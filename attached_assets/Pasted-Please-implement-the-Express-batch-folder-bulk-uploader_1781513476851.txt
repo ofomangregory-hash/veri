@@ -1,0 +1,19 @@
+Please implement the Express batch folder bulk uploader and database asset linker modules into our backend routing architecture immediately:
+
+1. EXPRESS ADMIN BULK UPLOADER ROUTE
+- Create or update the backend routing file at 'src/routes/adminMedia.js' (and ensure it is mounted inside your main server app file under '/api/admin').
+- Install and require 'multer', 'axios', and 'form-data'. Configure multer to use memory storage: multer({ storage: multer.memoryStorage() }).
+- Implement a POST route at '/bulk-upload' protected by our 'validateTelegramAuth' admin middleware layer.
+- This route must accept an array of multi-file images uploaded under the key name 'images' (up to 50 files) alongside a text parameter field named 'category' (which must explicitly be validated against these 4 allowed text blocks: 'profile', 'auto_loop', 'trigger_words', 'blurred').
+- Inside a loop, the engine must append each raw file buffer into a multipart form data packet and send an HTTP POST request to Telegram's native anonymous media endpoint: 'https://telegra.ph'.
+- Collect all returned strings into a clean JSON array of public URLs (e.g., 'https://telegra.ph') and return them to the client with a 200 OK success status.
+
+2. SUPABASE CHARACTER ASSET LINKER FUNCTIONS
+- Create or update your character update logic to include a dedicated transaction function using our '@supabase/supabase-js' client.
+- This function must receive a target 'character_id' and an 'uploadedMediaMap' JSON object payload containing the newly generated Telegra.ph strings mapped across the 4 asset folders.
+- Write an update transaction query to modify the 'characters' table in Supabase:
+  * Save the 'profile' string directly onto the 'avatar_url' column row cell.
+  * Save the 'trigger_words' data structure straight inside the jsonb 'trigger_metadata_array' column ledger.
+- Print clear server diagnostic logs confirming the cloud metadata array maps out successfully.
+
+Write out the complete, production-ready code blocks across these files cleanly without using shorthand comments or empty TODO placeholders.

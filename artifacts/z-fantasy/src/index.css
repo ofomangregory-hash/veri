@@ -1,0 +1,302 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-border: var(--secondary-border);
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted-border: var(--muted-border);
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-border: var(--accent-border);
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-border: var(--destructive-border);
+
+  --font-sans: var(--app-font-sans);
+  --font-serif: var(--app-font-serif);
+  --font-mono: var(--app-font-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root, .dark {
+  /* Deep blue-black base — not pure black, has a blue undertone */
+  --background: 228 25% 4%;
+  --foreground: 210 100% 96%;
+  --border: 270 60% 25%;
+
+  --card: 228 30% 7%;
+  --card-foreground: 210 100% 96%;
+  --card-border: 270 60% 25%;
+
+  --popover: 228 30% 7%;
+  --popover-foreground: 210 100% 96%;
+  --popover-border: 270 60% 28%;
+
+  /* Hot neon pink primary */
+  --primary: 322 100% 55%;
+  --primary-foreground: 0 0% 100%;
+  --primary-border: rgba(255, 20, 147, 0.5);
+
+  /* Electric purple secondary */
+  --secondary: 275 100% 55%;
+  --secondary-foreground: 0 0% 100%;
+  --secondary-border: rgba(150, 0, 255, 0.5);
+
+  --muted: 228 25% 11%;
+  --muted-foreground: 260 30% 65%;
+
+  /* Electric cyan-blue accent */
+  --accent: 195 100% 52%;
+  --accent-foreground: 228 25% 4%;
+  --accent-border: rgba(0, 220, 255, 0.5);
+
+  --destructive: 0 100% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-border: rgba(255, 50, 50, 0.5);
+
+  --input: 270 50% 18%;
+  --ring: 322 100% 55%;
+
+  --app-font-sans: 'Rajdhani', sans-serif;
+  --app-font-serif: 'Rajdhani', serif;
+  --app-font-mono: Menlo, monospace;
+  --radius: 0.5rem;
+
+  /* Neon glow shadows — more intense & layered */
+  --shadow-neon-pink:
+    0 0 8px rgba(255, 20, 147, 0.9),
+    0 0 20px rgba(255, 20, 147, 0.6),
+    0 0 40px rgba(255, 20, 147, 0.3);
+  --shadow-neon-purple:
+    0 0 8px rgba(150, 0, 255, 0.9),
+    0 0 20px rgba(150, 0, 255, 0.6),
+    0 0 40px rgba(150, 0, 255, 0.3);
+  --shadow-neon-blue:
+    0 0 8px rgba(0, 220, 255, 0.9),
+    0 0 20px rgba(0, 220, 255, 0.6),
+    0 0 40px rgba(0, 220, 255, 0.3);
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.5), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+}
+
+/* ───── Keyframes ───── */
+@keyframes neon-pulse-pink {
+  0%, 100% {
+    box-shadow:
+      0 0 6px rgba(255, 20, 147, 0.8),
+      0 0 18px rgba(255, 20, 147, 0.5),
+      0 0 35px rgba(255, 20, 147, 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 12px rgba(255, 20, 147, 1),
+      0 0 30px rgba(255, 20, 147, 0.75),
+      0 0 60px rgba(255, 20, 147, 0.4);
+  }
+}
+
+@keyframes neon-pulse-blue {
+  0%, 100% {
+    box-shadow:
+      0 0 6px rgba(0, 220, 255, 0.8),
+      0 0 18px rgba(0, 220, 255, 0.5),
+      0 0 35px rgba(0, 220, 255, 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 12px rgba(0, 220, 255, 1),
+      0 0 30px rgba(0, 220, 255, 0.75),
+      0 0 60px rgba(0, 220, 255, 0.4);
+  }
+}
+
+@keyframes neon-pulse-purple {
+  0%, 100% {
+    box-shadow:
+      0 0 6px rgba(150, 0, 255, 0.8),
+      0 0 18px rgba(150, 0, 255, 0.5),
+      0 0 35px rgba(150, 0, 255, 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 12px rgba(150, 0, 255, 1),
+      0 0 30px rgba(150, 0, 255, 0.75),
+      0 0 60px rgba(150, 0, 255, 0.4);
+  }
+}
+
+@keyframes text-glow-cycle {
+  0%, 100% { text-shadow: 0 0 10px rgba(255, 20, 147, 0.9), 0 0 25px rgba(255, 20, 147, 0.5); }
+  33%       { text-shadow: 0 0 10px rgba(150, 0, 255, 0.9), 0 0 25px rgba(150, 0, 255, 0.5); }
+  66%       { text-shadow: 0 0 10px rgba(0, 220, 255, 0.9),  0 0 25px rgba(0, 220, 255, 0.5); }
+}
+
+@keyframes scanline {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes grid-shimmer {
+  0%   { opacity: 0.03; }
+  50%  { opacity: 0.07; }
+  100% { opacity: 0.03; }
+}
+
+/* ───── Base ───── */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    /* Subtle blue-purple radial gradient behind everything */
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(100, 0, 255, 0.12) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 40% at 80% 110%, rgba(0, 180, 255, 0.08) 0%, transparent 70%);
+  }
+
+  /* Futuristic grid overlay on the root container */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      linear-gradient(rgba(0, 180, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 180, 255, 0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: grid-shimmer 6s ease-in-out infinite;
+  }
+
+  /* Single slow scanline sweep */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0, 200, 255, 0.03) 50%,
+      transparent 100%
+    );
+    background-size: 100% 120px;
+    animation: scanline 12s linear infinite;
+  }
+}
+
+/* ───── Glow text utilities ───── */
+.text-glow-pink {
+  text-shadow:
+    0 0 8px rgba(255, 20, 147, 1),
+    0 0 20px rgba(255, 20, 147, 0.7),
+    0 0 40px rgba(255, 20, 147, 0.4);
+}
+.text-glow-blue {
+  text-shadow:
+    0 0 8px rgba(0, 220, 255, 1),
+    0 0 20px rgba(0, 220, 255, 0.7),
+    0 0 40px rgba(0, 220, 255, 0.4);
+}
+.text-glow-purple {
+  text-shadow:
+    0 0 8px rgba(150, 0, 255, 1),
+    0 0 20px rgba(150, 0, 255, 0.7),
+    0 0 40px rgba(150, 0, 255, 0.4);
+}
+.text-glow-cycle {
+  animation: text-glow-cycle 6s ease-in-out infinite;
+}
+
+/* ───── Glow box utilities ───── */
+.box-glow-pink {
+  box-shadow: var(--shadow-neon-pink);
+}
+.box-glow-blue {
+  box-shadow: var(--shadow-neon-blue);
+}
+.box-glow-purple {
+  box-shadow: var(--shadow-neon-purple);
+}
+
+/* Animated pulsing versions */
+.box-glow-pink-pulse {
+  animation: neon-pulse-pink 2.5s ease-in-out infinite;
+}
+.box-glow-blue-pulse {
+  animation: neon-pulse-blue 2.5s ease-in-out infinite;
+}
+.box-glow-purple-pulse {
+  animation: neon-pulse-purple 2.5s ease-in-out infinite;
+}
+
+/* ───── Neon border utilities ───── */
+.border-neon-pink {
+  border-color: rgba(255, 20, 147, 0.6);
+  box-shadow: inset 0 0 8px rgba(255, 20, 147, 0.15), 0 0 8px rgba(255, 20, 147, 0.4);
+}
+.border-neon-blue {
+  border-color: rgba(0, 220, 255, 0.6);
+  box-shadow: inset 0 0 8px rgba(0, 220, 255, 0.15), 0 0 8px rgba(0, 220, 255, 0.4);
+}
+.border-neon-purple {
+  border-color: rgba(150, 0, 255, 0.6);
+  box-shadow: inset 0 0 8px rgba(150, 0, 255, 0.15), 0 0 8px rgba(150, 0, 255, 0.4);
+}
+
+/* ───── Neon gradient backgrounds ───── */
+.bg-neon-gradient {
+  background: linear-gradient(135deg,
+    rgba(255, 20, 147, 0.15) 0%,
+    rgba(150, 0, 255, 0.15) 50%,
+    rgba(0, 220, 255, 0.15) 100%
+  );
+}
+
+.bg-neon-card {
+  background: linear-gradient(135deg,
+    rgba(150, 0, 255, 0.08) 0%,
+    rgba(0, 10, 30, 0.6) 60%,
+    rgba(0, 220, 255, 0.06) 100%
+  );
+}

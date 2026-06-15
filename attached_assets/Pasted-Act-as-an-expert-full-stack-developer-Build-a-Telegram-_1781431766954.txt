@@ -1,0 +1,78 @@
+Act as an expert full-stack developer. Build a Telegram Mini App and backend called "Z-Fantasy". The stack must be a React frontend with Tailwind CSS and a Node.js/Express backend using Supabase (PostgreSQL).
+
+## CRITICAL SECURITY & CRYPTOGRAPHIC ENGINE LOGIC
+1. Zero Client Trust: The client must never send raw 'telegram_id' fields to backend API routes. The React frontend MUST pass the entire raw 'Telegram.WebApp.initData' string inside the 'Authorization' header for every HTTP request.
+2. Webhook Validation: The Express backend must implement validation middleware using the crypto library. It must verify the SHA-256 HMAC signature of the initData string using the TELEGRAM_BOT_TOKEN. If invalid, reject with 401 Unauthorized. If valid, unpack user data securely on the server.
+3. Dual-Channel Sync: Express backend and node-telegram-bot-api framework run concurrently. To completely prevent race conditions between web app typing flows and active Telegram DM inputs, utilize PostgreSQL's atomic updates or Upsert workflows on a jsonb message history column.
+
+## DATABASE ENVIRONMENT & SCHEMAS
+All connection variables must be isolated inside root .env files: TELEGRAM_BOT_TOKEN, OPENROUTER_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and ADMIN_TELEGRAM_ID.
+Install the official '@supabase/supabase-js' package and establish four core tables inside Supabase with explicitly indexed columns to accelerate queries and updates:
+
+- users (Table)
+  * id: text PRIMARY KEY (Stores the cryptographically verified Telegram User ID)
+  * username: text
+  * custom_nickname: text
+  * user_traits: text
+  * active_character_id: uuid
+  * ticket_balance: integer DEFAULT 50
+  * subscription_tier: text DEFAULT 'Free'
+  * last_login_timestamp: timestamp with time zone DEFAULT now()
+  * weekly_creations_count: integer DEFAULT 0 (Indexed)
+  * daily_trigger_requests_count: integer DEFAULT 0 (Indexed)
+  * unlocked_media_array: text[] DEFAULT '{}'
+
+- characters (Table)
+  * character_id: uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  * creator_id: text REFERENCES users(id)
+  * name: text
+  * visibility: text DEFAULT 'private'
+  * system_prompt: text
+  * avatar_url: text
+  * teaser_description: text
+  * initial_greeting: text
+  * tags: text[]
+  * trigger_metadata_array: jsonb
+
+- conversations (Table)
+  * conversation_id: uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  * telegram_id: text REFERENCES users(id)
+  * character_id: uuid REFERENCES characters(character_id)
+  * affection_points: integer DEFAULT 0
+  * message_history: jsonb DEFAULT '[]'::jsonb (Array tracking message JSON blocks containing role, content, and image_url)
+  * CONSTRAINT unique_user_character UNIQUE (telegram_id, character_id)
+
+- transaction_logs (Table)
+  * transaction_id: uuid PRIMARY KEY DEFAULT gen_random_uuid()
+  * telegram_id: text REFERENCES users(id)
+  * action_type: text
+  * ticket_amount: integer
+  * timestamp: timestamp with time zone DEFAULT now()
+
+## VISUAL THEMES & TOKENS
+1. Color Palette: Dark mode absolute black background. Accents must use a glowing cyberpunk/synthwave aesthetic featuring neon pink, neon purple, and neon blue glows.
+2. Token Representation: Tokens MUST be visually rendered everywhere across the application as a glowing neon 'Concert Ticket' icon/shape rather than a standard coin or circle.
+3. Sticky Bottom Navigation Bar: Contains 5 main tabs: [Home, Explore, Create, Chat, Premium]. The active tab must glow neon pink/purple.
+4. Top Header Utility: Displays a minimalist brand bar featuring the user's active ticket token count alongside a glowing neon blue Hamburger Menu (🍔) three-line icon anchored firmly in the top-left corner.
+
+## HAMBURGER SIDE-MENU DRAWER (🍔)
+- Animation: Tapping the top-left hamburger icon causes a smooth drawer to slide out from the left boundary over an absolute black backdrop, bordered by a glowing neon purple trim line.
+- Section 1: User Profile Hub (View & Edit Profile)
+  * Live Metrics: Renders the user's Telegram avatar, username, ticket token balance, and a glowing tier banner matching their ranking (Standard, Bronze, Silver, Gold).
+  * Interactive Profile Editor: A button that opens a layout view where users can customize their metadata: Nickname Display (used explicitly by AI characters) and User Profile Traits (custom personality text fields). The backend must automatically inject this data into the OpenRouter system context array so AI companions remember who they are chatting with dynamically.
+- Section 2: Core Utility Tools
+  * Claim Daily Tickets: Checks database login timestamp. If 24 hours have passed, executes database update adding +10 ticket tokens, pops up a glowing success animation modal, and updates the token display.
+  * Invite & Earn (Referral Engine): Generates automated unique referral link (t.me/your_bot?start=ref_id) and copies it to the clipboard. When an invited user signs up, both profiles are credited with +15 bonus tokens.
+- Section 3: Advanced System Settings & Help
+  * NSFW Context Smart Filter Switch: Sliding toggle. ON unlocks explicit text/image processing. OFF forces AI engine to shift to soft-core romance or standard storytelling behavior.
+  * Ambient Background Sound: Mute/unmute control allowing users to play/pause a low-frequency cyberpunk synthwave musical background loop.
+  * FAQ Center: Interactive accordion layout dropdown answering: How to get tokens, Telegram Stars explanation, creation privacy rules, media vault functions, and chat loop freeze cache clear guidelines.
+  * Customer Support Endpoint: Direct deep-link redirection button mapping straight to a designated support channel handle for transaction troubleshooting.
+
+## PAGE 1: THE HOME PAGE (WELCOME & MULTI-BANNER PREVIEW LAYER)
+- Banner 1 (Top Hero): A premium, full-width horizontal auto-scrolling promotional banner stating "Create your own AI Companion" with a glowing neon purple "Create Now" button. Clicking this button opens the character creation form/wizard modal natively as a pop-up overlay right on the page.
+- Banner 2 (Secondary Interactive CTA Block): Positioned directly below the top auto-scrolling hero slider. This is a massive, high-impact static block banner styled as an instant-launch character creation shortcut zone.
+- Main Trending Grid: Positioned below Banner 2, displaying exactly 12 items configured in a sleek 2-column card layout to hook users immediately upon entry.
+- Native Grid Paywalls: Inside this 12-card grid, exactly 10 slots must display actual public AI characters. The remaining 2 slots must be highly stylized "Premium Plan Ad Cards" natively embedded into the feed flow (one for Silver tier, one for Gold tier) featuring instant tap-to-subscribe button routes.
+
+Do not use shorthand, placeholders, or TODO comments. Generate full, complete, production-ready code blocks for this core setup.

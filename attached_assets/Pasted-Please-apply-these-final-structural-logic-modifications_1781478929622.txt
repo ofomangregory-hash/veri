@@ -1,0 +1,19 @@
+Please apply these final structural logic modifications, menu drawer fixes, and user validation updates across our application files immediately:
+
+1. FIX BROKEN FAQ & SUPPORT ACTIONS
+- Inside the side panel Hamburger drawer layout, the FAQ accordion entries and the Customer Support button are failing to execute or loading empty states. 
+- Rewrite the FAQ component: Wrap the dropdown disclosures in clean state checks so clicking an item expands the text layout smoothly.
+- Rewrite the Customer Support Deep Link: Change the tap event from an empty pointer to launch a native Telegram link routing rule using 'Telegram.WebApp.openTelegramLink("https://t.me")' so clicking it opens a direct message chat to your helper profile instantly.
+
+2. GRADED ADMIN PERMISSIONS MATRIX & DOCK CONTROL
+- Update the backend authentication middleware to check for two distinct levels of administrative power:
+  * Full Master Admin: If the authenticated incoming user ID equals process.env.ADMIN_TELEGRAM_ID, unlock complete system CRM control records, ledger wiping capabilities, and dynamic pricing managers. Automatically render the Admin navigation view on launch.
+  * Limited Support Admin: Add a text list column called 'staff_privileges' inside your Supabase 'users' table. If an ID has 'limited_admin' listed inside that array cell, restrict their layout privileges: let them access the user inspection log lists to view balances, but completely block out and hide the pricing adjustments, system-wide direct broadcasts, and configuration banner override tabs.
+- If any other standard account inputs the password "gregoryomofoman" into the explore search bar, prompt them with a secure validation token window to request access rather than opening master server configurations natively.
+
+3. IN-BOT CHARACTER SELECTOR CARDS WITH IMAGES
+- Implement a public text command handle named '/browse' directly inside the Telegram Bot Manager module code.
+- When any standard user inputs '/browse' inside their Telegram chat window, the bot must query the Supabase 'characters' table, extract active public companion profiles, and respond with an automated paginated photo carousel. 
+- Serve each companion card natively using the official 'bot.sendPhoto(chatId, avatar_url, { caption: ... })' method, outputting their name, short tagline text, and inline callback selection buttons (e.g., '💬 Start Chat' or '🌐 Launch Mini App') directly below the photo asset.
+
+Verify all variable mappings line up securely with our live Supabase table configurations. Write out full, complete code blocks without using shorthand or comments.

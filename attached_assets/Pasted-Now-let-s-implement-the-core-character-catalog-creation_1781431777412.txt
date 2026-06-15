@@ -1,0 +1,41 @@
+Now, let's implement the core character catalog, creation systems, and cloud media framework based on our established layout and Supabase architecture. Do not break previous configurations.
+
+## PAGE 2: THE CHARACTERS EXPLORE PAGE (FULL CATALOG WITH PRE-APPENDED HERO CARD)
+- Slot #1 Integration (First Card In Grid): The absolute first item inside the Explore page's character grid MUST be a dedicated, permanent, massive hero banner card styled as a character shortcut stating: "Can't find your perfect match? Design them yourself starting at 25 tickets!". Tapping this natively fires up the character creation flow modal on the spot.
+- Infinite Catalog Grid: Below that initial creation block, display an infinite-scrolling collection of all available public AI characters in a sleek 2-column responsive layout.
+- Search & Filter Suite: A top-level sticky search bar with integrated filtering nodes (Filter by gender, race/species, mood, or behavior types) and clickable neon category hashtags (e.g., #Vampire, #Anime, #Tsundere, #Dominant) that filter the grid instantly.
+- Instant Matching Engine: Position a glowing neon blue action button labeled "⚡ Surprise Me" directly below the search input. Clicking it runs a backend scan of the user's preference histories, selects an uncontacted active character matching those specific hashtag styles, and launches them directly into a fresh live conversation view with an intensive opening prompt.
+- Secret Gateway: Typing the exact phrase "gregoryomofoman" into the search bar does NOT trigger client-side layouts. It must fire a secure API call to the backend. The backend must cross-reference the cryptographically verified incoming user ID against process.env.ADMIN_TELEGRAM_ID. If it matches, it responds with the Admin template code payload, forcing open the God-Mode Admin Panel. If it fails, it returns a standard empty search payload to mask the bypass backdoor.
+
+## PAGE 3: AI CHARACTER CREATION SYSTEM (THE CREATE TAB & COHESIVE GENRE ROUTING)
+- Entry Points: This full interface must be accessible via the dedicated bottom "Create" navigation tab, the banners on the Home page, and the very first card block on the Explore page grid.
+- Price Action: Creating a custom character costs standard free/tier users 25 ticket tokens.
+- UI Selection Form Fields: Form must capture Name, Age, Character Bio, Initial Greeting, and a specific Dropdown Menu labeled "Choose Character Aesthetic / Genre" featuring 5 settings options: [Anime, Fantasy, Modern, Sci-Fi, Dark Goth].
+- Tier Restriction Protocols (Enforced at the Backend Router Level):
+  * Bronze Tier Users: Can create up to 10 custom characters per week (Forced PRIVATE status, invisible to the global directory grid).
+  * Silver Tier Users: Can create up to 25 custom characters per week (Forced PRIVATE status).
+  * Gold Tier Users: Unlimited custom character creation per week (Forced PRIVATE status).
+- Fallback Folder Integration: If a newly user-generated character lacks custom artwork, the backend conversation loop must automatically map image routing to corresponding folders hosted on cloud image storage (Cloudinary structure), bypassing ephemeral server container disks to prevent broken image references on container restarts. Target paths: /characters/general_[genre]/profile, /auto_loop, /trigger_pool, and /generate.
+
+## PAGE 4: THE CHAT FEED & CLOUD ASSET POOL MEDIA ENGINE
+- Active Chats Feed: Renders a vertical list of all characters the user has interacted with, displaying their avatar, name, a snippet of the latest text message, and a neon unread message indicator dot.
+- "Similar Desires" Recommendation Carousel: A horizontal scrolling row embedded at the bottom of the chat feed page analyzing user hashtags to recommend new companions.
+- STATIC CLOUD ASSET POOL LOGIC (Zero Text-to-Image APIs):
+  * Image URLs must be served dynamically from Cloudinary folder indices mapped out per character: /profile/, /auto_loop/, /trigger_pool/, and /generate/.
+- Automated In-Chat Loop (Runs independently of custom requests):
+  * Free Users: Characters include an automated image 2 out of every 5 messages. Counter resets to 0 at 5 messages. Total daily ceiling capped at 25 auto-images/day.
+  * All Premium Tiers: Characters include an automated image 4 out of every 6 messages. Counter resets to 0 at 6 messages. Total daily ceiling capped at 60 auto-images/day.
+  * Selection Logic: The server randomly selects a numbered integer image filename URL index (e.g., 1.jpg, 2.jpg) from the target companion's cloud /auto_loop/ folder and serves it.
+- On-Demand "Request Selfie" Keyword & Similarity Engine:
+  * Users can click "Request Selfie" or type descriptive phrases inside chat windows or Telegram DM threads. Each request checks database token logs and deducts 25 ticket tokens for non-unlocked plans.
+  * String Parsing Logic: The backend routes incoming request text against a local JSON metadata array matching file keywords assigned to the character's cloud /trigger_pool/ asset files (e.g., parsing "suit.jpg", "bed.jpg", "pool.jpg").
+  * Strict Similarity Fallback: If the user requests a selfie parameter keyword that does not match an active file trigger, the engine must automatically fall back to pulling a designated default_selfie.jpg URL link from that character's cloud asset folder loop.
+  * Daily Quota Restrictions: Custom requested trigger images are updated under a tracking column called 'daily_trigger_requests_count'. Enforce strict daily caps: Free = Max 3 | Bronze = Max 25 | Silver = Max 40 | Gold = Max 60.
+- Gifting & Relationship System: Embed a glowing neon pink Gift Box icon inside the chat bar text layout. Tapping it opens a slide-up menu displaying three digital items:
+  * Cyber-Cocktail (10 ticket tokens | +5 Affection Points) -> AI reacts with energetic, rapid-fire messaging behavior.
+  * Neon Bracelet (25 ticket tokens | +15 Affection Points) -> AI shifts status to 'Level 2: Flirty', referencing wearing the item in text.
+  * Secret Key / Luxury Silk Outfit (50 ticket tokens | +35 Affection Points) -> AI shifts to 'Level 3: Intimate/Explicit Status', altering parameters to uninhibited text responses and dropping a custom scenario image URL.
+  * Economy Rules: Standard/Bronze/Silver pay full token value. Gold Tier receives a 50% discount on all gift token costs. Database handles an 'affection_points' integer tracker per connection layout.
+- Shared Media Vault / Gallery Toggle: Implement a layout header switch inside Page 4 allowing users to toggle between active chats and a "Media Vault" media grid. Earned roleplay images are completely clear. Unearned contextual images appear heavily blurred with a glowing lock overlay, prompting an instant 20 ticket wallet balance token deduction to permanently unblur and add to account access arrays.
+
+Write full, complete, production-ready code blocks for these systems. Do not use shorthand.

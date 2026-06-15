@@ -1,0 +1,85 @@
+import { Router, type IRouter } from "express";
+import { eq, sql } from "drizzle-orm";
+import { db, usersTable, transactionsTable } from "@workspace/db";
+import {
+  GetMediaVaultResponseItem,
+  UnlockMediaBody,
+  UnlockMediaResponse,
+} from "@workspace/api-zod";
+import { authMiddleware } from "../middlewares/auth";
+
+const router: IRouter = Router();
+router.use(authMiddleware);
+
+router.get("/media/vault", async (req, res): Promise<void> => {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  // Vault items are stored in user's unlocked_media_array
+  // Format: "characterId:imageUrl:characterName"
+  const items = user.unlockedMediaArray.map((entry, idx) => {
+    const parts = entry.split("|");
+    const characterId = parts[0] ?? "";
+    const imageUrl = parts[1] ?? "";
+    const characterName = parts[2] ?? "Unknown";
+    return GetMediaVaultResponseItem.parse({
+      id: `vault-${idx}`,
+      imageUrl,
+      characterId,
+      unlocked: true,
+      characterName,
+    });
+  });
+
+  res.json(items);
+});
+
+router.post("/media/unlock", async (req, res): Promise<void> => {
+  const parsed = UnlockMediaBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  if (user.ticketBalance < 20) {
+    res.status(402).json({ error: "Insufficient tickets. Unlocking costs 20 tickets." });
+    return;
+  }
+
+  // Check not already unlocked
+  const mediaId = parsed.data.mediaId;
+  if (user.unlockedMediaArray.some(entry => entry.startsWith(mediaId))) {
+    res.status(400).json({ error: "Already unlocked" });
+    return;
+  }
+
+  await db.update(usersTable).set({
+    ticketBalance: sql`ticket_balance - 20`,
+    unlockedMediaArray: sql`array_append(unlocked_media_array, ${mediaId})`,
+  }).where(eq(usersTable.id, req.telegramUserId));
+
+  await db.insert(transactionsTable).values({
+    telegramId: req.telegramUserId,
+    actionType: "media_unlock",
+    ticketAmount: -20,
+  });
+
+  res.json(UnlockMediaResponse.parse({
+    id: mediaId,
+    imageUrl: mediaId,
+    characterId: mediaId.split("|")[0] ?? "",
+    unlocked: true,
+    characterName: mediaId.split("|")[2] ?? null,
+  }));
+});
+
+export default router;

@@ -1,0 +1,24 @@
+Implement the complete Admin Master Command Panel and database update routing inside the node-telegram-bot-api framework module. Enforce absolute security: every command executed here must first verify if the incoming message sender ID matches process.env.ADMIN_TELEGRAM_ID. If any unauthorized user attempts a command, the bot must remain silent or throw a permission error.
+
+1. CONFIGURATION SYSTEM CMS COMMANDS
+- /setwelcome [text]: Update 'welcome_message' in the 'system_configurations' table in Supabase.
+- /broadcast [message]: Query all IDs inside the 'users' table and sequentially push a text direct notification message to every user via the Telegram API.
+- /stats: Query count summaries from 'users', 'characters', and sum total logs to render a clean, analytical monitoring dashboard.
+
+2. PREMIUM LEDGER ADJUSTMENTS
+- /addpremium [userID] [days|lifetime]: Update the 'subscription_tier' column for the user. Calculate the expiration timestamp if days are passed, otherwise flag 'lifetime' and bypass coin checks.
+- /removepremium [userID]: Instantly downgrade the specified row profile back to 'Free' status tier settings.
+
+3. CHARACTER MASTER MANAGEMENT ENGINE
+- /createcharacter [name] | [visibility_true_false] | [backstory]: Instantly insert a row configuration block into the 'characters' table mapping visibility columns dynamically.
+- /setprompt [name] [new prompt]: Update the target companion's 'system_prompt' column directly inside Supabase.
+- /settagline [name] | [tagline]: Override and update the short subtext overview string on user feeds.
+- /setgreeting [name] | [message]: Re-assign the initial message text layout data.
+- /deletecharacter [name]: Permanently remove the character row and trigger cascade cleanups on conversations.
+
+4. DYNAMIC TRAITS, MEDIA LOOKUPS & CUSTOM KEYWORDS
+- /addcustomtrait [mood|tone] | [Name] | [AI description]: Insert a dynamic modifier entry into the 'character_traits' configuration table. The backend OpenRouter engine must read these entries and automatically inject them into the system text context layout string.
+- /addphoto [name] [keyword] & /addvideo [name] [keyword]: Accept an attached incoming image/video asset link, upload it straight to Telegraph ('https://telegra.ph'), and save the returned CDN URL string inside the 'media_triggers' table tied to that keyword match.
+- /addcommand [trigger] | [response text]: Append a custom text listener inside the conversation loop. If a standard user ever types that custom trigger keyword, the bot must immediately reply with the saved response text without hitting the OpenRouter AI endpoint to minimize resource consumption.
+
+Ensure all operations are written with complete database transaction protection routines using the '@supabase/supabase-js' instance variables. Do not insert shorthand or TODO placeholders.

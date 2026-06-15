@@ -1,0 +1,32 @@
+Let's complete the final functional tier of the Z-Fantasy ecosystem, integrating the revenue engine, admin controls, transactional validations, background loops, and AI failovers.
+
+## PAGE 5: THE PREMIUM MATRIX (NATIVE TELEGRAM STARS MINI-APP INTERFACE)
+Design a checkout screen mapping custom plan access to automated Telegram Stars invoices.
+- Native Mini-App Payment Gateway Execution: Tapping a tier checkout action button inside the React Web UI must fire an API POST request to the Express backend endpoint (/api/payments/create-invoice-link). The backend executes Telegram's 'createInvoiceLink' method, specifying terms, and outputs a secure 'https://t.me...' transaction link string. The Express API routes this link back to the React UI, which captures it and launches the native payment overlay sheet directly using the Telegram Web App SDK client method: 'Telegram.WebApp.openInvoice(url, callback)'. All settings must route earnings straight to the master bot owner profile handle parameters.
+- Tier Layout Configurations:
+  * Free Tier: Costs 2 tickets/msg | 2 out of 5 image loop | Max 25 auto-images/day | Max 3 custom requests/day. (Starts with 50 ticket tokens; daily login gives +10 ticket tokens every 24 hours).
+  * Bronze Tier: 200 msgs daily limit | 4 out of 6 image loop | Max 60 auto-images/day | Max 25 custom requests/day -> Weekly ($2): 100 Stars | Monthly ($4): 200 Stars | Yearly ($8): 400 Stars.
+  * Silver Tier: Unlimited msgs daily limit | 4 out of 6 image loop | Max 60 auto-images/day | Max 40 custom requests/day -> Weekly ($4): 200 Stars | Monthly ($8): 400 Stars | Yearly ($16): 800 Stars.
+  * Gold Tier: Absolute Unlimited msgs and images | 4 out of 6 image loop | Max 60 auto-images/day | Max 60 custom requests/day -> Weekly ($7): 350 Stars | Monthly ($14): 700 Stars | Yearly ($28): 1,400 Stars.
+
+## PAGE 6: GOD-MODE ADMIN CONTROL PANEL
+- Access Layer: Create a strict middleware blocking layer. This dashboard screen and its accompanying backend API routes must only render if the cryptographically verified user payload matches process.env.ADMIN_TELEGRAM_ID.
+- System Overrides: The Admin panel must feature interactive developer dashboards that include:
+  1. Complete paywall, subscription tier validation gate, message cap, image generation fee, and coin deduction bypass settings for the admin account.
+  2. Character Master Suite: View all characters built by all users (including private creations). Edit/customize all traits, or use a "Clone Character" button to quickly duplicate existing profile configurations.
+  3. Comprehensive User CRM: Search users by Telegram details or usernames showing in the dashboard view. Click a user to open an inspection layout showing remaining credits, tier type, transaction tracking logs, user affection point milestones, unlocked vault history list, and a full list of all characters they have interacted with. Includes interactive fields to manually adjust token ledgers, clear/wipe media access arrays, or instantly gift premium subscription tiers. Also includes a "Clear Active Chat Cache" button inside user profiles to fix looping server context errors.
+  4. System-Wide Neon Broadcast Channel: A text dashboard broadcast input tool allowing the admin to type a message and send it as a direct push notification from the Telegram DM bot to every single registered user in the database simultaneously.
+  5. Live Operations Dashboard & Persistent Cloud Uploads: Feature global analytics tickers tracking total users, active streams, revenue. Include an automated rolling token transaction log (anti-cheat auditor). All live media assets uploaded via this admin portal dashboard must bypass local ephemeral hard disks and upload straight to Cloudinary Free Tier, saving the permanent secure web URL string inside Supabase so layouts remain safe across daily server container restarts.
+
+## SYSTEM SCHEDULERS & SECURE TRANSACTION VALIDATION
+- Automated Schedulers via node-cron:
+  * Setup Job 1: Executes daily at midnight (0 0 * * *) to reset 'daily_trigger_requests_count' to 0 for all users across the indexed column instantly inside Supabase.
+  * Setup Job 2: Executes weekly on Sunday at midnight (0 0 * * 0) to reset 'weekly_creations_count' to 0 for all users to refresh character creation allowances inside Supabase.
+- Transaction Security Validation: Prior to executing any asset ledger adjustments (deducting 2 tokens for text, 25 tokens for selfies, 25 tokens for profile builds, or 20 tokens for vault unblurring), the Express router must check row data balances in Supabase. If insufficient, throw a 402 state to trigger upgrade prompts.
+
+## OPENROUTER AI ROLEPLAY ENGINE WITH INTEL-FAILOVER MATRIX
+Route messaging requests to OpenRouter. 
+- Primary Model Target: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free". Set max_tokens: 140, temperature: 0.88, top_p: 0.9. Dynamically merge the companion's core 'system_prompt' metadata with the user's saved 'custom_nickname' and 'user_traits' parameters before sending to ensure personalized interaction responses matching casual texting pacing.
+- Failover Security Logic: If OpenRouter returns a 429 (Rate Limit Exceeded), 503, or a timeout exception during peak traffic, the Express backend must automatically catch the exception and immediately refire the payload to an alternative low-cost, uncensored model like "meta-llama/llama-3-8b-instruct:free" or "undi-95/toppy-m-7b:free" to prevent runtime user chat dropouts or engine hangs.
+
+Write full, complete, production-ready code blocks for this final architecture phase.

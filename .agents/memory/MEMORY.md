@@ -1,0 +1,1 @@
+- [Z-Fantasy stack decisions](z-fantasy-stack.md) — auth, DB upsert pattern, cron, and AI failover quirks worth knowing for future work

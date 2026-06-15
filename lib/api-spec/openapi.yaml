@@ -1,0 +1,965 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Z-Fantasy Telegram Mini App API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication & user management
+  - name: characters
+    description: Character catalog and creation
+  - name: conversations
+    description: Chat and messaging
+  - name: payments
+    description: Premium subscriptions and Telegram Stars
+  - name: admin
+    description: Admin panel operations
+  - name: media
+    description: Media vault operations
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user (validates initData)
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+
+  /auth/profile:
+    patch:
+      operationId: updateProfile
+      tags: [auth]
+      summary: Update user profile (nickname, traits)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /auth/daily-claim:
+    post:
+      operationId: claimDailyTickets
+      tags: [auth]
+      summary: Claim daily +10 ticket reward
+      responses:
+        "200":
+          description: Tickets claimed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketClaimResult"
+        "400":
+          description: Already claimed today
+
+  /auth/nsfw:
+    patch:
+      operationId: updateNsfwSetting
+      tags: [auth]
+      summary: Toggle NSFW content setting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NsfwToggle"
+      responses:
+        "200":
+          description: Setting updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /auth/referral:
+    get:
+      operationId: getReferralLink
+      tags: [auth]
+      summary: Get user's unique referral link
+      responses:
+        "200":
+          description: Referral link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralInfo"
+
+  /characters:
+    get:
+      operationId: listCharacters
+      tags: [characters]
+      summary: List public characters (paginated, filterable)
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: tags
+          in: query
+          schema: { type: string }
+        - name: genre
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Character list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterPage"
+
+    post:
+      operationId: createCharacter
+      tags: [characters]
+      summary: Create a new AI character (costs 25 tickets)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CharacterInput"
+      responses:
+        "201":
+          description: Character created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+        "402":
+          description: Insufficient tickets
+
+  /characters/trending:
+    get:
+      operationId: getTrendingCharacters
+      tags: [characters]
+      summary: Get top 12 trending public characters for home feed
+      responses:
+        "200":
+          description: Trending characters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Character"
+
+  /characters/surprise:
+    get:
+      operationId: getSurpriseCharacter
+      tags: [characters]
+      summary: Get a random character matching user preferences
+      responses:
+        "200":
+          description: Surprise character match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+
+  /characters/mine:
+    get:
+      operationId: getMyCharacters
+      tags: [characters]
+      summary: Get characters created by the authenticated user
+      responses:
+        "200":
+          description: User's characters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Character"
+
+  /characters/{characterId}:
+    get:
+      operationId: getCharacter
+      tags: [characters]
+      summary: Get a single character by ID
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Character
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+        "404":
+          description: Not found
+
+    patch:
+      operationId: updateCharacter
+      tags: [characters]
+      summary: Update a character (owner or admin only)
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CharacterUpdate"
+      responses:
+        "200":
+          description: Updated character
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+
+    delete:
+      operationId: deleteCharacter
+      tags: [characters]
+      summary: Delete a character (owner or admin only)
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List all user conversations (chat feed)
+      responses:
+        "200":
+          description: Conversation list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConversationSummary"
+
+  /conversations/{characterId}:
+    get:
+      operationId: getConversation
+      tags: [conversations]
+      summary: Get or create conversation with a character
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+
+  /conversations/{characterId}/messages:
+    post:
+      operationId: sendMessage
+      tags: [conversations]
+      summary: Send a message and get AI reply (costs 2 tickets for Free tier)
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "200":
+          description: AI reply with optional image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageReply"
+        "402":
+          description: Insufficient tickets or daily limit reached
+
+  /conversations/{characterId}/selfie:
+    post:
+      operationId: requestSelfie
+      tags: [conversations]
+      summary: Request a selfie image from a character (costs 25 tickets)
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SelfieRequest"
+      responses:
+        "200":
+          description: Selfie URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SelfieResponse"
+        "402":
+          description: Insufficient tickets or daily limit reached
+
+  /conversations/{characterId}/gift:
+    post:
+      operationId: sendGift
+      tags: [conversations]
+      summary: Send a gift to a character (deducts tickets, updates affection)
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GiftInput"
+      responses:
+        "200":
+          description: Gift sent, affection updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GiftResult"
+        "402":
+          description: Insufficient tickets
+
+  /media/vault:
+    get:
+      operationId: getMediaVault
+      tags: [media]
+      summary: Get user's media vault (earned + locked images)
+      responses:
+        "200":
+          description: Media vault items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VaultItem"
+
+  /media/unlock:
+    post:
+      operationId: unlockMedia
+      tags: [media]
+      summary: Unlock a blurred media item (costs 20 tickets)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnlockMediaInput"
+      responses:
+        "200":
+          description: Media unlocked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VaultItem"
+        "402":
+          description: Insufficient tickets
+
+  /payments/create-invoice:
+    post:
+      operationId: createInvoice
+      tags: [payments]
+      summary: Create a Telegram Stars invoice link for a subscription tier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceRequest"
+      responses:
+        "200":
+          description: Invoice link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+
+  /payments/webhook:
+    post:
+      operationId: handlePaymentWebhook
+      tags: [payments]
+      summary: Handle Telegram Stars payment success webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentWebhookPayload"
+      responses:
+        "200":
+          description: Acknowledged
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Get global platform stats (admin only)
+      responses:
+        "200":
+          description: Platform statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+        "403":
+          description: Forbidden
+
+  /admin/users:
+    get:
+      operationId: adminListUsers
+      tags: [admin]
+      summary: Search/list all users (admin only)
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserPage"
+        "403":
+          description: Forbidden
+
+  /admin/users/{userId}:
+    get:
+      operationId: adminGetUser
+      tags: [admin]
+      summary: Get full user profile (admin only)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Full user data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserDetail"
+        "403":
+          description: Forbidden
+
+    patch:
+      operationId: adminUpdateUser
+      tags: [admin]
+      summary: Admin edit user (tickets, tier, clear vault etc.)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUserEdit"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "403":
+          description: Forbidden
+
+  /admin/characters:
+    get:
+      operationId: adminListCharacters
+      tags: [admin]
+      summary: List all characters including private (admin only)
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+      responses:
+        "200":
+          description: All characters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterPage"
+        "403":
+          description: Forbidden
+
+  /admin/characters/{characterId}/clone:
+    post:
+      operationId: adminCloneCharacter
+      tags: [admin]
+      summary: Clone a character (admin only)
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: Cloned character
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+        "403":
+          description: Forbidden
+
+  /admin/broadcast:
+    post:
+      operationId: adminBroadcast
+      tags: [admin]
+      summary: Send broadcast message to all users via Telegram bot (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BroadcastInput"
+      responses:
+        "200":
+          description: Broadcast sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BroadcastResult"
+        "403":
+          description: Forbidden
+
+  /admin/upload-media:
+    post:
+      operationId: adminUploadMedia
+      tags: [admin]
+      summary: Upload media asset to Cloudinary (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaUploadInput"
+      responses:
+        "200":
+          description: Upload result with Cloudinary URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaUploadResult"
+        "403":
+          description: Forbidden
+
+  /admin/secret-check:
+    post:
+      operationId: adminSecretCheck
+      tags: [admin]
+      summary: Validate secret admin phrase and return admin panel access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecretCheckInput"
+      responses:
+        "200":
+          description: Access granted or denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecretCheckResult"
+
+  /transactions:
+    get:
+      operationId: getTransactions
+      tags: [auth]
+      summary: Get user's transaction history
+      responses:
+        "200":
+          description: Transaction log
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status: { type: string }
+      required: [status]
+
+    User:
+      type: object
+      required: [id, username, ticketBalance, subscriptionTier, weeklyCreationsCount, dailyTriggerRequestsCount, nsfwEnabled]
+      properties:
+        id: { type: string }
+        username: { type: ["string", "null"] }
+        customNickname: { type: ["string", "null"] }
+        userTraits: { type: ["string", "null"] }
+        activeCharacterId: { type: ["string", "null"] }
+        ticketBalance: { type: integer }
+        subscriptionTier: { type: string }
+        lastLoginTimestamp: { type: ["string", "null"] }
+        weeklyCreationsCount: { type: integer }
+        dailyTriggerRequestsCount: { type: integer }
+        unlockedMediaArray: { type: array, items: { type: string } }
+        nsfwEnabled: { type: boolean }
+        avatarUrl: { type: ["string", "null"] }
+        referralCode: { type: ["string", "null"] }
+
+    ProfileUpdate:
+      type: object
+      properties:
+        customNickname: { type: string }
+        userTraits: { type: string }
+
+    NsfwToggle:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+
+    TicketClaimResult:
+      type: object
+      required: [ticketsAdded, newBalance, nextClaimAt]
+      properties:
+        ticketsAdded: { type: integer }
+        newBalance: { type: integer }
+        nextClaimAt: { type: string }
+
+    ReferralInfo:
+      type: object
+      required: [referralLink, referralCode]
+      properties:
+        referralLink: { type: string }
+        referralCode: { type: string }
+        referralCount: { type: integer }
+
+    Character:
+      type: object
+      required: [characterId, name, visibility, tags, genre]
+      properties:
+        characterId: { type: string }
+        creatorId: { type: ["string", "null"] }
+        name: { type: string }
+        visibility: { type: string }
+        systemPrompt: { type: ["string", "null"] }
+        avatarUrl: { type: ["string", "null"] }
+        teaserDescription: { type: ["string", "null"] }
+        initialGreeting: { type: ["string", "null"] }
+        tags: { type: array, items: { type: string } }
+        genre: { type: string }
+        age: { type: ["string", "null"] }
+        triggerMetadataArray: { type: ["object", "null"] }
+
+    CharacterInput:
+      type: object
+      required: [name, genre]
+      properties:
+        name: { type: string, minLength: 1 }
+        age: { type: string }
+        bio: { type: string }
+        initialGreeting: { type: string }
+        genre: { type: string, enum: [Anime, Fantasy, Modern, Sci-Fi, Dark Goth] }
+        tags: { type: array, items: { type: string } }
+        avatarUrl: { type: string }
+
+    CharacterUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        bio: { type: string }
+        initialGreeting: { type: string }
+        visibility: { type: string }
+        tags: { type: array, items: { type: string } }
+        avatarUrl: { type: string }
+        systemPrompt: { type: string }
+
+    CharacterPage:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Character"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+
+    MessageItem:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string }
+        content: { type: string }
+        imageUrl: { type: ["string", "null"] }
+        timestamp: { type: ["string", "null"] }
+
+    Conversation:
+      type: object
+      required: [conversationId, characterId, affectionPoints, messages]
+      properties:
+        conversationId: { type: string }
+        characterId: { type: string }
+        affectionPoints: { type: integer }
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessageItem"
+        character:
+          $ref: "#/components/schemas/Character"
+
+    ConversationSummary:
+      type: object
+      required: [conversationId, characterId, affectionPoints]
+      properties:
+        conversationId: { type: string }
+        characterId: { type: string }
+        affectionPoints: { type: integer }
+        lastMessage: { type: ["string", "null"] }
+        lastMessageAt: { type: ["string", "null"] }
+        unread: { type: boolean }
+        character:
+          $ref: "#/components/schemas/Character"
+
+    MessageInput:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1 }
+
+    MessageReply:
+      type: object
+      required: [message, ticketsRemaining]
+      properties:
+        message:
+          $ref: "#/components/schemas/MessageItem"
+        imageUrl: { type: ["string", "null"] }
+        ticketsRemaining: { type: integer }
+        affectionPoints: { type: integer }
+
+    SelfieRequest:
+      type: object
+      required: [description]
+      properties:
+        description: { type: string }
+
+    SelfieResponse:
+      type: object
+      required: [imageUrl, ticketsRemaining]
+      properties:
+        imageUrl: { type: string }
+        ticketsRemaining: { type: integer }
+        matched: { type: boolean }
+
+    GiftInput:
+      type: object
+      required: [giftType]
+      properties:
+        giftType: { type: string, enum: [cyber_cocktail, neon_bracelet, secret_key] }
+
+    GiftResult:
+      type: object
+      required: [affectionPoints, newLevel, ticketsRemaining, aiReaction]
+      properties:
+        affectionPoints: { type: integer }
+        newLevel: { type: integer }
+        ticketsRemaining: { type: integer }
+        aiReaction: { type: string }
+        scenarioImageUrl: { type: ["string", "null"] }
+
+    VaultItem:
+      type: object
+      required: [id, imageUrl, characterId, unlocked]
+      properties:
+        id: { type: string }
+        imageUrl: { type: string }
+        characterId: { type: string }
+        unlocked: { type: boolean }
+        characterName: { type: ["string", "null"] }
+
+    UnlockMediaInput:
+      type: object
+      required: [mediaId]
+      properties:
+        mediaId: { type: string }
+
+    InvoiceRequest:
+      type: object
+      required: [tier, period]
+      properties:
+        tier: { type: string, enum: [Bronze, Silver, Gold] }
+        period: { type: string, enum: [weekly, monthly, yearly] }
+
+    InvoiceResponse:
+      type: object
+      required: [invoiceLink]
+      properties:
+        invoiceLink: { type: string }
+
+    PaymentWebhookPayload:
+      type: object
+      properties:
+        update_id: { type: integer }
+        pre_checkout_query: { type: object }
+        message: { type: object }
+
+    Transaction:
+      type: object
+      required: [transactionId, actionType, ticketAmount, timestamp]
+      properties:
+        transactionId: { type: string }
+        actionType: { type: string }
+        ticketAmount: { type: integer }
+        timestamp: { type: string }
+
+    AdminStats:
+      type: object
+      required: [totalUsers, activeConversations, totalRevenue, totalCharacters]
+      properties:
+        totalUsers: { type: integer }
+        activeConversations: { type: integer }
+        totalRevenue: { type: integer }
+        totalCharacters: { type: integer }
+        newUsersToday: { type: integer }
+        messagesLastHour: { type: integer }
+
+    AdminUserPage:
+      type: object
+      required: [items, total, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        total: { type: integer }
+        page: { type: integer }
+
+    AdminUserDetail:
+      type: object
+      required: [user, transactions, conversations]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transaction"
+        conversations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationSummary"
+
+    AdminUserEdit:
+      type: object
+      properties:
+        ticketBalance: { type: integer }
+        subscriptionTier: { type: string }
+        clearUnlockedMedia: { type: boolean }
+        customNickname: { type: string }
+
+    BroadcastInput:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1 }
+
+    BroadcastResult:
+      type: object
+      required: [sent, failed]
+      properties:
+        sent: { type: integer }
+        failed: { type: integer }
+
+    MediaUploadInput:
+      type: object
+      required: [base64Data, characterId, folder]
+      properties:
+        base64Data: { type: string }
+        characterId: { type: string }
+        folder: { type: string, enum: [profile, auto_loop, trigger_pool, generate] }
+        filename: { type: string }
+
+    MediaUploadResult:
+      type: object
+      required: [url, publicId]
+      properties:
+        url: { type: string }
+        publicId: { type: string }
+
+    SecretCheckInput:
+      type: object
+      required: [phrase]
+      properties:
+        phrase: { type: string }
+
+    SecretCheckResult:
+      type: object
+      required: [isAdmin]
+      properties:
+        isAdmin: { type: boolean }

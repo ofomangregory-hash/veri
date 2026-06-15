@@ -1,0 +1,19 @@
+Now, let's bring the Telegram Bot Manager service fully online and activate the long-polling event listeners using the 'node-telegram-bot-api' library. Implement the following activation architecture completely:
+
+1. SECURE POLLING SERVER HOOK
+- Initialize the Telegram bot instance using: new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+- Wrap the entire initialization block inside a try/catch loop. If Replit's network firewall throws a connection timeout or network blockade error, catch it gracefully and print a clear diagnostic log without letting the entire Node process crash.
+
+2. COMBINED CHAT MESSAGE ROUTING LOOP
+Implement the primary 'bot.on('message', async (msg) => { ... })' event handler to mirror the exact same capabilities built into the Express Web Canvas UI:
+- User Sync: Extract the incoming 'msg.from.id' and search for them in the Supabase 'users' table. If they do not exist, automatically register them as a new user with a default balance of 50 ticket tokens.
+- Dynamic Context Aggregation: Prior to querying OpenRouter, fetch the active companion's 'system_prompt', look up any active custom descriptors in 'character_traits', and append the user's custom name/traits to the payload.
+- AI Interaction and Fallback Matrix: Route the text array directly to OpenRouter targeting 'meta-llama/llama-3-8b-instruct:free'. If it catches an error, instantly fail over to 'mistralai/mistral-7b-instruct:free' to maintain communication.
+- Message Storage: Save the assistant's final response text string directly into the jsonb 'message_history' column inside the Supabase 'conversations' table using atomic workflows to match both communication channels perfectly.
+
+3. REPLIT FIREWALL ANTI-SLEEP WORKAROUND
+- Because free Replit workspaces automatically go to sleep and disconnect background processes after a few minutes of inactivity, build a simple Express background ping script.
+- Expose a clean, empty public route: app.get('/ping', (req, res) => res.send('Bot Active'));
+- This keeps a public web footprint open so we can keep the workspace awake externally.
+
+Generate the full production-ready code structure inside our main bot execution file without using shorthands or placeholders.

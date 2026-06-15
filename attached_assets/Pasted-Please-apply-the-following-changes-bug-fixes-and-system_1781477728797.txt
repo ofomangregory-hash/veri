@@ -1,0 +1,34 @@
+Please apply the following changes, bug fixes, and system modifications to the codebase immediately:
+
+1. ADMIN DASHBOARD PASSWORD BYPASS FIX
+- The search bar backdoor trigger is broken. Typing "gregoryomofoman" into the search bar and hitting enter must trigger an API request to the backend.
+- The backend must check the cryptographically verified incoming user ID against process.env.ADMIN_TELEGRAM_ID. If it matches, it must respond with an authorized token payload that instructs the React frontend to override the visible layout view and render the full God-Mode Admin Dashboard panel immediately.
+
+2. CHAT NAVIGATION TAB PLUS SIGN (+) CHARACTER SELECTOR
+- Inside the "Chat" navigation tab view, add a floating neon pink plus sign (+) action button in the bottom right corner.
+- Tapping this button must open a clean, vertically scrollable list view displaying all available public AI characters so users can easily browse through them and tap one to instantly launch a fresh live conversation thread.
+
+3. WEB CANVAS PREVIEW MESSAGE ROUTER CORRECTION
+- Messages are failing to send inside the local web canvas layout preview. 
+- Fix the backend authorization loop: If 'Telegram.WebApp.initData' is missing or empty (indicating local desktop web development testing mode), automatically inject a mock user profile ID (e.g., '666666') inside the Supabase table scripts instead of crashing with a 401 Unauthorized encryption error.
+
+4. SIDE PANEL UTILITY DRAWER UPDATES
+Expand the Hamburger side panel menu drawer options to include these three interactive sections:
+- My Media Inventory: Displays a clean layout grid showcasing all unlocked unblurred media vault pictures won through chat roleplay loops.
+- Quest Hub: Simple visual list tracking actionable token tasks (e.g., 'Share a character to claim +5 ticket tokens').
+- Account Cache Manager: A reset button allowing users to instantly wipe their active local browser conversation memory logs safely.
+
+5. PREMIUM PAYMENT MATRIX CALCULATIONS & INVOICE FIX
+- The checkout system cards and invoice generation handlers must use these exact custom mathematical discount values based on a weekly base:
+  * Weekly (Base) -> Bronze: 100 Stars | Silver: 200 Stars | Gold: 350 Stars
+  * Monthly Formula ((Weekly*4) - 1 week) -> Bronze: 300 Stars | Silver: 600 Stars | Gold: 1,050 Stars
+  * Yearly Formula ((Monthly*12) - 2 months) -> Bronze: 3,000 Stars | Silver: 6,000 Stars | Gold: 10,500 Stars
+- Native Payment Invocation: Ensure your backend creates invoices via the official Telegram method that returns an 'https://t.me...' string. When a payment button is tapped in the React UI web layer, it must trigger 'Telegram.WebApp.openInvoice(url)' so the native Google Pay/Apple Pay sheet slides up natively inside the Telegram smartphone app interface.
+
+6. DYNAMIC GLOBAL CMS OVERRIDES (MANAGE ALL PAGES FROM ADMIN DASHBOARD)
+Build out full interactive dashboard forms inside Page 6 (God-Mode Control Panel) that connect directly to a fresh 'system_configurations' database table in Supabase, allowing the admin to dynamically update the live app on the fly without changing code files:
+- Banner & Advertisement Manager: Input fields to dynamically modify the image asset URLs and typography text contents of Home Page Banner 1 and Banner 2 globally across layout feeds.
+- Dynamic Pricing Overrides: Interactive input counters to alter or override the Telegram Stars price requirements for Bronze, Silver, and Gold tiers dynamically across layout views.
+- Character Grid Management: Tools to view all system characters, switch them between Public or Premium-Only (Private) visibility loops, and insert customizable advertisement/promotional text overlays right underneath individual chat screens.
+
+Write the complete production-ready code blocks across the frontend views and backend routing scripts without using placeholders or shorthand notes.
