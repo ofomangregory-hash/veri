@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe } from "@workspace/api-client-react";
-import { Users, Bot, CreditCard, Activity, Image, DollarSign, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Users, Bot, CreditCard, Activity, Image, DollarSign, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
@@ -62,6 +62,13 @@ export function Admin() {
   const [expandedCharId, setExpandedCharId] = useState<string | null>(null);
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
+
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newChar, setNewChar] = useState({
+    name: "", bio: "", age: "", genre: "Modern", tags: "",
+    avatarUrl: "", initialGreeting: "", visibility: "private" as "public" | "private",
+  });
 
   const loadConfigs = useCallback(async () => {
     setConfigsLoading(true);
@@ -135,6 +142,27 @@ export function Admin() {
       await adminApi("PATCH", `/admin/characters/${characterId}/overlay`, { text, enabled: text.length > 0 });
       toast({ title: "Overlay saved" });
     } catch (e) { toast({ title: "Failed", description: String(e), variant: "destructive" }); }
+  };
+
+  const createCharacter = async () => {
+    if (!newChar.name.trim()) { toast({ title: "Name required", variant: "destructive" }); return; }
+    setCreating(true);
+    try {
+      await adminApi("POST", "/admin/characters/create", {
+        name: newChar.name.trim(),
+        bio: newChar.bio || undefined,
+        age: newChar.age || undefined,
+        genre: newChar.genre,
+        tags: newChar.tags ? newChar.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
+        avatarUrl: newChar.avatarUrl || undefined,
+        initialGreeting: newChar.initialGreeting || undefined,
+        visibility: newChar.visibility,
+      });
+      toast({ title: `✅ ${newChar.name} created as ${newChar.visibility}!` });
+      setNewChar({ name: "", bio: "", age: "", genre: "Modern", tags: "", avatarUrl: "", initialGreeting: "", visibility: "private" });
+      setShowCreateForm(false);
+    } catch (e) { toast({ title: "Create failed", description: String(e), variant: "destructive" }); }
+    finally { setCreating(false); }
   };
 
   const sendBroadcast = async () => {
@@ -245,12 +273,96 @@ export function Admin() {
       {/* ── Characters ── */}
       {activeTab === "characters" && (
         <div className="space-y-6">
-          <div className="flex justify-end">
+          <div className="flex items-center gap-2 justify-end">
+            <button onClick={() => setShowCreateForm(f => !f)}
+              className="flex items-center gap-2 text-xs text-primary border border-primary/50 px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
+              {showCreateForm ? <X size={14} /> : <Plus size={14} />}
+              {showCreateForm ? "Cancel" : "Create Character"}
+            </button>
             <button onClick={loadConfigs} disabled={configsLoading}
               className="flex items-center gap-2 text-xs text-accent border border-accent/50 px-3 py-1.5 rounded-lg hover:bg-accent/10 transition-colors">
               <RefreshCw size={14} className={configsLoading ? "animate-spin" : ""} /> Refresh
             </button>
           </div>
+
+          {showCreateForm && (
+            <div className="p-4 rounded-xl bg-card border border-primary/40 space-y-3 box-glow-pink">
+              <h3 className="text-sm font-bold text-primary uppercase tracking-wider flex items-center gap-2">
+                <Bot size={14} /> New Character (Admin — Free &amp; No Limits)
+              </h3>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Name *</label>
+                  <Input value={newChar.name} onChange={e => setNewChar(p => ({ ...p, name: e.target.value }))}
+                    placeholder="Aria" className="bg-background border-border h-9 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Age</label>
+                  <Input value={newChar.age} onChange={e => setNewChar(p => ({ ...p, age: e.target.value }))}
+                    placeholder="22" className="bg-background border-border h-9 text-sm" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Genre</label>
+                  <select value={newChar.genre} onChange={e => setNewChar(p => ({ ...p, genre: e.target.value }))}
+                    className="w-full h-9 rounded-md border border-border bg-background text-sm px-2 text-foreground">
+                    {["Anime", "Fantasy", "Modern", "Sci-Fi", "Dark Goth"].map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Visibility</label>
+                  <div className="flex h-9 rounded-md border border-border overflow-hidden">
+                    {(["private", "public"] as const).map(v => (
+                      <button key={v} onClick={() => setNewChar(p => ({ ...p, visibility: v }))}
+                        className={`flex-1 text-xs font-bold uppercase tracking-wider transition-all ${
+                          newChar.visibility === v
+                            ? v === "public" ? "bg-green-500/20 text-green-400 border-green-500/50" : "bg-muted text-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}>
+                        {v === "public" ? "🌐 Public" : "🔒 Private"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Bio / Personality</label>
+                <textarea value={newChar.bio} onChange={e => setNewChar(p => ({ ...p, bio: e.target.value }))}
+                  rows={2} placeholder="A rebel hacker from Neo-Tokyo..."
+                  className="w-full rounded-md border border-border bg-background p-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-primary/60" />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Initial Greeting</label>
+                <Input value={newChar.initialGreeting} onChange={e => setNewChar(p => ({ ...p, initialGreeting: e.target.value }))}
+                  placeholder="Hey, I've been waiting for you..." className="bg-background border-border h-9 text-sm" />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Avatar URL (optional)</label>
+                <Input value={newChar.avatarUrl} onChange={e => setNewChar(p => ({ ...p, avatarUrl: e.target.value }))}
+                  placeholder="https://cdn.example.com/avatar.jpg" className="bg-background border-border h-9 text-sm" />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Tags (comma-separated)</label>
+                <Input value={newChar.tags} onChange={e => setNewChar(p => ({ ...p, tags: e.target.value }))}
+                  placeholder="Hacker, Anime, Tsundere" className="bg-background border-border h-9 text-sm" />
+              </div>
+
+              <button onClick={createCharacter} disabled={creating || !newChar.name.trim()}
+                className="w-full py-2.5 rounded-xl bg-primary text-white font-bold text-sm box-glow-pink disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                {creating ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
+                {creating ? "Creating..." : `Create "${newChar.name || "Character"}" as ${newChar.visibility}`}
+              </button>
+            </div>
+          )}
           <div className="space-y-3">
             {charsData?.items?.map(char => (
               <div key={char.characterId} className="rounded-xl bg-card border border-border overflow-hidden">

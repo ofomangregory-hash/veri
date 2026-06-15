@@ -65,6 +65,10 @@ function chunk<T>(arr: T[], size: number): T[][] {
 
 // ── Bot startup ────────────────────────────────────────────────────────────────
 export function startTelegramBot(): TelegramBot | null {
+  if (process.env.DISABLE_TELEGRAM_BOT === "true") {
+    logger.info("Telegram bot disabled via DISABLE_TELEGRAM_BOT — skipping polling");
+    return null;
+  }
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) { logger.warn("TELEGRAM_BOT_TOKEN not set — bot disabled"); return null; }
 
