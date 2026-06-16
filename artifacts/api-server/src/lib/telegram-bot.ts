@@ -3,6 +3,7 @@ import { db, usersTable, charactersTable, systemConfigurationsTable, transaction
 import { eq, sql, count, like, ilike } from "drizzle-orm";
 import { logger } from "./logger";
 import { generateAIReply } from "./openrouter";
+import { generateCharacterAvatar } from "./imageGenerator";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Trait { type: string; name: string; description: string }
@@ -1625,6 +1626,10 @@ export function startTelegramBot(): TelegramBot | null {
 
         const systemPrompt = `You are ${state.name}, an AI companion. ${state.bio}`;
         const botCharSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
+        let botAvatarUrl: string | undefined;
+        try {
+          botAvatarUrl = await generateCharacterAvatar({ characterName: state.name, genre, teaserDescription: state.bio.slice(0, 100), imageSeed: botCharSeed });
+        } catch { botAvatarUrl = undefined; }
         const [newChar] = await db.insert(charactersTable).values({
           name: state.name,
           genre,
@@ -1634,6 +1639,7 @@ export function startTelegramBot(): TelegramBot | null {
           initialGreeting: `Hey 💜 I'm ${state.name}. ${state.bio.slice(0, 80)}…`,
           creatorId: userId,
           imageSeed: botCharSeed,
+          avatarUrl: botAvatarUrl,
         }).returning({ characterId: charactersTable.characterId, name: charactersTable.name });
 
         await db.update(usersTable).set({
@@ -1900,6 +1906,11 @@ export function startTelegramBot(): TelegramBot | null {
             "Stay fully in character at all times.",
           ].filter(Boolean).join("\n\n");
 
+          const cwSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
+          let cwAvatarUrl: string | undefined;
+          try {
+            cwAvatarUrl = await generateCharacterAvatar({ characterName: cwSession.name, genre: cwSession.genre, teaserDescription: `A ${cwSession.genre} companion with a unique personality`, imageSeed: cwSeed });
+          } catch { cwAvatarUrl = undefined; }
           const [newChar] = await db.insert(charactersTable).values({
             name: cwSession.name,
             genre: cwSession.genre,
@@ -1908,7 +1919,8 @@ export function startTelegramBot(): TelegramBot | null {
             systemPrompt,
             initialGreeting: `Hey 💜 I'm ${cwSession.name}. I've been waiting for you...`,
             creatorId: cwUserId,
-            imageSeed: String(Math.floor(Math.random() * 9000000000) + 1000000000),
+            imageSeed: cwSeed,
+            avatarUrl: cwAvatarUrl,
           }).returning({ characterId: charactersTable.characterId, name: charactersTable.name });
 
           if (!isCWAdmin) {

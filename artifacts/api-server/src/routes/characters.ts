@@ -17,6 +17,7 @@ import {
 } from "@workspace/api-zod";
 import { authMiddleware } from "../middlewares/auth";
 import { getGenreDefaultAvatar } from "../lib/cloudinary";
+import { generateCharacterAvatar } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import { eq as _eq } from "drizzle-orm";
 
@@ -186,12 +187,28 @@ router.post("/characters", async (req, res): Promise<void> => {
   // Build system prompt
   const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
 
+  // Auto-generate avatar if none provided
+  let finalAvatarUrl = parsed.data.avatarUrl ?? null;
+  if (!finalAvatarUrl) {
+    try {
+      finalAvatarUrl = await generateCharacterAvatar({
+        characterName: parsed.data.name,
+        genre: parsed.data.genre,
+        teaserDescription: parsed.data.bio ?? null,
+        imageSeed,
+      });
+    } catch (err) {
+      logger.warn({ err }, "Avatar generation failed — using genre default");
+      finalAvatarUrl = getGenreDefaultAvatar(parsed.data.genre);
+    }
+  }
+
   const [character] = await db.insert(charactersTable).values({
     creatorId: req.telegramUserId,
     name: parsed.data.name,
     visibility,
     systemPrompt,
-    avatarUrl: parsed.data.avatarUrl ?? getGenreDefaultAvatar(parsed.data.genre),
+    avatarUrl: finalAvatarUrl,
     teaserDescription: parsed.data.bio ?? null,
     initialGreeting: parsed.data.initialGreeting ?? null,
     tags: parsed.data.tags ?? [],

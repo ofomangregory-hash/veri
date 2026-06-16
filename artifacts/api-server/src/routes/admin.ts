@@ -22,6 +22,7 @@ import {
 } from "@workspace/api-zod";
 import { authMiddleware, adminOnly } from "../middlewares/auth";
 import { uploadBase64ToCloudinary, getGenreDefaultAvatar } from "../lib/cloudinary";
+import { generateCharacterAvatar } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -415,17 +416,35 @@ router.post("/admin/characters/create", async (req, res): Promise<void> => {
   const systemPrompt = customSystemPrompt?.trim()
     || `You are ${name}, ${bio ?? "a mysterious AI companion"}. Age: ${age ?? "unknown"}. Initial greeting: ${initialGreeting ?? `Hello, I've been waiting for you...`}. Genre: ${safeGenre}. Be in character at all times.`;
 
+  // Auto-generate avatar if none provided
+  const seed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
+  let finalAvatarUrl = avatarUrl ?? null;
+  if (!finalAvatarUrl) {
+    try {
+      finalAvatarUrl = await generateCharacterAvatar({
+        characterName: name.trim(),
+        genre: safeGenre,
+        teaserDescription: bio ?? null,
+        imageSeed: seed,
+      });
+    } catch (err) {
+      logger.warn({ err }, "Admin avatar generation failed — using genre default");
+      finalAvatarUrl = getGenreDefaultAvatar(safeGenre);
+    }
+  }
+
   const [character] = await db.insert(charactersTable).values({
     creatorId: req.telegramUserId,
     name: name.trim(),
     visibility: safeVisibility,
     systemPrompt,
-    avatarUrl: avatarUrl ?? getGenreDefaultAvatar(safeGenre),
+    avatarUrl: finalAvatarUrl,
     teaserDescription: bio ?? null,
     initialGreeting: initialGreeting ?? null,
     tags: Array.isArray(tags) ? tags : [],
     genre: safeGenre,
     age: age ?? null,
+    imageSeed: seed,
   }).returning();
 
   res.status(201).json(serializeCharacter(character));

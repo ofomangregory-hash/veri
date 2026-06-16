@@ -26,6 +26,24 @@ export interface GenerateSelfieOptions {
   sceneDescription: string;
 }
 
+export interface GenerateAvatarOptions {
+  characterName: string;
+  genre: string;
+  teaserDescription: string | null | undefined;
+  imageSeed: string;
+}
+
+export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Promise<string> {
+  return generateCharacterSelfie({
+    characterName: opts.characterName,
+    genre: opts.genre,
+    systemPrompt: "",
+    teaserDescription: opts.teaserDescription,
+    imageSeed: opts.imageSeed,
+    sceneDescription: "close-up portrait, looking at camera, soft studio lighting, high detail",
+  });
+}
+
 export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Promise<string> {
   const { characterName, genre, systemPrompt, teaserDescription, imageSeed, sceneDescription } = opts;
 
