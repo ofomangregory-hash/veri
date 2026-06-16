@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe } from "@workspace/api-client-react";
-import { Users, Bot, CreditCard, Activity, Image, DollarSign, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles } from "lucide-react";
+import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { CharacterWizard } from "@/components/CharacterWizard";
 
 type AdminTab = "stats" | "characters" | "banners" | "pricing" | "broadcast";
 
@@ -63,6 +64,7 @@ export function Admin() {
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
 
+  const [showWizard, setShowWizard] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<{ seeded: number; skipped: number; total: number } | null>(null);
 
@@ -209,6 +211,7 @@ export function Admin() {
   };
 
   return (
+    <>
     <div className="p-4 pb-24">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
@@ -291,15 +294,19 @@ export function Admin() {
             <button onClick={runSeed} disabled={seeding}
               className="flex items-center gap-2 text-xs text-yellow-400 border border-yellow-500/50 px-3 py-1.5 rounded-lg hover:bg-yellow-500/10 transition-colors disabled:opacity-50">
               {seeding ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {seeding ? "Seeding…" : "Seed Default Characters"}
+              {seeding ? "Seeding…" : "Seed Defaults"}
+            </button>
+            <button onClick={() => setShowWizard(true)}
+              className="flex items-center gap-2 text-xs text-accent border border-accent/50 px-3 py-1.5 rounded-lg hover:bg-accent/10 transition-colors box-glow-blue">
+              <Wand2 size={14} /> Character Wizard
             </button>
             <button onClick={() => setShowCreateForm(f => !f)}
               className="flex items-center gap-2 text-xs text-primary border border-primary/50 px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
               {showCreateForm ? <X size={14} /> : <Plus size={14} />}
-              {showCreateForm ? "Cancel" : "Create Character"}
+              {showCreateForm ? "Cancel" : "Quick Create"}
             </button>
             <button onClick={loadConfigs} disabled={configsLoading}
-              className="flex items-center gap-2 text-xs text-accent border border-accent/50 px-3 py-1.5 rounded-lg hover:bg-accent/10 transition-colors">
+              className="flex items-center gap-2 text-xs text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-card transition-colors">
               <RefreshCw size={14} className={configsLoading ? "animate-spin" : ""} /> Refresh
             </button>
           </div>
@@ -595,5 +602,14 @@ export function Admin() {
         </div>
       )}
     </div>
+
+    {/* Character Wizard Overlay */}
+    {showWizard && (
+      <CharacterWizard
+        onClose={() => setShowWizard(false)}
+        onCreated={() => { setShowWizard(false); loadConfigs(); }}
+      />
+    )}
+    </>
   );
 }

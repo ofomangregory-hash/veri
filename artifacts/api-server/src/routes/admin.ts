@@ -400,19 +400,20 @@ router.put("/admin/system-config/:key", async (req, res): Promise<void> => {
 
 // ── Admin: Create character (free, any visibility) ───────────────────────────
 router.post("/admin/characters/create", async (req, res): Promise<void> => {
-  const { name, bio, age, genre, tags, avatarUrl, initialGreeting, visibility } = req.body as {
+  const { name, bio, age, genre, tags, avatarUrl, initialGreeting, visibility, systemPrompt: customSystemPrompt } = req.body as {
     name?: string; bio?: string; age?: string; genre?: string;
     tags?: string[]; avatarUrl?: string; initialGreeting?: string;
-    visibility?: string;
+    visibility?: string; systemPrompt?: string;
   };
 
   if (!name?.trim()) { res.status(400).json({ error: "Name is required" }); return; }
 
-  const validGenres = ["Anime", "Fantasy", "Modern", "Sci-Fi", "Dark Goth"];
+  const validGenres = ["Anime", "Fantasy", "Modern", "Sci-Fi", "Dark Goth", "Gothic", "Elf", "Vampire", "Succubus", "Custom"];
   const safeGenre = validGenres.includes(genre ?? "") ? genre! : "Modern";
   const safeVisibility = visibility === "public" ? "public" : "private";
 
-  const systemPrompt = `You are ${name}, ${bio ?? "a mysterious AI companion"}. Age: ${age ?? "unknown"}. Initial greeting: ${initialGreeting ?? `Hello, I've been waiting for you...`}. Genre: ${safeGenre}. Be in character at all times.`;
+  const systemPrompt = customSystemPrompt?.trim()
+    || `You are ${name}, ${bio ?? "a mysterious AI companion"}. Age: ${age ?? "unknown"}. Initial greeting: ${initialGreeting ?? `Hello, I've been waiting for you...`}. Genre: ${safeGenre}. Be in character at all times.`;
 
   const [character] = await db.insert(charactersTable).values({
     creatorId: req.telegramUserId,

@@ -19,6 +19,92 @@ const pendingBotPhoto = new Set<number>();          // chatIds waiting to set bo
 interface CreationState { step: "name" | "bio" | "genre"; name?: string; bio?: string }
 const pendingCreation = new Map<number, CreationState>(); // chatId → creation wizard state
 
+// ── Wizard state ──────────────────────────────────────────────────────────────
+interface WizardState {
+  step: "type" | "name" | "scene" | "behavior" | "personality" | "traits" | "mood" | "review";
+  characterType?: string;
+  characterName?: string;
+  scene?: string;
+  behaviors: string[];
+  personalities: string[];
+  traits: string[];
+  moods: string[];
+  awaitingText?: "name" | "bio" | "greeting";
+  bio?: string;
+  greeting?: string;
+}
+const pendingWizard = new Map<number, WizardState>();
+
+// ── Wizard data ───────────────────────────────────────────────────────────────
+const WIZARD_NAMES: Record<string, string[]> = {
+  Modern:   ["Nova","Jade","Riley","Skyler","Ash","Devon","Morgan","Sage","Quinn","Blake","Harlow","Remy","Sloane","Avery","Peyton"],
+  Gothic:   ["Morrigan","Raven","Shade","Vesper","Theron","Cinder","Draven","Grimm","Isolde","Moira"],
+  Elf:      ["Aelindra","Sylvara","Thalion","Elowyn","Nimriel","Lyraniel","Arannis","Caladwen","Faendal","Celebris"],
+  Vampire:  ["Damien","Lucrezia","Viktor","Mordecai","Alaric","Dorian","Carmilla","Vladislav","Evangeline","Caspian"],
+  Succubus: ["Avara","Zephyrine","Delara","Velvet","Roxane","Mystique","Tempest","Scarlet"],
+  Anime:    ["Hikari","Yuki","Ren","Akira","Sora","Hana","Kira","Ryuu","Mika","Zero"],
+};
+const WIZARD_TYPES = Object.keys(WIZARD_NAMES);
+const WIZARD_SCENES = [
+  "Moonlit Rooftop","Abandoned Castle","Neon-lit Tokyo Street","Secret Garden",
+  "Space Station Observation Deck","Underground Club","Beach at Sunset","Enchanted Forest",
+  "Corporate Penthouse","Cyberpunk Alley","Ancient Library","Volcanic Island",
+  "Cozy Coffee Shop","Haunted Mansion","Futuristic Lab","Snowy Mountain Cabin",
+  "Mystical Shrine","Underwater Palace","Desert Oasis","Dark Carnival",
+];
+const WIZARD_BEHAVIORS = [
+  "Protective","Teasing","Dominant","Submissive","Nurturing","Mysterious","Flirtatious",
+  "Stoic","Clingy","Tsundere","Loyal","Cunning","Reckless","Intellectual","Playful",
+  "Melancholic","Vengeful","Gentle","Possessive","Carefree","Sadistic","Empathetic",
+  "Detached","Charismatic","Rebellious","Perfectionist","Adventurous","Shy","Sarcastic",
+  "Idealistic","Pragmatic","Romantic","Competitive","Selfless","Hedonistic",
+];
+const WIZARD_PERSONALITIES = [
+  "Dreamy Idealist","Commander","Witch Archetype","The Rebel","The Caretaker",
+  "The Artist","The Trickster","The Scholar","The Warrior","The Lover",
+  "The Mystic","The Sage","The Hero","The Shadow","The Innocent",
+  "The Explorer","The Ruler","The Magician","The Outlaw","The Jester",
+  "The Everyman","The Seducer","The Mentor","The Orphan","The Destroyer",
+  "The Creator","The Seeker","Lover-Villain","Dark Empath","Stoic Philosopher",
+  "Wild Card","Broken Hearted","The Obsessed","The Liberator","The Mirror",
+];
+const WIZARD_TRAITS = [
+  "Silver-tongued","Telepathic","Immortal","Shapeshifter","Night Owl",
+  "Empath","Combat-trained","Hacker","Pyrokinetic","Healer",
+  "Necromancer","Time Traveler","Seer of Futures","Assassin Background","Royal Bloodline",
+  "Street Smart","Bookworm","Wanderer","Chef","Musician",
+  "Painter","Scientist","Engineer","Dancer","Pilot",
+  "Mage","Rogue","Knight","Spy","Rebel Leader",
+  "Poet","Philosopher","Guardian","Fallen Angel","Cursed Soul",
+];
+const WIZARD_MOODS = [
+  "Smoldering","Playful","Brooding","Yearning","Euphoric","Melancholic","Mischievous",
+  "Tender","Fierce","Wistful","Curious","Sultry","Anxious","Serene","Rebellious",
+  "Nostalgic","Charged","Vulnerable","Dominant","Lost","Warm","Cold","Haunted",
+  "Determined","Flirty","Protective","Dreamy","Urgent","Exhausted","Electric",
+  "Sacred","Dangerous","Broken","Hopeful","Magnetic",
+];
+
+function formatWizardList(items: string[], selected: string[]): string {
+  return items.map((item, i) =>
+    `${selected.includes(item) ? "✅" : `${i + 1}.`} ${item}`
+  ).join("\n");
+}
+
+function buildWizardPrompt(w: WizardState): string {
+  return [
+    `You are ${w.characterName}, a ${w.characterType} companion in the Z-Fantasy universe.`,
+    w.bio ? `Background: ${w.bio}` : "",
+    w.scene ? `Setting: ${w.scene}.` : "",
+    w.behaviors.length ? `Core behaviors: ${w.behaviors.join(", ")}.` : "",
+    w.personalities.length ? `Personality: ${w.personalities.join(", ")}.` : "",
+    w.traits.length ? `Traits: ${w.traits.join(", ")}.` : "",
+    w.moods.length ? `Mood: ${w.moods.join(", ")}.` : "",
+    w.greeting ? `Opening line: "${w.greeting}"` : "",
+    "Stay fully in character at all times.",
+  ].filter(Boolean).join("\n\n");
+}
+
 let bot: TelegramBot | null = null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -133,6 +219,13 @@ export function startTelegramBot(): TelegramBot | null {
       { command: "setdesc",            description: "Set bot description: /setdesc [text]" },
       { command: "setbotphoto",        description: "Set bot profile picture" },
       { command: "addcommand",         description: "Custom command: /addcommand [trigger] | [response]" },
+      { command: "createwizard",       description: "Step-by-step character creation wizard" },
+      { command: "wizardnames",        description: "List all wizard name options by type" },
+      { command: "wizardscenes",       description: "List all available scenes" },
+      { command: "wizardbehaviors",    description: "List all behavior options (35)" },
+      { command: "wizardpersonalities",description: "List all personality options (35)" },
+      { command: "wizardtraits",       description: "List all trait options (35)" },
+      { command: "wizardmoods",        description: "List all mood options (35)" },
     ];
 
     // Set public commands for all users (default scope)
@@ -1370,6 +1463,193 @@ export function startTelegramBot(): TelegramBot | null {
         return;
       }
 
+      // ── Wizard callbacks ──────────────────────────────────────────────────
+      if (query.data?.startsWith("wiz_")) {
+        const wizData = query.data;
+        const adminId = process.env.ADMIN_TELEGRAM_ID;
+        const isAdminUser = String(query.from.id) === adminId || adminSessions.has(query.from.id);
+        if (!isAdminUser) return;
+
+        // Cancel wizard
+        if (wizData === "wiz_cancel") {
+          pendingWizard.delete(chatId);
+          await bot!.sendMessage(chatId, "❌ Wizard cancelled.");
+          return;
+        }
+
+        // Type selection
+        if (wizData.startsWith("wiz_type_")) {
+          const type = wizData.replace("wiz_type_", "");
+          const state = pendingWizard.get(chatId) ?? { step: "type" as const, behaviors: [], personalities: [], traits: [], moods: [] };
+          state.characterType = type;
+          state.step = "name";
+          pendingWizard.set(chatId, state);
+          const names = WIZARD_NAMES[type] ?? [];
+          await bot!.sendMessage(chatId,
+            `✅ Type: *${type}*\n\nStep 2 of 7 — Pick a name:`,
+            {
+              parse_mode: "Markdown",
+              reply_markup: { inline_keyboard: [
+                ...chunk(names.map(n => ({ text: n, callback_data: `wiz_name_${n}` })), 3),
+                [{ text: "✏️ Custom name", callback_data: "wiz_name_custom" }],
+                [{ text: "❌ Cancel", callback_data: "wiz_cancel" }],
+              ]},
+            }
+          );
+          return;
+        }
+
+        // Name selection
+        if (wizData.startsWith("wiz_name_")) {
+          const nameVal = wizData.replace("wiz_name_", "");
+          const state = pendingWizard.get(chatId);
+          if (!state) return;
+          if (nameVal === "custom") {
+            state.awaitingText = "name";
+            pendingWizard.set(chatId, state);
+            await bot!.sendMessage(chatId, "✏️ Type the custom name for your character:");
+            return;
+          }
+          state.characterName = nameVal;
+          state.step = "scene";
+          pendingWizard.set(chatId, state);
+          await bot!.sendMessage(chatId,
+            `✅ Name: *${nameVal}*\n\nStep 3 of 7 — Choose a scene/setting:`,
+            {
+              parse_mode: "Markdown",
+              reply_markup: { inline_keyboard: [
+                ...chunk(WIZARD_SCENES.map((s, i) => ({ text: `${i + 1}. ${s}`, callback_data: `wiz_scene_${i}` })), 2),
+                [{ text: "❌ Cancel", callback_data: "wiz_cancel" }],
+              ]},
+            }
+          );
+          return;
+        }
+
+        // Scene selection
+        if (wizData.startsWith("wiz_scene_")) {
+          const idx = parseInt(wizData.replace("wiz_scene_", ""), 10);
+          const scene = WIZARD_SCENES[idx];
+          if (!scene) return;
+          const state = pendingWizard.get(chatId);
+          if (!state) return;
+          state.scene = scene;
+          state.step = "behavior";
+          pendingWizard.set(chatId, state);
+          const lines = WIZARD_BEHAVIORS.map((b, i) => `${i + 1}. ${b}`).join("\n");
+          await bot!.sendMessage(chatId,
+            `✅ Scene: *${scene}*\n\nStep 4 of 7 — Behaviors (pick up to 7)\n\nReply with comma-separated numbers, e.g: \`1,3,7,12\`\n\n${lines}`,
+            { parse_mode: "Markdown" }
+          );
+          return;
+        }
+
+        // Done buttons for multi-select steps
+        if (wizData === "wiz_done_behavior") {
+          const state = pendingWizard.get(chatId);
+          if (!state) return;
+          state.step = "personality";
+          pendingWizard.set(chatId, state);
+          const lines = WIZARD_PERSONALITIES.map((p, i) => `${i + 1}. ${p}`).join("\n");
+          await bot!.sendMessage(chatId,
+            `✅ Behaviors: ${state.behaviors.join(", ") || "—"}\n\nStep 5 of 7 — Personality (pick up to 7)\n\nReply with comma-separated numbers:\n\n${lines}`,
+            { parse_mode: "Markdown" }
+          );
+          return;
+        }
+
+        if (wizData === "wiz_done_personality") {
+          const state = pendingWizard.get(chatId);
+          if (!state) return;
+          state.step = "traits";
+          pendingWizard.set(chatId, state);
+          const lines = WIZARD_TRAITS.map((t, i) => `${i + 1}. ${t}`).join("\n");
+          await bot!.sendMessage(chatId,
+            `✅ Personalities: ${state.personalities.join(", ") || "—"}\n\nStep 6 of 7 — Traits (pick up to 7)\n\nReply with comma-separated numbers:\n\n${lines}`,
+            { parse_mode: "Markdown" }
+          );
+          return;
+        }
+
+        if (wizData === "wiz_done_traits") {
+          const state = pendingWizard.get(chatId);
+          if (!state) return;
+          state.step = "mood";
+          pendingWizard.set(chatId, state);
+          const lines = WIZARD_MOODS.map((m, i) => `${i + 1}. ${m}`).join("\n");
+          await bot!.sendMessage(chatId,
+            `✅ Traits: ${state.traits.join(", ") || "—"}\n\nStep 7 of 7 — Mood (pick up to 5)\n\nReply with comma-separated numbers:\n\n${lines}`,
+            { parse_mode: "Markdown" }
+          );
+          return;
+        }
+
+        if (wizData === "wiz_done_mood") {
+          const state = pendingWizard.get(chatId);
+          if (!state) return;
+          state.step = "review";
+          pendingWizard.set(chatId, state);
+          await bot!.sendMessage(chatId,
+            [
+              `🎉 *Almost done! Review your character:*`, ``,
+              `👤 Name: *${state.characterName}*`,
+              `🎨 Type: *${state.characterType}*`,
+              `🌍 Scene: *${state.scene}*`,
+              `⚡ Behaviors: ${state.behaviors.join(", ") || "—"}`,
+              `🎭 Personalities: ${state.personalities.join(", ") || "—"}`,
+              `✨ Traits: ${state.traits.join(", ") || "—"}`,
+              `💫 Moods: ${state.moods.join(", ") || "—"}`,
+              ``,
+              `Reply with a short bio/backstory (or send \`skip\` to use defaults):`,
+            ].join("\n"),
+            {
+              parse_mode: "Markdown",
+              reply_markup: { inline_keyboard: [[{ text: "⚡ Create Now (no bio)", callback_data: "wiz_create_now" }]] },
+            }
+          );
+          return;
+        }
+
+        if (wizData === "wiz_create_now" || wizData === "wiz_create_public" || wizData === "wiz_create_private") {
+          const state = pendingWizard.get(chatId);
+          if (!state || !state.characterName) { await bot!.sendMessage(chatId, "❌ Wizard data lost. Please /createwizard again."); return; }
+
+          const visibility = wizData === "wiz_create_public" ? "public" : "private";
+          const systemPrompt = buildWizardPrompt(state);
+
+          const [newChar] = await db.insert(charactersTable).values({
+            name: state.characterName,
+            genre: state.characterType ?? "Modern",
+            visibility,
+            teaserDescription: state.bio ?? null,
+            systemPrompt,
+            initialGreeting: state.greeting ?? `Hey 💜 I'm ${state.characterName}.`,
+            creatorId: String(query.from.id),
+            tags: [state.characterType ?? "Modern", ...state.behaviors.slice(0, 3)],
+          }).returning({ characterId: charactersTable.characterId, name: charactersTable.name });
+
+          pendingWizard.delete(chatId);
+
+          await bot!.sendMessage(chatId, [
+            `✅ *${newChar.name}* has been created!`,
+            ``,
+            `🎭 Type: ${state.characterType}`,
+            `🌍 Scene: ${state.scene}`,
+            `👁 Visibility: *${visibility}*`,
+            ``,
+            `Use /setcharphoto ${newChar.name} to add a photo.`,
+            `Use /setvisibility ${newChar.name} | public to publish.`,
+          ].join("\n"), {
+            parse_mode: "Markdown",
+            reply_markup: { inline_keyboard: [[
+              { text: "💬 Start Chat", callback_data: `chat_${newChar.characterId}` },
+              { text: "🌐 Open App", web_app: { url: appUrl(`/chat/${newChar.characterId}`) } },
+            ]]},
+          });
+          return;
+        }
+      }
+
       if (query.data?.startsWith("show_char_")) {
         const charId = query.data.replace("show_char_", "");
         const [char] = await db.select().from(charactersTable)
@@ -1522,6 +1802,121 @@ export function startTelegramBot(): TelegramBot | null {
       const chatId = msg.chat.id;
       const userId = String(msg.from?.id);
       const text = msg.text ?? "";
+
+      // ── Wizard text input handler ──────────────────────────────────────────────
+      const wizState = pendingWizard.get(chatId);
+      if (wizState && text && !text.startsWith("/")) {
+        const adminId = process.env.ADMIN_TELEGRAM_ID;
+        const isAdminUser = userId === adminId || adminSessions.has(msg.from?.id ?? 0);
+        if (isAdminUser) {
+          // Custom name input
+          if (wizState.awaitingText === "name") {
+            wizState.characterName = text.trim();
+            wizState.awaitingText = undefined;
+            wizState.step = "scene";
+            pendingWizard.set(chatId, wizState);
+            await bot!.sendMessage(chatId,
+              `✅ Name: *${wizState.characterName}*\n\nStep 3 of 7 — Choose a scene/setting:`,
+              {
+                parse_mode: "Markdown",
+                reply_markup: { inline_keyboard: [
+                  ...chunk(WIZARD_SCENES.map((s, i) => ({ text: `${i + 1}. ${s}`, callback_data: `wiz_scene_${i}` })), 2),
+                  [{ text: "❌ Cancel", callback_data: "wiz_cancel" }],
+                ]},
+              }
+            );
+            return;
+          }
+
+          // Bio input (review step)
+          if (wizState.step === "review" && !wizState.bio) {
+            if (text.toLowerCase() !== "skip") wizState.bio = text.trim();
+            pendingWizard.set(chatId, wizState);
+            await bot!.sendMessage(chatId,
+              `Great! Now choose visibility:`,
+              {
+                reply_markup: { inline_keyboard: [
+                  [
+                    { text: "🌐 Public", callback_data: "wiz_create_public" },
+                    { text: "🔒 Private", callback_data: "wiz_create_private" },
+                  ],
+                ]},
+              }
+            );
+            return;
+          }
+
+          // Behavior number selection
+          if (wizState.step === "behavior") {
+            const nums = text.split(",").map(s => parseInt(s.trim(), 10) - 1).filter(n => !isNaN(n) && n >= 0 && n < WIZARD_BEHAVIORS.length);
+            wizState.behaviors = [...new Set(nums.slice(0, 7).map(n => WIZARD_BEHAVIORS[n]!))];
+            pendingWizard.set(chatId, wizState);
+            const lines = WIZARD_PERSONALITIES.map((p, i) => `${i + 1}. ${p}`).join("\n");
+            await bot!.sendMessage(chatId,
+              `✅ Behaviors: ${wizState.behaviors.join(", ")}\n\nStep 5 of 7 — Personality (pick up to 7)\n\nReply with comma-separated numbers:\n\n${lines}`,
+              { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "⏭ Skip", callback_data: "wiz_done_behavior" }]] } }
+            );
+            wizState.step = "personality";
+            pendingWizard.set(chatId, wizState);
+            return;
+          }
+
+          // Personality number selection
+          if (wizState.step === "personality") {
+            const nums = text.split(",").map(s => parseInt(s.trim(), 10) - 1).filter(n => !isNaN(n) && n >= 0 && n < WIZARD_PERSONALITIES.length);
+            wizState.personalities = [...new Set(nums.slice(0, 7).map(n => WIZARD_PERSONALITIES[n]!))];
+            wizState.step = "traits";
+            pendingWizard.set(chatId, wizState);
+            const lines = WIZARD_TRAITS.map((t, i) => `${i + 1}. ${t}`).join("\n");
+            await bot!.sendMessage(chatId,
+              `✅ Personalities: ${wizState.personalities.join(", ")}\n\nStep 6 of 7 — Traits (pick up to 7)\n\nReply with comma-separated numbers:\n\n${lines}`,
+              { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "⏭ Skip", callback_data: "wiz_done_traits" }]] } }
+            );
+            return;
+          }
+
+          // Traits number selection
+          if (wizState.step === "traits") {
+            const nums = text.split(",").map(s => parseInt(s.trim(), 10) - 1).filter(n => !isNaN(n) && n >= 0 && n < WIZARD_TRAITS.length);
+            wizState.traits = [...new Set(nums.slice(0, 7).map(n => WIZARD_TRAITS[n]!))];
+            wizState.step = "mood";
+            pendingWizard.set(chatId, wizState);
+            const lines = WIZARD_MOODS.map((m, i) => `${i + 1}. ${m}`).join("\n");
+            await bot!.sendMessage(chatId,
+              `✅ Traits: ${wizState.traits.join(", ")}\n\nStep 7 of 7 — Mood (pick up to 5)\n\nReply with comma-separated numbers:\n\n${lines}`,
+              { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "⏭ Skip", callback_data: "wiz_done_mood" }]] } }
+            );
+            return;
+          }
+
+          // Mood number selection
+          if (wizState.step === "mood") {
+            const nums = text.split(",").map(s => parseInt(s.trim(), 10) - 1).filter(n => !isNaN(n) && n >= 0 && n < WIZARD_MOODS.length);
+            wizState.moods = [...new Set(nums.slice(0, 5).map(n => WIZARD_MOODS[n]!))];
+            wizState.step = "review";
+            pendingWizard.set(chatId, wizState);
+            await bot!.sendMessage(chatId,
+              [
+                `✅ Moods: ${wizState.moods.join(", ")}`, ``,
+                `🎉 *Review your character:*`, ``,
+                `👤 *${wizState.characterName}* (${wizState.characterType})`,
+                `🌍 ${wizState.scene}`,
+                `⚡ ${wizState.behaviors.join(", ") || "—"}`,
+                `🎭 ${wizState.personalities.join(", ") || "—"}`,
+                `✨ ${wizState.traits.join(", ") || "—"}`,
+                `💫 ${wizState.moods.join(", ") || "—"}`,
+                ``,
+                `Reply with a short bio (or send \`skip\`):`,
+              ].join("\n"),
+              {
+                parse_mode: "Markdown",
+                reply_markup: { inline_keyboard: [[{ text: "⚡ Create Now (no bio)", callback_data: "wiz_create_now" }]] },
+              }
+            );
+            return;
+          }
+        }
+      }
 
       // ── Successful Stars payment ───────────────────────────────────────────────
       if (msg.successful_payment) {
@@ -1720,6 +2115,62 @@ export function startTelegramBot(): TelegramBot | null {
         logger.error({ err }, "AI response failed");
         await bot!.sendMessage(chatId, "⚡ Having trouble right now — try again in a moment!");
       }
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  ADMIN: /createwizard — step-by-step character creation wizard
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/createwizard/, async (msg) => {
+      if (!isAdmin(msg)) return;
+      const chatId = msg.chat.id;
+      pendingWizard.set(chatId, { step: "type", behaviors: [], personalities: [], traits: [], moods: [] });
+      await bot!.sendMessage(chatId,
+        `🪄 *Character Creation Wizard*\n\nStep 1 of 7 — Choose a character type:`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: [
+            WIZARD_TYPES.slice(0, 3).map(t => ({ text: t, callback_data: `wiz_type_${t}` })),
+            WIZARD_TYPES.slice(3).map(t => ({ text: t, callback_data: `wiz_type_${t}` })),
+          ]},
+        }
+      );
+    });
+
+    // ── /wizardnames, /wizardscenes, /wizardbehaviors etc. — reference lists ──
+    bot.onText(/\/wizardnames/, async (msg) => {
+      if (!isAdmin(msg)) return;
+      const lines = WIZARD_TYPES.map(t => `*${t}:*\n${WIZARD_NAMES[t]!.join(", ")}`).join("\n\n");
+      await bot!.sendMessage(msg.chat.id, `🎭 *Character Names by Type*\n\n${lines}`, { parse_mode: "Markdown" });
+    });
+
+    bot.onText(/\/wizardscenes/, async (msg) => {
+      if (!isAdmin(msg)) return;
+      const lines = WIZARD_SCENES.map((s, i) => `${i + 1}. ${s}`).join("\n");
+      await bot!.sendMessage(msg.chat.id, `🌍 *Available Scenes (20)*\n\n${lines}`, { parse_mode: "Markdown" });
+    });
+
+    bot.onText(/\/wizardbehaviors/, async (msg) => {
+      if (!isAdmin(msg)) return;
+      const lines = WIZARD_BEHAVIORS.map((b, i) => `${i + 1}. ${b}`).join("\n");
+      await bot!.sendMessage(msg.chat.id, `⚡ *Behaviors (35 — pick up to 7)*\n\n${lines}`, { parse_mode: "Markdown" });
+    });
+
+    bot.onText(/\/wizardpersonalities/, async (msg) => {
+      if (!isAdmin(msg)) return;
+      const lines = WIZARD_PERSONALITIES.map((p, i) => `${i + 1}. ${p}`).join("\n");
+      await bot!.sendMessage(msg.chat.id, `🎭 *Personalities (35 — pick up to 7)*\n\n${lines}`, { parse_mode: "Markdown" });
+    });
+
+    bot.onText(/\/wizardtraits/, async (msg) => {
+      if (!isAdmin(msg)) return;
+      const lines = WIZARD_TRAITS.map((t, i) => `${i + 1}. ${t}`).join("\n");
+      await bot!.sendMessage(msg.chat.id, `✨ *Traits (35 — pick up to 7)*\n\n${lines}`, { parse_mode: "Markdown" });
+    });
+
+    bot.onText(/\/wizardmoods/, async (msg) => {
+      if (!isAdmin(msg)) return;
+      const lines = WIZARD_MOODS.map((m, i) => `${i + 1}. ${m}`).join("\n");
+      await bot!.sendMessage(msg.chat.id, `💫 *Moods (35 — pick up to 5)*\n\n${lines}`, { parse_mode: "Markdown" });
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
