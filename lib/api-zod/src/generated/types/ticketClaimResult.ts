@@ -10,4 +10,6 @@ export interface TicketClaimResult {
   ticketsAdded: number;
   newBalance: number;
   nextClaimAt: string;
+  neonCardsAdded: number;
+  newNeonCardBalance: number;
 }

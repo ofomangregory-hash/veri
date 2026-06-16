@@ -19,6 +19,9 @@ const pendingBotPhoto = new Set<number>();          // chatIds waiting to set bo
 interface CreationState { step: "name" | "bio" | "genre"; name?: string; bio?: string }
 const pendingCreation = new Map<number, CreationState>(); // chatId → creation wizard state
 
+// ── Browse carousel session (userId → current index) ─────────────────────────
+const browseSession = new Map<number, number>();
+
 // ── Wizard state ──────────────────────────────────────────────────────────────
 interface WizardState {
   step: "type" | "name" | "scene" | "behavior" | "personality" | "traits" | "mood" | "review";
@@ -402,34 +405,44 @@ export function startTelegramBot(): TelegramBot | null {
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  PUBLIC: /browse — paginated character carousel
+    //  PUBLIC: /browse — single-card carousel with ◀ / ▶ navigation
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     bot.onText(/\/browse/, async (msg) => {
       const chatId = msg.chat.id;
       await syncUser(String(msg.from?.id), msg.from?.username);
 
       const characters = await db.select().from(charactersTable)
-        .where(eq(charactersTable.visibility, "public")).limit(10);
+        .where(eq(charactersTable.visibility, "public"));
 
       if (!characters.length) {
         await bot!.sendMessage(chatId, "No public companions available yet 💜");
         return;
       }
-      for (const char of characters) {
-        const caption = `*${char.name}*\n_${char.teaserDescription ?? char.genre}_\n\n${(char.systemPrompt ?? "").slice(0, 100)}…`;
-        const markup: TelegramBot.InlineKeyboardMarkup = {
-          inline_keyboard: [[
-            { text: "💬 Start Chat", callback_data: `chat_${char.characterId}` },
-            { text: "🌐 Launch App", web_app: { url: appUrl(`/chat/${char.characterId}`) } },
-          ]],
-        };
-        try {
-          if (char.avatarUrl) {
-            await bot!.sendPhoto(chatId, char.avatarUrl, { caption, parse_mode: "Markdown", reply_markup: markup });
-          } else {
-            await bot!.sendMessage(chatId, caption, { parse_mode: "Markdown", reply_markup: markup });
-          }
-        } catch { /* skip broken image */ }
+
+      browseSession.set(chatId, 0);
+      const char = characters[0]!;
+      const caption = `✨ *${char.name}* _(${char.genre})_\n${char.teaserDescription ?? ""}\n\n_Card 1 of ${characters.length}_`;
+      const markup: TelegramBot.InlineKeyboardMarkup = {
+        inline_keyboard: [
+          [
+            { text: "◀ Previous", callback_data: "browse_prev" },
+            { text: "Next ▶", callback_data: "browse_next" },
+          ],
+          [
+            { text: "💬 Chat Now", callback_data: `chat_${char.characterId}` },
+            { text: "🌐 Open App", web_app: { url: appUrl(`/chat/${char.characterId}`) } },
+          ],
+        ],
+      };
+
+      try {
+        if (char.avatarUrl) {
+          await bot!.sendPhoto(chatId, char.avatarUrl, { caption, parse_mode: "Markdown", reply_markup: markup });
+        } else {
+          await bot!.sendMessage(chatId, caption, { parse_mode: "Markdown", reply_markup: markup });
+        }
+      } catch {
+        await bot!.sendMessage(chatId, caption, { parse_mode: "Markdown", reply_markup: markup });
       }
     });
 
@@ -1346,6 +1359,62 @@ export function startTelegramBot(): TelegramBot | null {
       const chatId = query.message?.chat.id;
       if (!chatId) return;
       await bot!.answerCallbackQuery(query.id);
+
+      // ── Browse carousel navigation ─────────────────────────────────────────
+      if (query.data === "browse_prev" || query.data === "browse_next") {
+        const characters = await db.select().from(charactersTable)
+          .where(eq(charactersTable.visibility, "public"));
+
+        if (!characters.length) {
+          await bot!.answerCallbackQuery(query.id, { text: "No companions available" });
+          return;
+        }
+
+        const current = browseSession.get(chatId) ?? 0;
+        let next: number;
+        if (query.data === "browse_next") {
+          next = (current + 1) % characters.length;
+        } else {
+          next = (current - 1 + characters.length) % characters.length;
+        }
+        browseSession.set(chatId, next);
+
+        const char = characters[next]!;
+        const caption = `✨ *${char.name}* _(${char.genre})_\n${char.teaserDescription ?? ""}\n\n_Card ${next + 1} of ${characters.length}_`;
+        const markup: TelegramBot.InlineKeyboardMarkup = {
+          inline_keyboard: [
+            [
+              { text: "◀ Previous", callback_data: "browse_prev" },
+              { text: "Next ▶", callback_data: "browse_next" },
+            ],
+            [
+              { text: "💬 Chat Now", callback_data: `chat_${char.characterId}` },
+              { text: "🌐 Open App", web_app: { url: appUrl(`/chat/${char.characterId}`) } },
+            ],
+          ],
+        };
+
+        try {
+          if (char.avatarUrl && query.message?.photo) {
+            await (bot as unknown as {
+              editMessageMedia: (media: object, options: object) => Promise<unknown>
+            }).editMessageMedia(
+              { type: "photo", media: char.avatarUrl, caption, parse_mode: "Markdown" },
+              { chat_id: chatId, message_id: query.message.message_id, reply_markup: markup }
+            );
+          } else {
+            await bot!.editMessageText(caption, {
+              chat_id: chatId,
+              message_id: query.message?.message_id,
+              parse_mode: "Markdown",
+              reply_markup: markup,
+            });
+          }
+        } catch {
+          // If edit fails (e.g. content unchanged), silently ignore
+        }
+        return;
+      }
 
       if (query.data?.startsWith("cfg_")) {
         const charId = query.data.replace("cfg_", "");

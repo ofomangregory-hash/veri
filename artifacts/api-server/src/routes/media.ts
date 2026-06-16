@@ -11,6 +11,8 @@ import { authMiddleware } from "../middlewares/auth";
 const router: IRouter = Router();
 router.use(authMiddleware);
 
+const VAULT_UNLOCK_NEON_COST = 10;
+
 router.get("/media/vault", async (req, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
   if (!user) {
@@ -18,8 +20,6 @@ router.get("/media/vault", async (req, res): Promise<void> => {
     return;
   }
 
-  // Vault items are stored in user's unlocked_media_array
-  // Format: "characterId:imageUrl:characterName"
   const items = user.unlockedMediaArray.map((entry, idx) => {
     const parts = entry.split("|");
     const characterId = parts[0] ?? "";
@@ -50,12 +50,11 @@ router.post("/media/unlock", async (req, res): Promise<void> => {
     return;
   }
 
-  if (user.ticketBalance < 20) {
-    res.status(402).json({ error: "Insufficient tickets. Unlocking costs 20 tickets." });
+  if (user.neonCardBalance < VAULT_UNLOCK_NEON_COST) {
+    res.status(402).json({ error: `Insufficient Neon Cards. Vault unlock costs ${VAULT_UNLOCK_NEON_COST} Neon Cards.` });
     return;
   }
 
-  // Check not already unlocked
   const mediaId = parsed.data.mediaId;
   if (user.unlockedMediaArray.some(entry => entry.startsWith(mediaId))) {
     res.status(400).json({ error: "Already unlocked" });
@@ -63,14 +62,14 @@ router.post("/media/unlock", async (req, res): Promise<void> => {
   }
 
   await db.update(usersTable).set({
-    ticketBalance: sql`ticket_balance - 20`,
+    neonCardBalance: sql`neon_card_balance - ${VAULT_UNLOCK_NEON_COST}`,
     unlockedMediaArray: sql`array_append(unlocked_media_array, ${mediaId})`,
   }).where(eq(usersTable.id, req.telegramUserId));
 
   await db.insert(transactionsTable).values({
     telegramId: req.telegramUserId,
     actionType: "media_unlock",
-    ticketAmount: -20,
+    ticketAmount: -VAULT_UNLOCK_NEON_COST,
   });
 
   res.json(UnlockMediaResponse.parse({

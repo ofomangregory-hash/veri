@@ -135,11 +135,11 @@ const TYPE_COLORS: Record<string, string> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function buildSystemPrompt(data: WizardData): string {
-  const { name, characterType, scene, behaviors, personalities, traits, moods, bio, initialGreeting } = data;
+  const { name, characterType, scenes, behaviors, personalities, traits, moods, bio, initialGreeting } = data;
   const parts = [
     `You are ${name}, a ${characterType} companion in the Z-Fantasy universe.`,
     bio ? `Background: ${bio}` : "",
-    scene ? `Your world and setting: ${scene}.` : "",
+    scenes.length ? `Your world and setting: ${scenes.join(", ")}.` : "",
     behaviors.length ? `Your core behaviors: ${behaviors.join(", ")}.` : "",
     personalities.length ? `Your personality archetype: ${personalities.join(", ")}.` : "",
     traits.length ? `Your special traits: ${traits.join(", ")}.` : "",
@@ -155,7 +155,7 @@ function buildSystemPrompt(data: WizardData): string {
 export interface WizardData {
   name: string;
   characterType: string;
-  scene: string;
+  scenes: string[];
   behaviors: string[];
   personalities: string[];
   traits: string[];
@@ -173,6 +173,12 @@ const STEP_LABELS: Record<Step, string> = {
   name: "Name", scene: "Scene", behavior: "Behavior",
   personality: "Personality", traits: "Traits", mood: "Mood", review: "Create",
 };
+
+const MAX_PERSONALITIES = 3;
+const MAX_SCENES = 5;
+const MAX_BEHAVIORS = 7;
+const MAX_TRAITS = 7;
+const MAX_MOODS = 5;
 
 function getToken() {
   return (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData || "mock_init_data_for_dev";
@@ -220,7 +226,7 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
   const [customName, setCustomName] = useState("");
 
   const [data, setData] = useState<WizardData>({
-    name: "", characterType: "Modern", scene: "", behaviors: [],
+    name: "", characterType: "Modern", scenes: [], behaviors: [],
     personalities: [], traits: [], moods: [], bio: "",
     age: "", initialGreeting: "", avatarUrl: "", visibility: "private",
   });
@@ -236,7 +242,7 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
     if (prev) setStep(prev);
   }
 
-  function toggle<K extends "behaviors" | "personalities" | "traits" | "moods">(
+  function toggle<K extends "behaviors" | "personalities" | "traits" | "moods" | "scenes">(
     key: K, value: string, max: number
   ) {
     setData(d => {
@@ -249,7 +255,7 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
 
   const canProceed = (): boolean => {
     if (step === "name") return data.name.length > 0;
-    if (step === "scene") return data.scene.length > 0;
+    if (step === "scene") return data.scenes.length > 0;
     if (step === "behavior") return data.behaviors.length > 0;
     if (step === "personality") return data.personalities.length > 0;
     if (step === "traits") return data.traits.length > 0;
@@ -313,10 +319,11 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
       </div>
       <div className="px-4 pb-3 shrink-0">
         <span className="text-xs font-bold uppercase tracking-widest text-accent">{STEP_LABELS[step]}</span>
-        {step === "behavior" && <span className="text-xs text-muted-foreground ml-2">pick up to 7 · {data.behaviors.length}/7</span>}
-        {step === "personality" && <span className="text-xs text-muted-foreground ml-2">pick up to 7 · {data.personalities.length}/7</span>}
-        {step === "traits" && <span className="text-xs text-muted-foreground ml-2">pick up to 7 · {data.traits.length}/7</span>}
-        {step === "mood" && <span className="text-xs text-muted-foreground ml-2">pick up to 5 · {data.moods.length}/5</span>}
+        {step === "scene" && <span className="text-xs text-muted-foreground ml-2">pick up to {MAX_SCENES} · {data.scenes.length}/{MAX_SCENES}</span>}
+        {step === "behavior" && <span className="text-xs text-muted-foreground ml-2">pick up to {MAX_BEHAVIORS} · {data.behaviors.length}/{MAX_BEHAVIORS}</span>}
+        {step === "personality" && <span className="text-xs text-muted-foreground ml-2">pick up to {MAX_PERSONALITIES} · {data.personalities.length}/{MAX_PERSONALITIES}</span>}
+        {step === "traits" && <span className="text-xs text-muted-foreground ml-2">pick up to {MAX_TRAITS} · {data.traits.length}/{MAX_TRAITS}</span>}
+        {step === "mood" && <span className="text-xs text-muted-foreground ml-2">pick up to {MAX_MOODS} · {data.moods.length}/{MAX_MOODS}</span>}
       </div>
 
       {/* Content */}
@@ -367,16 +374,17 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
           </div>
         )}
 
-        {/* ── Step: Scene ── */}
+        {/* ── Step: Scene (multi-select up to 5) ── */}
         {step === "scene" && (
           <div className="grid grid-cols-2 gap-2">
             {SCENES.map(scene => (
-              <button key={scene} onClick={() => setData(d => ({ ...d, scene }))}
+              <button key={scene} onClick={() => toggle("scenes", scene, MAX_SCENES)}
                 className={`p-3 rounded-xl border text-left text-sm font-semibold transition-all ${
-                  data.scene === scene
+                  data.scenes.includes(scene)
                     ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
                     : "border-border bg-card text-foreground hover:border-primary/30 hover:text-primary"
                 }`}>
+                {data.scenes.includes(scene) && <Check size={10} className="inline mr-1" />}
                 {scene}
               </button>
             ))}
@@ -388,17 +396,17 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
           <div className="flex flex-wrap gap-2">
             {BEHAVIORS.map(b => (
               <Chip key={b} label={b} selected={data.behaviors.includes(b)}
-                onClick={() => toggle("behaviors", b, 7)} />
+                onClick={() => toggle("behaviors", b, MAX_BEHAVIORS)} />
             ))}
           </div>
         )}
 
-        {/* ── Step: Personality ── */}
+        {/* ── Step: Personality (max 3) ── */}
         {step === "personality" && (
           <div className="flex flex-wrap gap-2">
             {PERSONALITIES.map(p => (
               <Chip key={p} label={p} selected={data.personalities.includes(p)}
-                onClick={() => toggle("personalities", p, 7)} />
+                onClick={() => toggle("personalities", p, MAX_PERSONALITIES)} />
             ))}
           </div>
         )}
@@ -408,7 +416,7 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
           <div className="flex flex-wrap gap-2">
             {TRAITS.map(t => (
               <Chip key={t} label={t} selected={data.traits.includes(t)}
-                onClick={() => toggle("traits", t, 7)} />
+                onClick={() => toggle("traits", t, MAX_TRAITS)} />
             ))}
           </div>
         )}
@@ -418,7 +426,7 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
           <div className="flex flex-wrap gap-2">
             {MOODS.map(m => (
               <Chip key={m} label={m} selected={data.moods.includes(m)}
-                onClick={() => toggle("moods", m, 5)} />
+                onClick={() => toggle("moods", m, MAX_MOODS)} />
             ))}
           </div>
         )}
@@ -426,6 +434,12 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
         {/* ── Step: Review ── */}
         {step === "review" && (
           <div className="space-y-4">
+            {/* Slot limit notice */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-400/10 border border-cyan-400/30 text-xs text-cyan-300">
+              <span>🃏</span>
+              <span>Creation costs <strong>25 Neon Cards</strong>. Max <strong>3 character slots</strong> per account.</span>
+            </div>
+
             {/* Summary card */}
             <div className="p-4 rounded-xl bg-card border border-primary/30 space-y-3 box-glow-blue">
               <div className="flex items-center gap-2">
@@ -434,7 +448,7 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${TYPE_COLORS[data.characterType] ?? ""}`}>{data.characterType}</span>
               </div>
               <div className="text-xs text-muted-foreground space-y-1">
-                <div>🌍 <span className="text-foreground">{data.scene}</span></div>
+                <div>🌍 <span className="text-foreground">{data.scenes.join(", ") || "—"}</span></div>
                 <div>⚡ {data.behaviors.join(", ") || "—"}</div>
                 <div>🎭 {data.personalities.join(", ") || "—"}</div>
                 <div>✨ {data.traits.join(", ") || "—"}</div>
@@ -507,7 +521,7 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
           <button onClick={create} disabled={creating || !data.name.trim()}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-white font-bold text-sm disabled:opacity-40 transition-all box-glow-pink">
             {creating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
-            {creating ? "Creating..." : `Create ${data.name}`}
+            {creating ? "Creating..." : `Create ${data.name} (25 🃏)`}
           </button>
         )}
       </div>

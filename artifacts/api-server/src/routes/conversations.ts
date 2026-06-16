@@ -314,8 +314,9 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     return;
   }
 
-  if (user.ticketBalance < 25) {
-    res.status(402).json({ error: "Insufficient tickets. Selfie requests cost 25 tickets." });
+  const SELFIE_NEON_COST = 15;
+  if (user.neonCardBalance < SELFIE_NEON_COST) {
+    res.status(402).json({ error: `Insufficient Neon Cards. Selfie requests cost ${SELFIE_NEON_COST} Neon Cards.` });
     return;
   }
 
@@ -345,7 +346,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
 
   // Deduct 25 tickets and increment daily trigger count
   await db.update(usersTable).set({
-    ticketBalance: sql`ticket_balance - 25`,
+    neonCardBalance: sql`neon_card_balance - 15`,
     dailyTriggerRequestsCount: sql`daily_trigger_requests_count + 1`,
   }).where(eq(usersTable.id, req.telegramUserId));
 

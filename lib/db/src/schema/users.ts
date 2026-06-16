@@ -9,6 +9,7 @@ export const usersTable = pgTable("users", {
   userTraits: text("user_traits"),
   activeCharacterId: text("active_character_id"),
   ticketBalance: integer("ticket_balance").notNull().default(50),
+  neonCardBalance: integer("neon_card_balance").notNull().default(0),
   subscriptionTier: text("subscription_tier").notNull().default("Free"),
   lastLoginTimestamp: timestamp("last_login_timestamp", { withTimezone: true }).defaultNow(),
   weeklyCreationsCount: integer("weekly_creations_count").notNull().default(0),

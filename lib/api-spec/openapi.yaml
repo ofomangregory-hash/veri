@@ -629,6 +629,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/SecretCheckResult"
 
+  /payments/neon-cards/create-invoice:
+    post:
+      operationId: createNeonCardInvoice
+      tags: [payments]
+      summary: Create invoice for Neon Card pack purchase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NeonCardPurchaseRequest"
+      responses:
+        "200":
+          description: Invoice link created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+        "400":
+          description: Invalid pack type or amount
+
   /transactions:
     get:
       operationId: getTransactions
@@ -654,7 +675,7 @@ components:
 
     User:
       type: object
-      required: [id, username, ticketBalance, subscriptionTier, weeklyCreationsCount, dailyTriggerRequestsCount, nsfwEnabled]
+      required: [id, username, ticketBalance, neonCardBalance, subscriptionTier, weeklyCreationsCount, dailyTriggerRequestsCount, nsfwEnabled]
       properties:
         id: { type: string }
         username: { type: ["string", "null"] }
@@ -662,6 +683,7 @@ components:
         userTraits: { type: ["string", "null"] }
         activeCharacterId: { type: ["string", "null"] }
         ticketBalance: { type: integer }
+        neonCardBalance: { type: integer }
         subscriptionTier: { type: string }
         lastLoginTimestamp: { type: ["string", "null"] }
         weeklyCreationsCount: { type: integer }
@@ -685,11 +707,20 @@ components:
 
     TicketClaimResult:
       type: object
-      required: [ticketsAdded, newBalance, nextClaimAt]
+      required: [ticketsAdded, newBalance, nextClaimAt, neonCardsAdded, newNeonCardBalance]
       properties:
         ticketsAdded: { type: integer }
         newBalance: { type: integer }
         nextClaimAt: { type: string }
+        neonCardsAdded: { type: integer }
+        newNeonCardBalance: { type: integer }
+
+    NeonCardPurchaseRequest:
+      type: object
+      required: [packType]
+      properties:
+        packType: { type: string, enum: [starter, booster, mega, custom] }
+        customAmount: { type: integer }
 
     ReferralInfo:
       type: object

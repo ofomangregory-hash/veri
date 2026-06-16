@@ -29,6 +29,12 @@ const BASE_TIER_PRICES: Record<string, Record<string, { stars: number; label: st
   },
 };
 
+const NEON_CARD_PACKS: Record<string, { cards: number; stars: number; label: string }> = {
+  starter: { cards: 100,  stars: 200,  label: "Starter Pack — 100 Neon Cards" },
+  booster: { cards: 255,  stars: 500,  label: "Booster Pack — 255 Neon Cards" },
+  mega:    { cards: 510,  stars: 1000, label: "Mega Pack — 510 Neon Cards" },
+};
+
 async function resolveStars(tier: string, period: string): Promise<number> {
   const base = BASE_TIER_PRICES[tier]?.[period]?.stars ?? 0;
   try {
@@ -42,7 +48,7 @@ async function resolveStars(tier: string, period: string): Promise<number> {
       return override.stars;
     }
   } catch {
-    // system_configurations table may not exist yet — fall through to base price
+    // fall through to base price
   }
   return base;
 }
@@ -76,7 +82,7 @@ router.post("/payments/create-invoice", authMiddleware, async (req, res): Promis
       body: JSON.stringify({
         title: `Z-Fantasy ${baseConfig.label}`,
         description: `Unlock ${tier} tier benefits for ${period}`,
-        payload: JSON.stringify({ tier, period, userId: req.telegramUserId }),
+        payload: JSON.stringify({ type: "subscription", tier, period, userId: req.telegramUserId }),
         currency: "XTR",
         prices: [{ label: baseConfig.label, amount: stars }],
       }),
@@ -94,11 +100,74 @@ router.post("/payments/create-invoice", authMiddleware, async (req, res): Promis
   }
 });
 
-// Telegram sends pre_checkout_query and successful_payment via webhook
-router.post("/payments/webhook", async (req, res): Promise<void> => {
-  const body = req.body as { pre_checkout_query?: { id: string; from: { id: number }; invoice_payload: string }; message?: { successful_payment?: { invoice_payload: string }; from?: { id: number } } };
+router.post("/payments/neon-cards/create-invoice", authMiddleware, async (req, res): Promise<void> => {
+  const { packType, customAmount } = req.body as { packType?: string; customAmount?: number };
 
-  // Answer pre-checkout query immediately
+  if (!packType) {
+    res.status(400).json({ error: "packType is required" });
+    return;
+  }
+
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) {
+    res.status(500).json({ error: "Bot token not configured" });
+    return;
+  }
+
+  let cards: number;
+  let stars: number;
+  let label: string;
+
+  if (packType === "custom") {
+    if (!customAmount || customAmount < 10 || !Number.isInteger(customAmount)) {
+      res.status(400).json({ error: "customAmount must be an integer >= 10" });
+      return;
+    }
+    cards = customAmount;
+    stars = Math.ceil(customAmount / 2);
+    label = `Custom — ${customAmount} Neon Cards`;
+  } else {
+    const pack = NEON_CARD_PACKS[packType];
+    if (!pack) {
+      res.status(400).json({ error: "Invalid packType. Use: starter, booster, mega, custom" });
+      return;
+    }
+    cards = pack.cards;
+    stars = pack.stars;
+    label = pack.label;
+  }
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: `Z-Fantasy ${label}`,
+        description: `${cards} Neon Cards added to your wallet instantly`,
+        payload: JSON.stringify({ type: "neon_cards", cards, userId: req.telegramUserId }),
+        currency: "XTR",
+        prices: [{ label, amount: stars }],
+      }),
+    });
+
+    const data = (await response.json()) as { ok: boolean; result: string };
+    if (!data.ok) {
+      throw new Error("Telegram API returned not ok");
+    }
+
+    res.json({ invoiceLink: data.result });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create neon card invoice");
+    res.status(500).json({ error: "Failed to create invoice" });
+  }
+});
+
+router.post("/payments/webhook", async (req, res): Promise<void> => {
+  const body = req.body as {
+    pre_checkout_query?: { id: string; from: { id: number }; invoice_payload: string };
+    message?: { successful_payment?: { invoice_payload: string }; from?: { id: number } };
+  };
+
   if (body.pre_checkout_query) {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (botToken) {
@@ -112,23 +181,38 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
     return;
   }
 
-  // Handle successful payment
   if (body.message?.successful_payment) {
     try {
-      const payload = JSON.parse(body.message.successful_payment.invoice_payload) as { tier: string; userId: string; period: string };
-      const userId = String(body.message?.from?.id ?? payload.userId);
+      const rawPayload = JSON.parse(body.message.successful_payment.invoice_payload) as {
+        type?: string; tier?: string; userId?: string; period?: string; cards?: number;
+      };
+      const userId = String(body.message?.from?.id ?? rawPayload.userId);
 
-      await db.update(usersTable)
-        .set({ subscriptionTier: payload.tier })
-        .where(eq(usersTable.id, userId));
+      if (rawPayload.type === "neon_cards" && rawPayload.cards) {
+        await db.update(usersTable)
+          .set({ neonCardBalance: sql`neon_card_balance + ${rawPayload.cards}` })
+          .where(eq(usersTable.id, userId));
 
-      await db.insert(transactionsTable).values({
-        telegramId: userId,
-        actionType: `subscription_${payload.tier}_${payload.period}`,
-        ticketAmount: 0,
-      });
+        await db.insert(transactionsTable).values({
+          telegramId: userId,
+          actionType: `neon_cards_purchase_${rawPayload.cards}`,
+          ticketAmount: rawPayload.cards,
+        });
 
-      logger.info({ userId, tier: payload.tier }, "Subscription activated");
+        logger.info({ userId, cards: rawPayload.cards }, "Neon cards purchased");
+      } else if (rawPayload.tier) {
+        await db.update(usersTable)
+          .set({ subscriptionTier: rawPayload.tier })
+          .where(eq(usersTable.id, userId));
+
+        await db.insert(transactionsTable).values({
+          telegramId: userId,
+          actionType: `subscription_${rawPayload.tier}_${rawPayload.period ?? "unknown"}`,
+          ticketAmount: 0,
+        });
+
+        logger.info({ userId, tier: rawPayload.tier }, "Subscription activated");
+      }
     } catch (err) {
       logger.error({ err }, "Failed to process payment webhook");
     }

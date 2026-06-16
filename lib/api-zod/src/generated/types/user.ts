@@ -17,6 +17,7 @@ export interface User {
   /** @nullable */
   activeCharacterId?: string | null;
   ticketBalance: number;
+  neonCardBalance: number;
   subscriptionTier: string;
   /** @nullable */
   lastLoginTimestamp?: string | null;

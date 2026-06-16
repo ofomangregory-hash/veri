@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, ilike, sql } from "drizzle-orm";
+import { eq, and, ilike, sql, count } from "drizzle-orm";
 import { db, charactersTable, usersTable, transactionsTable } from "@workspace/db";
 import {
   ListCharactersQueryParams,
@@ -22,6 +22,9 @@ import { eq as _eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
+
+const MAX_CHARACTER_SLOTS = 3;
+const CHARACTER_CREATION_NEON_COST = 25;
 
 function serializeCharacter(c: typeof charactersTable.$inferSelect) {
   return {
@@ -145,10 +148,21 @@ router.post("/characters", async (req, res): Promise<void> => {
     return;
   }
 
-  // Check ticket balance
-  if (user.ticketBalance < 25) {
-    res.status(402).json({ error: "Insufficient tickets. Character creation costs 25 tickets." });
+  // Check Neon Card balance for creation cost
+  if (user.neonCardBalance < CHARACTER_CREATION_NEON_COST) {
+    res.status(402).json({ error: `Insufficient Neon Cards. Character creation costs ${CHARACTER_CREATION_NEON_COST} Neon Cards.` });
     return;
+  }
+
+  // Check character slot limit for non-admin users
+  if (!req.isAdmin) {
+    const [slotCount] = await db.select({ count: sql<number>`count(*)` })
+      .from(charactersTable)
+      .where(eq(charactersTable.creatorId, req.telegramUserId));
+    if (Number(slotCount?.count ?? 0) >= MAX_CHARACTER_SLOTS) {
+      res.status(402).json({ error: `Character slot limit reached. Maximum ${MAX_CHARACTER_SLOTS} characters allowed.` });
+      return;
+    }
   }
 
   // Check weekly creation limit
@@ -182,16 +196,16 @@ router.post("/characters", async (req, res): Promise<void> => {
     age: parsed.data.age ?? null,
   }).returning();
 
-  // Deduct 25 tickets and increment weekly counter
+  // Deduct Neon Cards and increment weekly counter
   await db.update(usersTable).set({
-    ticketBalance: sql`ticket_balance - 25`,
+    neonCardBalance: sql`neon_card_balance - ${CHARACTER_CREATION_NEON_COST}`,
     weeklyCreationsCount: sql`weekly_creations_count + 1`,
   }).where(eq(usersTable.id, req.telegramUserId));
 
   await db.insert(transactionsTable).values({
     telegramId: req.telegramUserId,
     actionType: "character_creation",
-    ticketAmount: -25,
+    ticketAmount: -CHARACTER_CREATION_NEON_COST,
   });
 
   res.status(201).json(serializeCharacter(character));

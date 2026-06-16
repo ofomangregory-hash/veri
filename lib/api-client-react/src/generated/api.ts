@@ -44,6 +44,7 @@ import type {
   MediaUploadResult,
   MessageInput,
   MessageReply,
+  NeonCardPurchaseRequest,
   NsfwToggle,
   PaymentWebhookPayload,
   ProfileUpdate,
@@ -2454,6 +2455,77 @@ export const useAdminSecretCheck = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getAdminSecretCheckMutationOptions(options));
+    }
+
+export const getCreateNeonCardInvoiceUrl = () => {
+
+
+
+
+  return `/api/payments/neon-cards/create-invoice`
+}
+
+/**
+ * @summary Create invoice for Neon Card pack purchase
+ */
+export const createNeonCardInvoice = async (neonCardPurchaseRequest: NeonCardPurchaseRequest, options?: RequestInit): Promise<InvoiceResponse> => {
+
+  return customFetch<InvoiceResponse>(getCreateNeonCardInvoiceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      neonCardPurchaseRequest,)
+  }
+);}
+
+
+
+
+export const getCreateNeonCardInvoiceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createNeonCardInvoice>>, TError,{data: BodyType<NeonCardPurchaseRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createNeonCardInvoice>>, TError,{data: BodyType<NeonCardPurchaseRequest>}, TContext> => {
+
+const mutationKey = ['createNeonCardInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createNeonCardInvoice>>, {data: BodyType<NeonCardPurchaseRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createNeonCardInvoice(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateNeonCardInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof createNeonCardInvoice>>>
+    export type CreateNeonCardInvoiceMutationBody = BodyType<NeonCardPurchaseRequest>
+    export type CreateNeonCardInvoiceMutationError = ErrorType<void>
+
+    /**
+ * @summary Create invoice for Neon Card pack purchase
+ */
+export const useCreateNeonCardInvoice = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createNeonCardInvoice>>, TError,{data: BodyType<NeonCardPurchaseRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createNeonCardInvoice>>,
+        TError,
+        {data: BodyType<NeonCardPurchaseRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateNeonCardInvoiceMutationOptions(options));
     }
 
 export const getGetTransactionsUrl = () => {

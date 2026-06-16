@@ -26,6 +26,7 @@ export const GetMeResponse = zod.object({
   "userTraits": zod.string().nullish(),
   "activeCharacterId": zod.string().nullish(),
   "ticketBalance": zod.number(),
+  "neonCardBalance": zod.number(),
   "subscriptionTier": zod.string(),
   "lastLoginTimestamp": zod.string().nullish(),
   "weeklyCreationsCount": zod.number(),
@@ -33,9 +34,7 @@ export const GetMeResponse = zod.object({
   "unlockedMediaArray": zod.array(zod.string()).optional(),
   "nsfwEnabled": zod.boolean(),
   "avatarUrl": zod.string().nullish(),
-  "referralCode": zod.string().nullish(),
-  "staffPrivileges": zod.string().nullish(),
-  "isAdmin": zod.boolean().optional()
+  "referralCode": zod.string().nullish()
 })
 
 
@@ -54,6 +53,7 @@ export const UpdateProfileResponse = zod.object({
   "userTraits": zod.string().nullish(),
   "activeCharacterId": zod.string().nullish(),
   "ticketBalance": zod.number(),
+  "neonCardBalance": zod.number(),
   "subscriptionTier": zod.string(),
   "lastLoginTimestamp": zod.string().nullish(),
   "weeklyCreationsCount": zod.number(),
@@ -71,7 +71,9 @@ export const UpdateProfileResponse = zod.object({
 export const ClaimDailyTicketsResponse = zod.object({
   "ticketsAdded": zod.number(),
   "newBalance": zod.number(),
-  "nextClaimAt": zod.string()
+  "nextClaimAt": zod.string(),
+  "neonCardsAdded": zod.number(),
+  "newNeonCardBalance": zod.number()
 })
 
 
@@ -89,6 +91,7 @@ export const UpdateNsfwSettingResponse = zod.object({
   "userTraits": zod.string().nullish(),
   "activeCharacterId": zod.string().nullish(),
   "ticketBalance": zod.number(),
+  "neonCardBalance": zod.number(),
   "subscriptionTier": zod.string(),
   "lastLoginTimestamp": zod.string().nullish(),
   "weeklyCreationsCount": zod.number(),
@@ -515,6 +518,7 @@ export const AdminListUsersResponse = zod.object({
   "userTraits": zod.string().nullish(),
   "activeCharacterId": zod.string().nullish(),
   "ticketBalance": zod.number(),
+  "neonCardBalance": zod.number(),
   "subscriptionTier": zod.string(),
   "lastLoginTimestamp": zod.string().nullish(),
   "weeklyCreationsCount": zod.number(),
@@ -544,6 +548,7 @@ export const AdminGetUserResponse = zod.object({
   "userTraits": zod.string().nullish(),
   "activeCharacterId": zod.string().nullish(),
   "ticketBalance": zod.number(),
+  "neonCardBalance": zod.number(),
   "subscriptionTier": zod.string(),
   "lastLoginTimestamp": zod.string().nullish(),
   "weeklyCreationsCount": zod.number(),
@@ -607,6 +612,7 @@ export const AdminUpdateUserResponse = zod.object({
   "userTraits": zod.string().nullish(),
   "activeCharacterId": zod.string().nullish(),
   "ticketBalance": zod.number(),
+  "neonCardBalance": zod.number(),
   "subscriptionTier": zod.string(),
   "lastLoginTimestamp": zod.string().nullish(),
   "weeklyCreationsCount": zod.number(),
@@ -699,6 +705,19 @@ export const AdminSecretCheckBody = zod.object({
 
 export const AdminSecretCheckResponse = zod.object({
   "isAdmin": zod.boolean()
+})
+
+
+/**
+ * @summary Create invoice for Neon Card pack purchase
+ */
+export const CreateNeonCardInvoiceBody = zod.object({
+  "packType": zod.enum(['starter', 'booster', 'mega', 'custom']),
+  "customAmount": zod.number().optional()
+})
+
+export const CreateNeonCardInvoiceResponse = zod.object({
+  "invoiceLink": zod.string()
 })
 
 

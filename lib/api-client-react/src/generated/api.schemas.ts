@@ -20,6 +20,7 @@ export interface User {
   /** @nullable */
   activeCharacterId?: string | null;
   ticketBalance: number;
+  neonCardBalance: number;
   subscriptionTier: string;
   /** @nullable */
   lastLoginTimestamp?: string | null;
@@ -46,6 +47,23 @@ export interface TicketClaimResult {
   ticketsAdded: number;
   newBalance: number;
   nextClaimAt: string;
+  neonCardsAdded: number;
+  newNeonCardBalance: number;
+}
+
+export type NeonCardPurchaseRequestPackType = typeof NeonCardPurchaseRequestPackType[keyof typeof NeonCardPurchaseRequestPackType];
+
+
+export const NeonCardPurchaseRequestPackType = {
+  starter: 'starter',
+  booster: 'booster',
+  mega: 'mega',
+  custom: 'custom',
+} as const;
+
+export interface NeonCardPurchaseRequest {
+  packType: NeonCardPurchaseRequestPackType;
+  customAmount?: number;
 }
 
 export interface ReferralInfo {

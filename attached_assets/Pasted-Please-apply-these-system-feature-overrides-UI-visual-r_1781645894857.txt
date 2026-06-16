@@ -1,0 +1,45 @@
+Please apply these system feature overrides, UI visual re-themes, and pagination updates to the codebase immediately:
+
+1. THE DUAL-CURRENCY ECONOMY CORE (Tickets vs. Neon Cards)
+- System Currency Partition: The application now utilizes two distinct assets. The existing 'ticket_balance' (rendered as a glowing neon ticket) is strictly consumed for text message routing. Introduce a new currency token named 'Neon Cards' (rendered visually across grids as a glowing geometric tech card icon) to power ALL non-chat mechanics.
+- Action Cost Re-allocation: Update the frontend forms and backend validation middleware layers to deduct currency based on these explicit parameters:
+  * Public Character Creation: Costs 25 Neon Cards (Available to all standard public users).
+  * On-Demand Image Request / Custom Selfie: Costs 15 Neon Cards per payload.
+  * Shared Media Vault Image Unblurring: Costs 10 Neon Cards to unlock permanently.
+- Daily Login Reward Adjustment: Refactor the daily claim cron button logic. When a user checks in, verify the 24-hour limit and credit the wallet row simultaneously with: +25 Tickets AND +5 Neon Cards.
+
+2. PREMIUM MATRIX CARDS EXTRACTION (Neon Card Shop Packets)
+- In the Premium checkout tab view, immediately below the main VIP subscription tier rows, add a dedicated interface section titled 'Purchase Neon Cards'.
+- Render three clean checkout option cards inside this section:
+  * Starter Pack: 100 Neon Cards for 200 Telegram Stars.
+  * Booster Pack: 250 Neon Cards (+5 bonus cards free) for 500 Telegram Stars.
+  * Mega Pack: 500 Neon Cards (+10 bonus cards free) for 1000 Telegram Stars.
+- 'Buy Custom' Portal Node: Below the three fixed bundle tiers, place an interactive quantitative selector form button labeled 'Buy Custom Amount'. This allows the user to input a dynamic text value integer of Neon Cards, auto-calculates the 2:1 Telegram Stars ratio price, and generates the native 'Telegram.WebApp.openInvoice' sheet payload dynamically.
+
+3. FUTURISTIC 'SWEET DREAMS' LOGO GRAPHICS RE-THEME
+- Global Typography Updates: Locate the primary Application Title layout block across headers. Make the text significantly larger. 
+- Cyber Accent Text: Alter the styling to a bold, glowing, futuristic neon blue synthwave aesthetic. Immediately below or integrated within the primary text title, append the accent phrase 'Sweet Dreams' rendered using a fluid, slanted italicized curves custom calligraphy script font format.
+
+4. IMAGE UPLOAD DROPBOX COMPONENT STABILIZATION
+- Fix the broken image upload selector layout box inside the character creation wizard form component. 
+- Ensure the pointer cursor acts as an active overlay. When an image file is dragged-and-dropped or selected via local hard drives, it must cleanly show a thumbnail preview element on screen instead of shifting positions or breaking layout flex grids.
+
+5. RESTRICTIVE SYSTEM CAP SLOTS (Character Creation Limits)
+- Update the Page 3 (Character Design) validation form layouts to present exactly 5 explicit entry restriction rows to guide content ingestion:
+  * Character Max Slots Box: Upper limit threshold capped firmly at 3 records.
+  * Traits Allocation Box: Upper limit threshold capped firmly at 7 items.
+  * Behaviour Directives Box: Upper limit threshold capped firmly at 7 entries.
+  * Personalities Matrix Box: Upper limit threshold capped firmly at 3 traits.
+  * Scenario Scenes Window Box: Upper limit threshold capped firmly at 5 structures.
+- Enforce character-counting limitations or maximum length alerts directly inside these layout frames.
+
+6. IN-BOT SINGLE-CARD CAROUSEL NAVIGATION OVERHAUL
+- Locate your Telegram Bot Polling module listeners for the '/browse' or '/character' text commands.
+- Revise the logic: The bot must never drop all database character profile files into separate native message feeds at once.
+- Single-Card State Output: When a user triggers browsing, fetch public companions from Supabase, but only return the absolute first companion card utilizing 'bot.sendPhoto' displaying their image, tagline, and pricing data.
+- Interactive Inline Pagination Buttons: Affix two precise inline callback steering nodes right below the message photo frame:
+  * Left Button: '◀ Previous' (fires an internal callback passing the index loop decrement identifier).
+  * Right Button: 'Next ▶' (fires an internal callback passing the index loop increment identifier).
+- When a navigation button is clicked, cleanly update the existing message context layout inline using 'bot.editMessageMedia' or 'bot.editMessageCaption' to create a smooth page-flipping interaction.
+
+Generate the exact updated TypeScript, React view configurations, and Express backend payment endpoints cleanly without any shorthand comments or incomplete TODO notes.

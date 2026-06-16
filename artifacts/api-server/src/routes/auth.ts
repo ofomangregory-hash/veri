@@ -31,6 +31,7 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     userTraits: user.userTraits,
     activeCharacterId: user.activeCharacterId,
     ticketBalance: user.ticketBalance,
+    neonCardBalance: user.neonCardBalance,
     subscriptionTier: user.subscriptionTier,
     lastLoginTimestamp: user.lastLoginTimestamp?.toISOString() ?? null,
     weeklyCreationsCount: user.weeklyCreationsCount,
@@ -66,6 +67,7 @@ router.patch("/auth/profile", async (req, res): Promise<void> => {
     userTraits: updated.userTraits,
     activeCharacterId: updated.activeCharacterId,
     ticketBalance: updated.ticketBalance,
+    neonCardBalance: updated.neonCardBalance,
     subscriptionTier: updated.subscriptionTier,
     lastLoginTimestamp: updated.lastLoginTimestamp?.toISOString() ?? null,
     weeklyCreationsCount: updated.weeklyCreationsCount,
@@ -96,9 +98,13 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
     }
   }
 
+  const TICKETS_REWARD = 25;
+  const NEON_CARDS_REWARD = 5;
+
   const [updated] = await db.update(usersTable)
     .set({
-      ticketBalance: sql`ticket_balance + 10`,
+      ticketBalance: sql`ticket_balance + ${TICKETS_REWARD}`,
+      neonCardBalance: sql`neon_card_balance + ${NEON_CARDS_REWARD}`,
       lastDailyClaim: now,
     })
     .where(eq(usersTable.id, req.telegramUserId))
@@ -107,15 +113,17 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
   await db.insert(transactionsTable).values({
     telegramId: req.telegramUserId,
     actionType: "daily_claim",
-    ticketAmount: 10,
+    ticketAmount: TICKETS_REWARD,
   });
 
   const nextClaimAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
   res.json(ClaimDailyTicketsResponse.parse({
-    ticketsAdded: 10,
+    ticketsAdded: TICKETS_REWARD,
     newBalance: updated.ticketBalance,
     nextClaimAt: nextClaimAt.toISOString(),
+    neonCardsAdded: NEON_CARDS_REWARD,
+    newNeonCardBalance: updated.neonCardBalance,
   }));
 });
 
@@ -138,6 +146,7 @@ router.patch("/auth/nsfw", async (req, res): Promise<void> => {
     userTraits: updated.userTraits,
     activeCharacterId: updated.activeCharacterId,
     ticketBalance: updated.ticketBalance,
+    neonCardBalance: updated.neonCardBalance,
     subscriptionTier: updated.subscriptionTier,
     lastLoginTimestamp: updated.lastLoginTimestamp?.toISOString() ?? null,
     weeklyCreationsCount: updated.weeklyCreationsCount,
@@ -159,7 +168,6 @@ router.get("/auth/referral", async (req, res): Promise<void> => {
   const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? "z_fantasy_bot";
   const referralLink = `https://t.me/${botUsername}?start=ref_${user.referralCode}`;
 
-  // Count how many used this referral code
   const countResult = await db.select({ count: sql<number>`count(*)` })
     .from(usersTable)
     .where(eq(usersTable.referredBy, user.referralCode ?? ""));
