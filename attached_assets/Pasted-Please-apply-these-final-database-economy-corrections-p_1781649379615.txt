@@ -1,0 +1,30 @@
+Please apply these final database economy corrections, premium text updates, user customization inputs, and admin panel bypass fixes immediately across the repository files:
+
+1. UNIVERSAL CHARACTER CREATION STANDARDIZATION
+- Overwrite all frontend text layers, forms, templates, wizard modals, and backend controller endpoints.
+- Building or generating a character costs exactly 25 Neon Cards for ALL public users across both the React web interface and the Telegram bot conversation routers. Completely remove any references or filters charging 25 tickets.
+
+2. CUSTOM USER INPUT EXTENSION (Add Custom Buttons)
+- In the React creation view (Page 3) and the Telegram bot inline checkbox creation workflow, add a permanent button at the bottom of the checklist menus labeled '➕ Add Custom'.
+- Tapping this option must fire a text input collector. This allows users to type out their own unique text strings for Traits, Behaviours, Personalities, or Scenes, appending them cleanly into their character design array while preserving the system threshold boundaries (Max 3 Characters, Max 7 Traits, Max 7 Behaviours, Max 3 Personalities, Max 5 Scenes).
+
+3. GOD-MODE ADMIN TAB LOCKDOWN (Bypass Validation Filters)
+- Frontend Authorization: Fix the visibility routing rules for the Admin panel. If the user session matches ID '8704633862' OR matches the mock local preview user string '666666', completely skip the password gate. Force the Admin navigation tab to render visibly on the bottom bar instantly.
+- For all other standard profiles, hide the Admin tab and force the password wall input form requiring 'ofomangregory' or 'gregoryomofoman'.
+
+4. DYNAMIC 'BUY CUSTOM' NEON CARD DISPLAY (Bonus Calculations)
+- In the Premium store window, update the custom quantitative card input calculation script:
+  * Display the clean math mapping the base amount received at the 2:1 ratio (e.g., 'Receive 200 Cards for 400 Stars').
+  * Calculate the progressive tiered bonus structures based on volume thresholds: If custom cards > 250, auto-calculate and render a prominent badge layout on top reading '+20 Bonus Cards'. If custom cards > 500, render a permanent top badge reading '+50 Bonus Cards'. Integrate this bonus into the payment webhook delivery script.
+
+5. PREMIUM PLAN TYPOGRAPHY CARDS REWRITE
+Update the text and benefit matrices displayed inside the Bronze, Silver, and Gold checkout tier cards to state these exact resource features:
+- Bronze Tier Layout: 'UNLIMITED MESSAGES | Includes 150 Neon Tickets to start | 4/6 Image Ratio Loop'
+- Silver Tier Layout: 'UNLIMITED MESSAGES | Includes 350 Neon Tickets to start | Max 40 Daily Requests'
+- Gold Tier Layout: 'UNLIMITED MESSAGES | Includes 600 Neon Tickets to start | Balance limits set to 9999'
+
+6. PREMIUM MULTIPLIER CHECK-IN LOGIC
+- Update the daily login reward function.
+- Check user subscription_tier rows. If user holds Bronze, Silver, or Gold premium ranking status, apply a 1.5x resource multiplier bump to their daily claim payload, automatically awarding them +37 Tickets and +15 Neon Cards every 24 hours.
+
+Generate the exact updated code assets across files cleanly without any shorthand lines or empty placeholders.

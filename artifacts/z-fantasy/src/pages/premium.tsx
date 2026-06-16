@@ -116,7 +116,7 @@ export function Premium() {
       border: "border-amber-500",
       glow: "hover:shadow-[0_0_25px_rgba(245,158,11,0.5)]",
       icon: Shield,
-      features: ["100 Tickets/cycle", "Basic avatars", "Standard wait times"],
+      features: ["UNLIMITED MESSAGES", "Includes 150 Neon Tickets to start", "4/6 Image Ratio Loop"],
     },
     {
       id: InvoiceRequestTier.Silver,
@@ -125,7 +125,7 @@ export function Premium() {
       border: "border-slate-300",
       glow: "hover:shadow-[0_0_25px_rgba(203,213,225,0.5)]",
       icon: Zap,
-      features: ["300 Tickets/cycle", "Priority generation", "Voice messages", "HD Vault"],
+      features: ["UNLIMITED MESSAGES", "Includes 350 Neon Tickets to start", "Max 40 Daily Requests"],
     },
     {
       id: InvoiceRequestTier.Gold,
@@ -134,12 +134,13 @@ export function Premium() {
       border: "border-yellow-400",
       glow: "hover:shadow-[0_0_25px_rgba(250,204,21,0.5)]",
       icon: Infinity,
-      features: ["1000 Tickets/cycle", "Instant generation", "All NSFW unlocked", "Custom models"],
+      features: ["UNLIMITED MESSAGES", "Includes 600 Neon Tickets to start", "Balance limits set to 9999"],
     },
   ];
 
   const customAmt = parseInt(customCards, 10);
   const customStars = !isNaN(customAmt) && customAmt >= 10 ? Math.ceil(customAmt / 2) : null;
+  const customBonus = !isNaN(customAmt) && customAmt > 0 ? (customAmt > 500 ? 50 : customAmt > 250 ? 20 : 0) : 0;
 
   return (
     <div className="p-4 pb-24">
@@ -283,6 +284,22 @@ export function Premium() {
               {customStars !== null ? `${customStars} ⭐` : "Buy"}
             </button>
           </div>
+          {customStars !== null && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                Receive <span className="text-cyan-300 font-bold">{customAmt + customBonus} Cards</span> for <span className="text-white font-bold">{customStars} ⭐</span>
+              </span>
+              {customBonus > 0 && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${
+                  customBonus >= 50
+                    ? "bg-pink-500/20 text-pink-300 border-pink-500/50"
+                    : "bg-violet-500/20 text-violet-300 border-violet-500/50"
+                }`}>
+                  +{customBonus} Bonus Cards
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

@@ -1618,12 +1618,13 @@ export function startTelegramBot(): TelegramBot | null {
 
         const userId = String(query.from.id);
         const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-        if (!user || (user.ticketBalance ?? 0) < 25) {
-          await bot!.sendMessage(chatId, "❌ Insufficient tickets. Creation cancelled.");
+        if (!user || (user.neonCardBalance ?? 0) < 25) {
+          await bot!.sendMessage(chatId, "❌ Insufficient Neon Cards. Creation cancelled. You need 25 🃏 Neon Cards.");
           return;
         }
 
         const systemPrompt = `You are ${state.name}, an AI companion. ${state.bio}`;
+        const botCharSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
         const [newChar] = await db.insert(charactersTable).values({
           name: state.name,
           genre,
@@ -1632,10 +1633,11 @@ export function startTelegramBot(): TelegramBot | null {
           systemPrompt,
           initialGreeting: `Hey 💜 I'm ${state.name}. ${state.bio.slice(0, 80)}…`,
           creatorId: userId,
+          imageSeed: botCharSeed,
         }).returning({ characterId: charactersTable.characterId, name: charactersTable.name });
 
         await db.update(usersTable).set({
-          ticketBalance: sql`ticket_balance - 25`,
+          neonCardBalance: sql`neon_card_balance - 25`,
           weeklyCreationsCount: sql`weekly_creations_count + 1`,
           activeCharacterId: newChar.characterId,
         }).where(eq(usersTable.id, userId));
@@ -1906,6 +1908,7 @@ export function startTelegramBot(): TelegramBot | null {
             systemPrompt,
             initialGreeting: `Hey 💜 I'm ${cwSession.name}. I've been waiting for you...`,
             creatorId: cwUserId,
+            imageSeed: String(Math.floor(Math.random() * 9000000000) + 1000000000),
           }).returning({ characterId: charactersTable.characterId, name: charactersTable.name });
 
           if (!isCWAdmin) {

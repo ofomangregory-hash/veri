@@ -17,7 +17,8 @@ import {
 } from "@workspace/api-zod";
 import { authMiddleware } from "../middlewares/auth";
 import { generateAIReply } from "../lib/openrouter";
-import { getAutoLoopImage, getTriggerPoolImage, getCharacterAssetUrl, getGenreDefaultAvatar } from "../lib/cloudinary";
+import { getAutoLoopImage, getGenreDefaultAvatar } from "../lib/cloudinary";
+import { generateCharacterSelfie } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -338,20 +339,26 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     return;
   }
 
-  // Parse description against trigger metadata
-  const description = parsed.data.description.toLowerCase();
-  const triggerMeta = (character.triggerMetadataArray as Array<{ keyword: string; filename: string }> | null) ?? [];
-  const matchedTrigger = triggerMeta.find(t => description.includes(t.keyword.toLowerCase()));
+  // Generate AI selfie via Perchance using the character's locked seed for facial consistency
+  const imageSeed = character.imageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
 
   let imageUrl: string;
   let matched = false;
 
-  if (matchedTrigger) {
-    imageUrl = getTriggerPoolImage(character.characterId, matchedTrigger.filename);
+  try {
+    imageUrl = await generateCharacterSelfie({
+      characterName: character.name,
+      genre: character.genre,
+      systemPrompt: character.systemPrompt ?? "",
+      teaserDescription: character.teaserDescription,
+      imageSeed,
+      sceneDescription: parsed.data.description,
+    });
     matched = true;
-  } else {
-    // Fallback to default selfie
-    imageUrl = getCharacterAssetUrl(character.characterId, "trigger_pool", "default_selfie.jpg");
+  } catch (err) {
+    logger.warn({ err }, "Perchance generation failed — using avatar fallback");
+    imageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre);
+    matched = false;
   }
 
   // Deduct neon cards and increment daily trigger count

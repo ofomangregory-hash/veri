@@ -180,6 +180,9 @@ router.post("/characters", async (req, res): Promise<void> => {
   // Determine visibility — all non-admin users get private
   const visibility = req.isAdmin ? "public" : "private";
 
+  // Auto-generate a permanent 10-digit image seed for consistent AI generations
+  const imageSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
+
   // Build system prompt
   const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
 
@@ -194,6 +197,7 @@ router.post("/characters", async (req, res): Promise<void> => {
     tags: parsed.data.tags ?? [],
     genre: parsed.data.genre,
     age: parsed.data.age ?? null,
+    imageSeed,
   }).returning();
 
   // Deduct Neon Cards and increment weekly counter (admin is exempt from cost)

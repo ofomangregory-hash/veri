@@ -124,14 +124,18 @@ router.post("/payments/neon-cards/create-invoice", authMiddleware, async (req, r
   let stars: number;
   let label: string;
 
+  let bonusCards = 0;
   if (packType === "custom") {
     if (!customAmount || customAmount < 10 || !Number.isInteger(customAmount)) {
       res.status(400).json({ error: "customAmount must be an integer >= 10" });
       return;
     }
+    bonusCards = customAmount > 500 ? 50 : customAmount > 250 ? 20 : 0;
     cards = customAmount;
     stars = Math.ceil(customAmount / 2);
-    label = `Custom — ${customAmount} Neon Cards`;
+    label = bonusCards > 0
+      ? `Custom — ${customAmount} Neon Cards (+${bonusCards} Bonus)`
+      : `Custom — ${customAmount} Neon Cards`;
   } else {
     const pack = NEON_CARD_PACKS[packType];
     if (!pack) {
@@ -149,8 +153,8 @@ router.post("/payments/neon-cards/create-invoice", authMiddleware, async (req, r
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: `Z-Fantasy ${label}`,
-        description: `${cards} Neon Cards added to your wallet instantly`,
-        payload: JSON.stringify({ type: "neon_cards", cards, userId: req.telegramUserId }),
+        description: `${cards + bonusCards} Neon Cards added to your wallet instantly`,
+        payload: JSON.stringify({ type: "neon_cards", cards, bonus: bonusCards, userId: req.telegramUserId }),
         currency: "XTR",
         prices: [{ label, amount: stars }],
       }),
@@ -190,22 +194,24 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
   if (body.message?.successful_payment) {
     try {
       const rawPayload = JSON.parse(body.message.successful_payment.invoice_payload) as {
-        type?: string; tier?: string; userId?: string; period?: string; cards?: number;
+        type?: string; tier?: string; userId?: string; period?: string; cards?: number; bonus?: number;
       };
       const userId = String(body.message?.from?.id ?? rawPayload.userId);
 
       if (rawPayload.type === "neon_cards" && rawPayload.cards) {
+        const bonusAwarded = rawPayload.bonus ?? 0;
+        const totalAwarded = rawPayload.cards + bonusAwarded;
         await db.update(usersTable)
-          .set({ neonCardBalance: sql`neon_card_balance + ${rawPayload.cards}` })
+          .set({ neonCardBalance: sql`neon_card_balance + ${totalAwarded}` })
           .where(eq(usersTable.id, userId));
 
         await db.insert(transactionsTable).values({
           telegramId: userId,
-          actionType: `neon_cards_purchase_${rawPayload.cards}`,
-          ticketAmount: rawPayload.cards,
+          actionType: `neon_cards_purchase_${totalAwarded}`,
+          ticketAmount: totalAwarded,
         });
 
-        logger.info({ userId, cards: rawPayload.cards }, "Neon cards purchased");
+        logger.info({ userId, cards: rawPayload.cards, bonus: bonusAwarded, total: totalAwarded }, "Neon cards purchased");
       } else if (rawPayload.tier) {
         const tierTickets = SUBSCRIPTION_TICKET_PERKS[rawPayload.tier] ?? 0;
         await db.update(usersTable)

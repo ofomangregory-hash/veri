@@ -225,6 +225,21 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
   const [creating, setCreating] = useState(false);
   const [customName, setCustomName] = useState("");
 
+  type ListStep = "scenes" | "behaviors" | "personalities" | "traits" | "moods";
+  const [customText, setCustomText] = useState<Record<ListStep, string>>({
+    scenes: "", behaviors: "", personalities: "", traits: "", moods: "",
+  });
+  const [showCustom, setShowCustom] = useState<Record<ListStep, boolean>>({
+    scenes: false, behaviors: false, personalities: false, traits: false, moods: false,
+  });
+
+  function submitCustom(key: ListStep, max: number) {
+    const val = customText[key].trim();
+    if (val) toggle(key, val, max);
+    setCustomText(p => ({ ...p, [key]: "" }));
+    setShowCustom(p => ({ ...p, [key]: false }));
+  }
+
   const [data, setData] = useState<WizardData>({
     name: "", characterType: "Modern", scenes: [], behaviors: [],
     personalities: [], traits: [], moods: [], bio: "",
@@ -376,58 +391,173 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
 
         {/* ── Step: Scene (multi-select up to 5) ── */}
         {step === "scene" && (
-          <div className="grid grid-cols-2 gap-2">
-            {SCENES.map(scene => (
-              <button key={scene} onClick={() => toggle("scenes", scene, MAX_SCENES)}
-                className={`p-3 rounded-xl border text-left text-sm font-semibold transition-all ${
-                  data.scenes.includes(scene)
-                    ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
-                    : "border-border bg-card text-foreground hover:border-primary/30 hover:text-primary"
-                }`}>
-                {data.scenes.includes(scene) && <Check size={10} className="inline mr-1" />}
-                {scene}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {SCENES.map(scene => (
+                <button key={scene} onClick={() => toggle("scenes", scene, MAX_SCENES)}
+                  className={`p-3 rounded-xl border text-left text-sm font-semibold transition-all ${
+                    data.scenes.includes(scene)
+                      ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
+                      : "border-border bg-card text-foreground hover:border-primary/30 hover:text-primary"
+                  }`}>
+                  {data.scenes.includes(scene) && <Check size={10} className="inline mr-1" />}
+                  {scene}
+                </button>
+              ))}
+            </div>
+            {showCustom.scenes ? (
+              <div className="flex gap-2">
+                <input
+                  autoFocus
+                  value={customText.scenes}
+                  onChange={e => setCustomText(p => ({ ...p, scenes: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && submitCustom("scenes", MAX_SCENES)}
+                  placeholder="Type a custom scene..."
+                  className="flex-1 h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-foreground focus:outline-none focus:border-accent"
+                />
+                <button onClick={() => submitCustom("scenes", MAX_SCENES)}
+                  className="px-3 h-9 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors">
+                  Add
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setShowCustom(p => ({ ...p, scenes: true }))}
+                className="w-full py-2 rounded-lg border border-dashed border-accent/40 text-accent text-xs font-semibold hover:bg-accent/5 transition-colors">
+                ➕ Add Custom
               </button>
-            ))}
+            )}
           </div>
         )}
 
         {/* ── Step: Behavior ── */}
         {step === "behavior" && (
-          <div className="flex flex-wrap gap-2">
-            {BEHAVIORS.map(b => (
-              <Chip key={b} label={b} selected={data.behaviors.includes(b)}
-                onClick={() => toggle("behaviors", b, MAX_BEHAVIORS)} />
-            ))}
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {BEHAVIORS.map(b => (
+                <Chip key={b} label={b} selected={data.behaviors.includes(b)}
+                  onClick={() => toggle("behaviors", b, MAX_BEHAVIORS)} />
+              ))}
+            </div>
+            {showCustom.behaviors ? (
+              <div className="flex gap-2">
+                <input
+                  autoFocus
+                  value={customText.behaviors}
+                  onChange={e => setCustomText(p => ({ ...p, behaviors: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && submitCustom("behaviors", MAX_BEHAVIORS)}
+                  placeholder="Type a custom behavior..."
+                  className="flex-1 h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-foreground focus:outline-none focus:border-accent"
+                />
+                <button onClick={() => submitCustom("behaviors", MAX_BEHAVIORS)}
+                  className="px-3 h-9 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors">
+                  Add
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setShowCustom(p => ({ ...p, behaviors: true }))}
+                className="w-full py-2 rounded-lg border border-dashed border-accent/40 text-accent text-xs font-semibold hover:bg-accent/5 transition-colors">
+                ➕ Add Custom
+              </button>
+            )}
           </div>
         )}
 
         {/* ── Step: Personality (max 3) ── */}
         {step === "personality" && (
-          <div className="flex flex-wrap gap-2">
-            {PERSONALITIES.map(p => (
-              <Chip key={p} label={p} selected={data.personalities.includes(p)}
-                onClick={() => toggle("personalities", p, MAX_PERSONALITIES)} />
-            ))}
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {PERSONALITIES.map(p => (
+                <Chip key={p} label={p} selected={data.personalities.includes(p)}
+                  onClick={() => toggle("personalities", p, MAX_PERSONALITIES)} />
+              ))}
+            </div>
+            {showCustom.personalities ? (
+              <div className="flex gap-2">
+                <input
+                  autoFocus
+                  value={customText.personalities}
+                  onChange={e => setCustomText(p => ({ ...p, personalities: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && submitCustom("personalities", MAX_PERSONALITIES)}
+                  placeholder="Type a custom personality..."
+                  className="flex-1 h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-foreground focus:outline-none focus:border-accent"
+                />
+                <button onClick={() => submitCustom("personalities", MAX_PERSONALITIES)}
+                  className="px-3 h-9 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors">
+                  Add
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setShowCustom(p => ({ ...p, personalities: true }))}
+                className="w-full py-2 rounded-lg border border-dashed border-accent/40 text-accent text-xs font-semibold hover:bg-accent/5 transition-colors">
+                ➕ Add Custom
+              </button>
+            )}
           </div>
         )}
 
         {/* ── Step: Traits ── */}
         {step === "traits" && (
-          <div className="flex flex-wrap gap-2">
-            {TRAITS.map(t => (
-              <Chip key={t} label={t} selected={data.traits.includes(t)}
-                onClick={() => toggle("traits", t, MAX_TRAITS)} />
-            ))}
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {TRAITS.map(t => (
+                <Chip key={t} label={t} selected={data.traits.includes(t)}
+                  onClick={() => toggle("traits", t, MAX_TRAITS)} />
+              ))}
+            </div>
+            {showCustom.traits ? (
+              <div className="flex gap-2">
+                <input
+                  autoFocus
+                  value={customText.traits}
+                  onChange={e => setCustomText(p => ({ ...p, traits: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && submitCustom("traits", MAX_TRAITS)}
+                  placeholder="Type a custom trait..."
+                  className="flex-1 h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-foreground focus:outline-none focus:border-accent"
+                />
+                <button onClick={() => submitCustom("traits", MAX_TRAITS)}
+                  className="px-3 h-9 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors">
+                  Add
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setShowCustom(p => ({ ...p, traits: true }))}
+                className="w-full py-2 rounded-lg border border-dashed border-accent/40 text-accent text-xs font-semibold hover:bg-accent/5 transition-colors">
+                ➕ Add Custom
+              </button>
+            )}
           </div>
         )}
 
         {/* ── Step: Mood ── */}
         {step === "mood" && (
-          <div className="flex flex-wrap gap-2">
-            {MOODS.map(m => (
-              <Chip key={m} label={m} selected={data.moods.includes(m)}
-                onClick={() => toggle("moods", m, MAX_MOODS)} />
-            ))}
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {MOODS.map(m => (
+                <Chip key={m} label={m} selected={data.moods.includes(m)}
+                  onClick={() => toggle("moods", m, MAX_MOODS)} />
+              ))}
+            </div>
+            {showCustom.moods ? (
+              <div className="flex gap-2">
+                <input
+                  autoFocus
+                  value={customText.moods}
+                  onChange={e => setCustomText(p => ({ ...p, moods: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && submitCustom("moods", MAX_MOODS)}
+                  placeholder="Type a custom mood..."
+                  className="flex-1 h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-foreground focus:outline-none focus:border-accent"
+                />
+                <button onClick={() => submitCustom("moods", MAX_MOODS)}
+                  className="px-3 h-9 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors">
+                  Add
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setShowCustom(p => ({ ...p, moods: true }))}
+                className="w-full py-2 rounded-lg border border-dashed border-accent/40 text-accent text-xs font-semibold hover:bg-accent/5 transition-colors">
+                ➕ Add Custom
+              </button>
+            )}
           </div>
         )}
 

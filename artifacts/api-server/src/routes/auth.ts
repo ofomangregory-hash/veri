@@ -99,8 +99,9 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
     }
   }
 
-  const TICKETS_REWARD = 25;
-  const NEON_CARDS_REWARD = 10;
+  const isPremium = ["Bronze", "Silver", "Gold"].includes(user.subscriptionTier);
+  const TICKETS_REWARD     = isPremium ? 37 : 25;
+  const NEON_CARDS_REWARD  = isPremium ? 15 : 10;
 
   const [updated] = await db.update(usersTable)
     .set({
