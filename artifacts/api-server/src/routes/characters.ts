@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and, ilike, sql, count } from "drizzle-orm";
-import { db, charactersTable, usersTable, transactionsTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import { db, usersTable, transactionsTable } from "@workspace/db";
 import {
   ListCharactersQueryParams,
   ListCharactersResponse,
@@ -19,7 +19,14 @@ import { authMiddleware } from "../middlewares/auth";
 import { getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterAvatar } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
-import { eq as _eq } from "drizzle-orm";
+import {
+  listSupabaseCharacters,
+  getSupabaseCharacterById,
+  createSupabaseCharacter,
+  updateSupabaseCharacter,
+  deleteSupabaseCharacter,
+  type NormalizedCharacter,
+} from "../lib/supabaseCharacters";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
@@ -27,20 +34,21 @@ router.use(authMiddleware);
 const MAX_CHARACTER_SLOTS = 3;
 const CHARACTER_CREATION_NEON_COST = 25;
 
-function serializeCharacter(c: typeof charactersTable.$inferSelect) {
+function serializeCharacter(c: NormalizedCharacter) {
+  const triggerMeta = Array.isArray(c.triggerMetadataArray) ? null : (c.triggerMetadataArray ?? null);
   return {
     characterId: c.characterId,
     creatorId: c.creatorId,
     name: c.name,
     visibility: c.visibility,
     systemPrompt: c.systemPrompt,
-    avatarUrl: c.avatarUrl ?? getGenreDefaultAvatar(c.genre),
+    avatarUrl: c.avatarUrl ?? getGenreDefaultAvatar(c.genre ?? "Fantasy"),
     teaserDescription: c.teaserDescription,
     initialGreeting: c.initialGreeting,
     tags: c.tags,
-    genre: c.genre,
-    age: c.age,
-    triggerMetadataArray: c.triggerMetadataArray ?? null,
+    genre: c.genre ?? "Fantasy",
+    age: c.age ?? null,
+    triggerMetadataArray: triggerMeta,
   };
 }
 
@@ -61,46 +69,33 @@ router.get("/characters", async (req, res): Promise<void> => {
   const { page = 1, limit = 20, search, tags, genre } = parsed.data;
   const offset = ((page ?? 1) - 1) * (limit ?? 20);
 
-  const conditions = [eq(charactersTable.visibility, "public")];
-  if (search) {
-    conditions.push(ilike(charactersTable.name, `%${search}%`));
-  }
-  if (genre) {
-    conditions.push(eq(charactersTable.genre, genre));
-  }
-  if (tags) {
-    conditions.push(sql`${tags} = ANY(${charactersTable.tags})`);
-  }
+  const { items, total } = await listSupabaseCharacters({
+    visibility: "public",
+    search: search ?? undefined,
+    tags: tags ?? undefined,
+    limit: limit ?? 20,
+    offset,
+  });
 
-  const [items, countResult] = await Promise.all([
-    db.select().from(charactersTable)
-      .where(and(...conditions))
-      .limit(limit ?? 20)
-      .offset(offset),
-    db.select({ count: sql<number>`count(*)` }).from(charactersTable)
-      .where(and(...conditions)),
-  ]);
+  const filtered = genre
+    ? items.filter(c => c.genre === genre || c.tags.some(t => t.toLowerCase().includes(genre.toLowerCase())))
+    : items;
 
   res.json(ListCharactersResponse.parse({
-    items: items.map(serializeCharacter),
-    total: Number(countResult[0]?.count ?? 0),
+    items: filtered.map(serializeCharacter),
+    total: genre ? filtered.length : total,
     page: page ?? 1,
     limit: limit ?? 20,
   }));
 });
 
 router.get("/characters/trending", async (req, res): Promise<void> => {
-  const items = await db.select().from(charactersTable)
-    .where(eq(charactersTable.visibility, "public"))
-    .limit(10);
-
+  const { items } = await listSupabaseCharacters({ visibility: "public", limit: 10, offset: 0 });
   res.json(items.map(c => GetTrendingCharactersResponseItem.parse(serializeCharacter(c))));
 });
 
 router.get("/characters/surprise", async (req, res): Promise<void> => {
-  const items = await db.select().from(charactersTable)
-    .where(eq(charactersTable.visibility, "public"))
-    .limit(50);
+  const { items } = await listSupabaseCharacters({ visibility: "public", limit: 50, offset: 0 });
 
   if (items.length === 0) {
     res.status(404).json({ error: "No characters available" });
@@ -112,9 +107,7 @@ router.get("/characters/surprise", async (req, res): Promise<void> => {
 });
 
 router.get("/characters/mine", async (req, res): Promise<void> => {
-  const items = await db.select().from(charactersTable)
-    .where(eq(charactersTable.creatorId, req.telegramUserId));
-
+  const { items } = await listSupabaseCharacters({ creatorId: req.telegramUserId, limit: 100, offset: 0 });
   res.json(items.map(c => GetMyCharactersResponseItem.parse(serializeCharacter(c))));
 });
 
@@ -125,8 +118,7 @@ router.get("/characters/:characterId", async (req, res): Promise<void> => {
     return;
   }
 
-  const [character] = await db.select().from(charactersTable)
-    .where(eq(charactersTable.characterId, params.data.characterId));
+  const character = await getSupabaseCharacterById(params.data.characterId);
 
   if (!character) {
     res.status(404).json({ error: "Character not found" });
@@ -149,24 +141,19 @@ router.post("/characters", async (req, res): Promise<void> => {
     return;
   }
 
-  // Check Neon Card balance for creation cost (admin is exempt)
   if (!req.isAdmin && user.neonCardBalance < CHARACTER_CREATION_NEON_COST) {
     res.status(402).json({ error: `Insufficient Neon Cards. Character creation costs ${CHARACTER_CREATION_NEON_COST} Neon Cards.` });
     return;
   }
 
-  // Check character slot limit for non-admin users
   if (!req.isAdmin) {
-    const [slotCount] = await db.select({ count: sql<number>`count(*)` })
-      .from(charactersTable)
-      .where(eq(charactersTable.creatorId, req.telegramUserId));
-    if (Number(slotCount?.count ?? 0) >= MAX_CHARACTER_SLOTS) {
+    const { total } = await listSupabaseCharacters({ creatorId: req.telegramUserId, limit: 1, offset: 0 });
+    if (total >= MAX_CHARACTER_SLOTS) {
       res.status(402).json({ error: `Character slot limit reached. Maximum ${MAX_CHARACTER_SLOTS} characters allowed.` });
       return;
     }
   }
 
-  // Check weekly creation limit
   const tier = user.subscriptionTier;
   const weeklyLimit = TIER_WEEKLY_LIMITS[tier] ?? 0;
   if (tier === "Free" && user.weeklyCreationsCount >= 1) {
@@ -178,16 +165,10 @@ router.post("/characters", async (req, res): Promise<void> => {
     return;
   }
 
-  // Determine visibility — all non-admin users get private
   const visibility = req.isAdmin ? "public" : "private";
-
-  // Auto-generate a permanent 10-digit image seed for consistent AI generations
   const imageSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
-
-  // Build system prompt
   const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
 
-  // Auto-generate avatar if none provided
   let finalAvatarUrl = parsed.data.avatarUrl ?? null;
   if (!finalAvatarUrl) {
     try {
@@ -203,7 +184,7 @@ router.post("/characters", async (req, res): Promise<void> => {
     }
   }
 
-  const [character] = await db.insert(charactersTable).values({
+  const character = await createSupabaseCharacter({
     creatorId: req.telegramUserId,
     name: parsed.data.name,
     visibility,
@@ -212,12 +193,15 @@ router.post("/characters", async (req, res): Promise<void> => {
     teaserDescription: parsed.data.bio ?? null,
     initialGreeting: parsed.data.initialGreeting ?? null,
     tags: parsed.data.tags ?? [],
-    genre: parsed.data.genre,
-    age: parsed.data.age ?? null,
+    tagline: null,
     imageSeed,
-  }).returning();
+  });
 
-  // Deduct Neon Cards and increment weekly counter (admin is exempt from cost)
+  if (!character) {
+    res.status(500).json({ error: "Failed to create character" });
+    return;
+  }
+
   await db.update(usersTable).set({
     neonCardBalance: req.isAdmin ? undefined : sql`neon_card_balance - ${CHARACTER_CREATION_NEON_COST}`,
     weeklyCreationsCount: sql`weekly_creations_count + 1`,
@@ -245,9 +229,7 @@ router.patch("/characters/:characterId", async (req, res): Promise<void> => {
     return;
   }
 
-  const [existing] = await db.select().from(charactersTable)
-    .where(eq(charactersTable.characterId, params.data.characterId));
-
+  const existing = await getSupabaseCharacterById(params.data.characterId);
   if (!existing) {
     res.status(404).json({ error: "Character not found" });
     return;
@@ -258,18 +240,20 @@ router.patch("/characters/:characterId", async (req, res): Promise<void> => {
     return;
   }
 
-  const [updated] = await db.update(charactersTable)
-    .set({
-      name: parsed.data.name ?? undefined,
-      teaserDescription: parsed.data.bio ?? undefined,
-      initialGreeting: parsed.data.initialGreeting ?? undefined,
-      visibility: parsed.data.visibility ?? undefined,
-      tags: parsed.data.tags ?? undefined,
-      avatarUrl: parsed.data.avatarUrl ?? undefined,
-      systemPrompt: parsed.data.systemPrompt ?? undefined,
-    })
-    .where(eq(charactersTable.characterId, params.data.characterId))
-    .returning();
+  const updated = await updateSupabaseCharacter(params.data.characterId, {
+    name: parsed.data.name ?? undefined,
+    teaserDescription: parsed.data.bio ?? undefined,
+    initialGreeting: parsed.data.initialGreeting ?? undefined,
+    visibility: parsed.data.visibility as "public" | "private" | undefined,
+    tags: parsed.data.tags ?? undefined,
+    avatarUrl: parsed.data.avatarUrl ?? undefined,
+    systemPrompt: parsed.data.systemPrompt ?? undefined,
+  });
+
+  if (!updated) {
+    res.status(500).json({ error: "Failed to update character" });
+    return;
+  }
 
   res.json(UpdateCharacterResponse.parse(serializeCharacter(updated)));
 });
@@ -281,9 +265,7 @@ router.delete("/characters/:characterId", async (req, res): Promise<void> => {
     return;
   }
 
-  const [existing] = await db.select().from(charactersTable)
-    .where(eq(charactersTable.characterId, params.data.characterId));
-
+  const existing = await getSupabaseCharacterById(params.data.characterId);
   if (!existing) {
     res.status(404).json({ error: "Character not found" });
     return;
@@ -294,8 +276,11 @@ router.delete("/characters/:characterId", async (req, res): Promise<void> => {
     return;
   }
 
-  await db.delete(charactersTable)
-    .where(eq(charactersTable.characterId, params.data.characterId));
+  const ok = await deleteSupabaseCharacter(params.data.characterId);
+  if (!ok) {
+    res.status(500).json({ error: "Failed to delete character" });
+    return;
+  }
 
   res.sendStatus(204);
 });

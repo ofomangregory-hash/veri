@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, sql } from "drizzle-orm";
-import { db, conversationsTable, charactersTable, usersTable, transactionsTable } from "@workspace/db";
+import { db, conversationsTable, usersTable, transactionsTable } from "@workspace/db";
 import {
   GetConversationParams,
   GetConversationResponse,
@@ -17,9 +17,10 @@ import {
 } from "@workspace/api-zod";
 import { authMiddleware } from "../middlewares/auth";
 import { generateAIReply } from "../lib/openrouter";
-import { getAutoLoopImage, getGenreDefaultAvatar } from "../lib/cloudinary";
+import { getAutoLoopImage, getGenreDefaultAvatar, getCharacterAssetUrl } from "../lib/cloudinary";
 import { generateCharacterSelfie } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
+import { getSupabaseCharacterById, type NormalizedCharacter } from "../lib/supabaseCharacters";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
@@ -62,20 +63,21 @@ const GIFT_CONFIG: Record<string, { cost: number; costGold: number; ap: number; 
   secret_key: { cost: 50, costGold: 25, ap: 35, level: 3, reaction: "The Secret Key and this silk outfit... you really know how to get to me. I'm all yours now, no holding back 🔑" },
 };
 
-function serializeCharacter(c: typeof charactersTable.$inferSelect) {
+function serializeCharacter(c: NormalizedCharacter) {
+  const triggerMeta = Array.isArray(c.triggerMetadataArray) ? null : (c.triggerMetadataArray ?? null);
   return {
     characterId: c.characterId,
     creatorId: c.creatorId,
     name: c.name,
     visibility: c.visibility,
     systemPrompt: c.systemPrompt,
-    avatarUrl: c.avatarUrl ?? getGenreDefaultAvatar(c.genre),
+    avatarUrl: c.avatarUrl ?? getGenreDefaultAvatar(c.genre ?? "Fantasy"),
     teaserDescription: c.teaserDescription,
     initialGreeting: c.initialGreeting,
     tags: c.tags,
-    genre: c.genre,
-    age: c.age,
-    triggerMetadataArray: c.triggerMetadataArray ?? null,
+    genre: c.genre ?? "Fantasy",
+    age: c.age ?? null,
+    triggerMetadataArray: triggerMeta,
   };
 }
 
@@ -85,8 +87,7 @@ router.get("/conversations", async (req, res): Promise<void> => {
     .orderBy(conversationsTable.updatedAt);
 
   const result = await Promise.all(convs.map(async (conv) => {
-    const [character] = await db.select().from(charactersTable)
-      .where(eq(charactersTable.characterId, conv.characterId));
+    const character = await getSupabaseCharacterById(conv.characterId);
 
     const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as Array<{ role: string; content: string; imageUrl?: string; timestamp?: string }> : [];
     const lastMsg = messages[messages.length - 1];
@@ -119,8 +120,7 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
     return;
   }
 
-  const [character] = await db.select().from(charactersTable)
-    .where(eq(charactersTable.characterId, params.data.characterId));
+  const character = await getSupabaseCharacterById(params.data.characterId);
 
   if (!character) {
     res.status(404).json({ error: "Character not found" });
@@ -200,8 +200,7 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
 
   const msgCost = isAdminUser ? 0 : (MSG_COST[tier] ?? 1);
 
-  const [character] = await db.select().from(charactersTable)
-    .where(eq(charactersTable.characterId, params.data.characterId));
+  const character = await getSupabaseCharacterById(params.data.characterId);
 
   if (!character) {
     res.status(404).json({ error: "Character not found" });
@@ -331,8 +330,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
 
   const SELFIE_NEON_COST = isSelfieAdmin ? 0 : 15;
 
-  const [character] = await db.select().from(charactersTable)
-    .where(eq(charactersTable.characterId, params.data.characterId));
+  const character = await getSupabaseCharacterById(params.data.characterId);
 
   if (!character) {
     res.status(404).json({ error: "Character not found" });
@@ -357,7 +355,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     matched = true;
   } catch (err) {
     logger.warn({ err }, "Perchance generation failed — using avatar fallback");
-    imageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre);
+    imageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre ?? "Fantasy");
     matched = false;
   }
 

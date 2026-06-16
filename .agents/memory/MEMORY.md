@@ -1,1 +1,2 @@
 - [Z-Fantasy stack decisions](z-fantasy-stack.md) — auth, DB upsert pattern, cron, and AI failover quirks worth knowing for future work
+- [Supabase character data source](supabase-characters.md) — characters live in Supabase, not local Replit PostgreSQL; triggerMetadataArray is an array in Supabase but Zod expects object|null
