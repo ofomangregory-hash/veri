@@ -90,7 +90,8 @@ export function startTelegramBot(): TelegramBot | null {
       { command: "create",    description: "Create a new companion (costs 25 tickets)" },
       { command: "inventory", description: "Your created companions" },
       { command: "referral",  description: "Get your referral link" },
-      { command: "upgrade",   description: "View premium plans" },
+      { command: "premium",   description: "Subscribe with Telegram Stars — pick a plan" },
+      { command: "upgrade",   description: "View premium plan overview" },
       { command: "browse",    description: "Browse all public companions" },
       { command: "character", description: "View a companion profile: /character [name]" },
       { command: "select",    description: "Switch active companion: /select [name]" },
@@ -462,6 +463,42 @@ export function startTelegramBot(): TelegramBot | null {
         parse_mode: "Markdown",
         reply_markup: {
           inline_keyboard: [[{ text: "💎 View Plans & Subscribe", web_app: { url: appUrl("/premium") } }]],
+        },
+      });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /premium — plan picker → sends native Telegram Stars invoice
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/premium$/, async (msg) => {
+      const chatId = msg.chat.id;
+      await syncUser(String(msg.from?.id), msg.from?.username);
+
+      await bot!.sendMessage(chatId, [
+        `💎 *Choose your Z-Fantasy plan*`,
+        ``,
+        `🥉 *Bronze* — Character creation · 100 tickets/month`,
+        `🥈 *Silver* — Priority AI · Voice messages · 300 tickets/month`,
+        `🥇 *Gold* — Unlimited access · 1000 tickets/month`,
+        ``,
+        `Payment is processed securely via Telegram Stars ⭐`,
+      ].join("\n"), {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "🥉 Bronze  300 ⭐/mo",  callback_data: "premium_plan_Bronze_monthly" },
+              { text: "🥉 Bronze  3000 ⭐/yr", callback_data: "premium_plan_Bronze_yearly" },
+            ],
+            [
+              { text: "🥈 Silver  600 ⭐/mo",  callback_data: "premium_plan_Silver_monthly" },
+              { text: "🥈 Silver  6000 ⭐/yr", callback_data: "premium_plan_Silver_yearly" },
+            ],
+            [
+              { text: "🥇 Gold  1050 ⭐/mo",   callback_data: "premium_plan_Gold_monthly" },
+              { text: "🥇 Gold  10500 ⭐/yr",  callback_data: "premium_plan_Gold_yearly" },
+            ],
+          ],
         },
       });
     });
@@ -1224,6 +1261,53 @@ export function startTelegramBot(): TelegramBot | null {
         await bot!.sendMessage(chatId, "✅ Character selected! Send me a message to start chatting 💜");
       }
 
+      if (query.data?.startsWith("premium_plan_")) {
+        const parts = query.data.replace("premium_plan_", "").split("_");
+        const tier = parts[0];
+        const period = parts[1];
+
+        const PRICES: Record<string, Record<string, { stars: number; label: string }>> = {
+          Bronze: { monthly: { stars: 300,   label: "Bronze Monthly" }, yearly: { stars: 3000,  label: "Bronze Yearly" } },
+          Silver: { monthly: { stars: 600,   label: "Silver Monthly" }, yearly: { stars: 6000,  label: "Silver Yearly" } },
+          Gold:   { monthly: { stars: 1050,  label: "Gold Monthly"   }, yearly: { stars: 10500, label: "Gold Yearly"   } },
+        };
+
+        const plan = PRICES[tier]?.[period];
+        if (!plan) { await bot!.sendMessage(chatId, "❌ Invalid plan selected."); return; }
+
+        const userId = String(query.from.id);
+        const periodLabel = period === "yearly" ? "1 Year" : "1 Month";
+
+        try {
+          await (bot as unknown as {
+            sendInvoice: (
+              chatId: number, title: string, description: string,
+              payload: string, providerToken: string, currency: string,
+              prices: { label: string; amount: number }[],
+              options?: Record<string, unknown>
+            ) => Promise<unknown>
+          }).sendInvoice(
+            chatId,
+            `Z-Fantasy ${plan.label}`,
+            `${tier} tier subscription — ${periodLabel}\nUnlock all ${tier} benefits instantly.`,
+            JSON.stringify({ tier, period, userId }),
+            "",
+            "XTR",
+            [{ label: plan.label, amount: plan.stars }],
+            {
+              protect_content: false,
+              reply_markup: { inline_keyboard: [[{ text: `Pay ${plan.stars} ⭐`, pay: true }]] },
+            }
+          );
+        } catch (err) {
+          logger.error({ err }, "sendInvoice failed");
+          await bot!.sendMessage(chatId,
+            `❌ Could not open payment. Please try the in-app checkout instead.`,
+            { reply_markup: { inline_keyboard: [[{ text: "🌐 Open Premium Page", web_app: { url: appUrl("/premium") } }]] } });
+        }
+        return;
+      }
+
       if (query.data?.startsWith("createchar_genre_")) {
         const genre = query.data.replace("createchar_genre_", "");
         const state = pendingCreation.get(chatId);
@@ -1439,6 +1523,52 @@ export function startTelegramBot(): TelegramBot | null {
       const userId = String(msg.from?.id);
       const text = msg.text ?? "";
 
+      // ── Successful Stars payment ───────────────────────────────────────────────
+      if (msg.successful_payment) {
+        try {
+          const payload = JSON.parse(msg.successful_payment.invoice_payload) as { tier: string; period: string; userId: string };
+          const payUserId = String(msg.from?.id ?? payload.userId);
+
+          // Grant ticket bonus by tier
+          const TICKET_BONUS: Record<string, number> = { Bronze: 100, Silver: 300, Gold: 1000 };
+          const bonus = TICKET_BONUS[payload.tier] ?? 0;
+
+          await db.update(usersTable)
+            .set({
+              subscriptionTier: payload.tier,
+              ticketBalance: sql`ticket_balance + ${bonus}`,
+            })
+            .where(eq(usersTable.id, payUserId));
+
+          await db.insert(transactionsTable).values({
+            telegramId: payUserId,
+            actionType: `subscription_${payload.tier}_${payload.period}`,
+            ticketAmount: bonus,
+          });
+
+          const periodLabel = payload.period === "yearly" ? "1 year" : "1 month";
+          const tierEmoji: Record<string, string> = { Bronze: "🥉", Silver: "🥈", Gold: "🥇" };
+          await bot!.sendMessage(chatId, [
+            `${tierEmoji[payload.tier] ?? "💎"} *${payload.tier} activated!*`,
+            ``,
+            `Your subscription is now live for ${periodLabel}.`,
+            `🎟 *+${bonus} tickets* added to your balance.`,
+            ``,
+            `Use /profile to see your updated balance, or tap below to start chatting.`,
+          ].join("\n"), {
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [[
+                { text: "🌐 Open Z-Fantasy", web_app: { url: appUrl("/") } },
+              ]],
+            },
+          });
+        } catch (err) {
+          logger.error({ err }, "Failed to process successful_payment");
+        }
+        return;
+      }
+
       // Skip slash commands (handled by onText above)
       if (text.startsWith("/")) return;
 
@@ -1589,6 +1719,17 @@ export function startTelegramBot(): TelegramBot | null {
       } catch (err) {
         logger.error({ err }, "AI response failed");
         await bot!.sendMessage(chatId, "⚡ Having trouble right now — try again in a moment!");
+      }
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PRE-CHECKOUT — Telegram requires answering within 10 s
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.on("pre_checkout_query", async (query) => {
+      try {
+        await bot!.answerPreCheckoutQuery(query.id, true);
+      } catch (err) {
+        logger.error({ err }, "pre_checkout_query answer failed");
       }
     });
 
