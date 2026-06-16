@@ -10,13 +10,15 @@ const TAGS = ["Anime", "Fantasy", "Sci-Fi", "Dark Goth", "Modern", "Tsundere", "
 export function Explore() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   const { data: charactersData, isLoading } = useListCharacters({ 
     search: searchQuery || undefined,
     tags: selectedTag || undefined,
-    limit: 20
+    limit: 50,
+    page,
   });
 
   const surpriseQuery = useGetSurpriseCharacter({
@@ -36,7 +38,7 @@ export function Explore() {
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchQuery(val);
-    
+    setPage(1);
     if (val === "gregoryomofoman") {
       secretCheck.mutate({ data: { phrase: val } });
     }
@@ -70,7 +72,7 @@ export function Explore() {
           {TAGS.map(tag => (
             <button
               key={tag}
-              onClick={() => setSelectedTag(tag === selectedTag ? null : tag)}
+              onClick={() => { setSelectedTag(tag === selectedTag ? null : tag); setPage(1); }}
               className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
                 tag === selectedTag 
                   ? "bg-primary text-white border-primary box-glow-pink" 
@@ -124,6 +126,16 @@ export function Explore() {
             ))
           )}
         </div>
+
+        {/* Load More */}
+        {charactersData && charactersData.items.length < charactersData.total && (
+          <button
+            onClick={() => setPage(p => p + 1)}
+            className="w-full py-3 rounded-xl border border-border text-muted-foreground text-sm font-semibold hover:border-primary/50 hover:text-primary transition-all"
+          >
+            Load more characters ({charactersData.total - charactersData.items.length} remaining)
+          </button>
+        )}
       </div>
     </div>
   );

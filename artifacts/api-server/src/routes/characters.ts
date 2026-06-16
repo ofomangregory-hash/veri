@@ -64,6 +64,9 @@ router.get("/characters", async (req, res): Promise<void> => {
   if (genre) {
     conditions.push(eq(charactersTable.genre, genre));
   }
+  if (tags) {
+    conditions.push(sql`${tags} = ANY(${charactersTable.tags})`);
+  }
 
   const [items, countResult] = await Promise.all([
     db.select().from(charactersTable)

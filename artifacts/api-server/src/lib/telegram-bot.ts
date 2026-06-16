@@ -76,6 +76,10 @@ const WIZARD_TRAITS = [
   "Painter","Scientist","Engineer","Dancer","Pilot",
   "Mage","Rogue","Knight","Spy","Rebel Leader",
   "Poet","Philosopher","Guardian","Fallen Angel","Cursed Soul",
+  // Adult
+  "Seductress","Touch-starved","Temptress","Irresistible","Sensual Artist",
+  "Pleasure Seeker","Dominatrix","Submissive Heart","Desire Incarnate","Forbidden Lover",
+  "Tantric Master","Exhibitionist","Voyeur","Kink-curious","Master of Seduction",
 ];
 const WIZARD_MOODS = [
   "Smoldering","Playful","Brooding","Yearning","Euphoric","Melancholic","Mischievous",
