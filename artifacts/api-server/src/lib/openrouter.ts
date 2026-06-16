@@ -21,7 +21,7 @@ interface OpenRouterResponse {
 
 async function callModel(model: string, messages: Message[], nsfwEnabled: boolean): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY not set — add it to Replit Secrets");
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -43,14 +43,20 @@ async function callModel(model: string, messages: Message[], nsfwEnabled: boolea
 
   if (!response.ok) {
     const status = response.status;
-    if (status === 429 || status === 503) {
-      throw { retryable: true, status };
-    }
-    throw new Error(`OpenRouter error: ${status}`);
+    let bodyText = "";
+    try { bodyText = await response.text(); } catch { /* ignore */ }
+    logger.error({ model, status, body: bodyText.slice(0, 300) }, "OpenRouter HTTP error");
+    // All HTTP errors are thrown; caller decides whether to retry with next model
+    throw new Error(`OpenRouter ${status}: ${bodyText.slice(0, 120)}`);
   }
 
   const data = (await response.json()) as OpenRouterResponse;
-  return data.choices?.[0]?.message?.content ?? "...";
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    logger.warn({ model, data }, "OpenRouter returned empty content");
+    throw new Error("Empty response from model");
+  }
+  return content;
 }
 
 export async function generateAIReply(
@@ -79,23 +85,16 @@ Keep replies short (1-3 sentences), casual, intimate texting style.`;
     { role: "user", content: userMessage },
   ];
 
-  // Try primary model first
-  try {
-    return await callModel(PRIMARY_MODEL, messages, nsfwEnabled);
-  } catch (err: unknown) {
-    const retryable = typeof err === "object" && err !== null && "retryable" in err;
-    if (!retryable) throw err;
-    logger.warn({ err }, "Primary model failed, trying fallbacks");
-  }
+  const allModels = [PRIMARY_MODEL, ...FALLBACK_MODELS];
 
-  // Try fallbacks sequentially
-  for (const model of FALLBACK_MODELS) {
+  for (const model of allModels) {
     try {
       return await callModel(model, messages, nsfwEnabled);
     } catch (err) {
-      logger.warn({ err, model }, "Fallback model failed");
+      logger.warn({ err: err instanceof Error ? err.message : err, model }, "Model failed, trying next");
     }
   }
 
-  return "I'm feeling a little overwhelmed right now... give me a moment?";
+  logger.error("All OpenRouter models failed — returning soft fallback");
+  return "I'm feeling a little overwhelmed right now... give me a moment? 💭";
 }

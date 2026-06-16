@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useCreateInvoice, InvoiceRequestTier, InvoiceRequestPeriod } from "@workspace/api-client-react";
-import { Star, Zap, Infinity, Shield } from "lucide-react";
+import { Star, Zap, Infinity, Shield, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type Period = "weekly" | "monthly" | "yearly";
@@ -25,16 +25,26 @@ const PERIOD_NOTE: Record<Period, string> = {
 
 export function Premium() {
   const [period, setPeriod] = useState<Period>("monthly");
+  const [paidTier, setPaidTier] = useState<string | null>(null);
   const createInvoice = useCreateInvoice();
   const { toast } = useToast();
 
-  const handleSubscribe = (tier: InvoiceRequestTier) => {
+  const handleSubscribe = (tier: InvoiceRequestTier, tierName: string) => {
     createInvoice.mutate(
       { data: { tier, period: period as typeof InvoiceRequestPeriod[keyof typeof InvoiceRequestPeriod] } },
       {
         onSuccess: (res) => {
           if (window.Telegram?.WebApp?.openInvoice) {
-            window.Telegram.WebApp.openInvoice(res.invoiceLink);
+            window.Telegram.WebApp.openInvoice(res.invoiceLink, (status) => {
+              if (status === "paid") {
+                setPaidTier(tierName);
+                setTimeout(() => setPaidTier(null), 4000);
+              } else if (status === "cancelled") {
+                toast({ title: "Payment cancelled" });
+              } else if (status === "failed") {
+                toast({ title: "Payment failed", description: "Please try again.", variant: "destructive" });
+              }
+            });
           } else {
             toast({ title: "Payment link ready", description: res.invoiceLink });
           }
@@ -76,6 +86,19 @@ export function Premium() {
 
   return (
     <div className="p-4 pb-24">
+      {/* Payment success overlay */}
+      {paidTier && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-card border border-yellow-400 rounded-3xl p-10 flex flex-col items-center gap-4 shadow-[0_0_60px_rgba(250,204,21,0.4)]">
+            <CheckCircle2 size={64} className="text-yellow-400 drop-shadow-[0_0_16px_rgba(250,204,21,0.8)]" />
+            <h2 className="text-2xl font-bold uppercase tracking-widest text-yellow-400">Activated!</h2>
+            <p className="text-muted-foreground text-center text-sm">
+              {paidTier} tier is now live.<br />Enjoy your upgraded experience.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="text-center mb-8 mt-4">
         <h1 className="text-3xl font-bold uppercase tracking-widest text-glow-purple">Ascend</h1>
         <p className="text-muted-foreground mt-2 text-sm">Unlock the true power of the underground.</p>
@@ -133,7 +156,7 @@ export function Premium() {
               </ul>
 
               <button
-                onClick={() => handleSubscribe(tier.id)}
+                onClick={() => handleSubscribe(tier.id, tier.name)}
                 disabled={createInvoice.isPending}
                 className={`w-full py-3 rounded-xl border ${tier.border} ${tier.color} font-bold uppercase tracking-wider hover:bg-current hover:text-black transition-colors relative z-10 disabled:opacity-50`}
               >
@@ -145,7 +168,7 @@ export function Premium() {
       </div>
 
       <p className="text-center text-[10px] text-muted-foreground mt-6">
-        Payments processed via Telegram Stars. Tap the button to open the native checkout.
+        Payments processed via Telegram Stars. The native checkout sheet opens inside your app.
       </p>
     </div>
   );

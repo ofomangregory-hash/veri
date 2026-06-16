@@ -1,0 +1,25 @@
+Please apply these critical security patches, API variable fixes, and native payment overrides across the application files immediately:
+
+1. OPENROUTER API KEY CORRECTION (Fix Chatbot Message Errors)
+- The bot is returning the '⚡ Having trouble right now' fallback message because OpenRouter calls fail.
+- Audit your OpenRouter engine file. Ensure the axios request headers explicitly load 'process.env.OPENROUTER_API_KEY' with no string overrides, typos, or empty placeholders.
+- Log clean, non-sensitive errors inside the catch block to verify if it receives a 401 (Invalid Key) or 400 (Bad Format) response during runtime streams.
+
+2. NATIVE IN-APP PAYMENT INVOCATION SHEET FIX (Stop Generating Raw Web Links)
+- Locate your Premium Checkout View components inside the React frontend.
+- When a pricing card button is tapped, completely block out standard browser window redirection hooks (remove window.open or window.location rules).
+- The tap event must fire an API call to our backend invoice link route. Once the backend yields the 'https://t.me...' transaction string, the frontend MUST natively execute the Telegram Web App SDK payment method:
+  window.Telegram.WebApp.openInvoice(invoiceUrl, (status) => {
+    if (status === 'paid') {
+      // Pop up custom success animation modal on screen instantly
+    }
+  });
+- This ensures the native Stars slide-up sheet triggers directly inside the user's mobile app without generating any public links.
+
+3. PRODUCTION ADMIN PRIVILEGES LOCKDOWN (Fix Global Admin Tab Leak)
+- Locate the main session authentication middleware and frontend initialization script.
+- The Admin dashboard layout tab is currently leaking and visible to standard public users because of a flawed hostname development check.
+- Restrict the development override mode STRICLY to local environments. The mock user session ({ id: '666666', username: 'PreviewUser' }) must ONLY execute if the request hostname equals 'localhost', '127.0.0.1', or includes '.replit.dev' / '.replit.app'.
+- If the incoming request executes over any production domain (such as '*.onrender.com'), the code must enforce standard cryptographic validation controls against process.env.ADMIN_TELEGRAM_ID. If the user ID fails to match, completely strip out, isolate, and hide the Admin tab from their navigation tray views.
+
+Generate the exact updated code layouts cleanly without any shorthand notes or empty TODO components.

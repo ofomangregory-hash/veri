@@ -23,30 +23,34 @@ function generateReferralCode(): string {
 
 const DEV_USER_ID = "666666";
 
+const ALLOWED_DEV_HOST_PATTERNS = [
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  ".replit.dev",
+  ".replit.app",
+  ".picard.replit.dev",
+];
+
 function isDevPreviewRequest(req: Request): boolean {
+  // Hard block: never grant dev bypass in production build
   if (process.env.NODE_ENV === "production") return false;
 
   const origin = req.headers.origin ?? "";
   const host = req.headers.host ?? "";
   const referer = req.headers.referer ?? "";
+  const allDomains = [origin, host, referer];
 
-  const isLocalHost =
-    host.startsWith("localhost") ||
-    host.startsWith("127.0.0.1") ||
-    host.startsWith("0.0.0.0");
+  const isAllowedDomain = allDomains.some((domain) =>
+    ALLOWED_DEV_HOST_PATTERNS.some((pattern) => domain.includes(pattern))
+  );
 
-  const isReplitPreview =
-    origin.includes(".replit.dev") ||
-    origin.includes(".replit.app") ||
-    host.includes(".replit.dev") ||
-    host.includes(".replit.app") ||
-    referer.includes(".replit.dev") ||
-    referer.includes(".replit.app");
+  if (!isAllowedDomain) return false;
 
   const auth = req.headers.authorization ?? "";
   const hasMockToken = auth === "" || auth === "Bearer mock_init_data_for_dev";
 
-  return (isLocalHost || isReplitPreview) && hasMockToken;
+  return hasMockToken;
 }
 
 async function ensureDevUser(): Promise<void> {

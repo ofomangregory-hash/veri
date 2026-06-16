@@ -11,7 +11,7 @@ declare global {
     Telegram?: {
       WebApp?: {
         initData: string;
-        openInvoice: (url: string) => void;
+        openInvoice: (url: string, callback?: (status: "paid" | "cancelled" | "failed" | "pending") => void) => void;
       };
     };
   }
