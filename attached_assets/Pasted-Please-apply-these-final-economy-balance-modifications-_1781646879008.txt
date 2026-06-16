@@ -1,0 +1,45 @@
+Please apply these final economy balance modifications, admin command modules, and in-bot creation checklist features across our frontend views and backend scripts immediately:
+
+1. ECONOMY RULES & MATRIX RE-ALIGNMENT
+- Message Cost: Sending a chat text message to an AI companion now consumes exactly 1 ticket from 'ticket_balance'.
+- Daily Login Balance: Refactor the reward claim system. Checking in every 24 hours now credits the user account with exactly +25 Tickets AND +10 Neon Cards.
+- Premium Subscription Ticket Perks: Update the checkout matrix. Purchasing or renewing a VIP plan must instantly credit the user's 'ticket_balance' ledger with these exact amounts:
+  * Bronze Tier: Grants 150 Neon Tickets
+  * Silver Tier: Grants 350 Neon Tickets
+  * Gold Tier: Grants 600 Neon Tickets
+- Neon Card Shop Adjusted Pricing: Update your checkout packs to match these discounted rates and increased asset numbers:
+  * Starter Pack: 100 Neon Cards for 200 Telegram Stars.
+  * Booster Pack: 270 Neon Cards (250 + 20 bonus) for 450 Telegram Stars (reduced by 50 Stars).
+  * Mega Pack: 550 Neon Cards (500 + 50 bonus) for 950 Telegram Stars (reduced by 50 Stars).
+  * 'Buy Custom' option: Preserves the 2:1 Stars-to-Cards base ratio.
+
+2. SYSTEM-WIDE MASTER ADMIN IMMUNITY & UNLIMITED OVERRIDES
+- Absolute Admin bypass: Modify your database checking loops and ledger deduction middleware across the Express API routes and the Telegram Bot core.
+- If the incoming user ID matches process.env.ADMIN_TELEGRAM_ID:
+  * Their account balances for both Tickets and Neon Cards must display as 9999 at all times across UI layers.
+  * Completely bypass all cost validation checks (wiping, unblurring, character creating, messaging, or image requesting costs 0 for the admin).
+  * They possess permanent, unlimited Gold Premium Tier subscription status.
+
+3. NEW ECONOMY CONTROLLER ADMIN COMMANDS
+Add these new administrative commands to your Telegram Bot long-polling parser module, strictly locked to process.env.ADMIN_TELEGRAM_ID validation:
+- /addcards [userID] [amount]: Add a positive integer of Neon Cards straight to a user's database balance.
+- /removecards [userID] [amount]: Deduct Neon Cards from a user's wallet profile row.
+- /addtickets [userID] [amount]: Add a positive integer of Tickets directly to a user's balance ledger.
+- /removetickets [userID] [amount]: Deduct Tickets from a user's balance row.
+
+4. IN-BOT CHECKLIST CREATION MATRIX WITH SELECTION INTERFACES
+- Refactor the step-by-step '/createcharacter' command routing inside the Telegram Bot module.
+- Instead of requiring users to manually type out long, tedious strings for character components, the bot must query your global database collections to pool available preset categories, traits, and scene options.
+- Render these options cleanly inside the Telegram DM using native inline keyboards featuring checkbox emojis (e.g., '⬜ [Trait Name]' or '✅ [Selected Trait Name]').
+- Allow users to tap individual inline buttons to toggle selections on and off dynamically.
+- Strict Cap Threshold Enforcement: Code the state validator to enforce the exact same boundaries set on the web interface. If a user attempts to check more than the maximum allowance, fire an alert and block further selections:
+  * Max Characters Total: 3 items maximum.
+  * Max Traits Selected: 7 items maximum.
+  * Max Behaviour Profiles Selected: 7 items maximum.
+  * Max Personalities Selected: 3 items maximum.
+  * Max Scenario Scenes Selected: 5 items maximum.
+
+5. FORCED SUPABASE PERSISTENCE MATRIX
+- Ensure every single user operation, bot-created character, checkbox configuration setting, and ledger modification runs an instant asynchronous insert/update statement straight to your remote live Supabase PostgreSQL tables. No data should be stored inside ephemeral local workspace hard disks or transient execution arrays.
+
+Write out the complete, production-ready code files cleanly without any shorthand comments or incomplete TODO blocks.
