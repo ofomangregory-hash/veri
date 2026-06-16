@@ -1,5 +1,5 @@
 import TelegramBot from "node-telegram-bot-api";
-import { db, usersTable, charactersTable, systemConfigurationsTable } from "@workspace/db";
+import { db, usersTable, charactersTable, systemConfigurationsTable, transactionsTable } from "@workspace/db";
 import { eq, sql, count, like, ilike } from "drizzle-orm";
 import { logger } from "./logger";
 import { generateAIReply } from "./openrouter";
@@ -15,6 +15,9 @@ const ADMIN_PASSWORD = "ofomangregory";
 // ── Pending multi-step states ─────────────────────────────────────────────────
 const pendingPhotoFor = new Map<number, string>(); // chatId → characterId (for /setcharphoto)
 const pendingBotPhoto = new Set<number>();          // chatIds waiting to set bot photo
+
+interface CreationState { step: "name" | "bio" | "genre"; name?: string; bio?: string }
+const pendingCreation = new Map<number, CreationState>(); // chatId → creation wizard state
 
 let bot: TelegramBot | null = null;
 
@@ -82,8 +85,15 @@ export function startTelegramBot(): TelegramBot | null {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const publicCommands = [
       { command: "start",     description: "Welcome message + Open App button" },
+      { command: "profile",   description: "Your stats — balance, tier, active companion" },
+      { command: "daily",     description: "Claim your daily +10 tickets" },
+      { command: "create",    description: "Create a new companion (costs 25 tickets)" },
+      { command: "inventory", description: "Your created companions" },
+      { command: "referral",  description: "Get your referral link" },
+      { command: "upgrade",   description: "View premium plans" },
       { command: "browse",    description: "Browse all public companions" },
       { command: "character", description: "View a companion profile: /character [name]" },
+      { command: "select",    description: "Switch active companion: /select [name]" },
       { command: "commands",  description: "Show available commands" },
     ];
 
@@ -91,9 +101,12 @@ export function startTelegramBot(): TelegramBot | null {
       ...publicCommands,
       { command: "stats",              description: "Dashboard — users, premium, characters" },
       { command: "listusers",          description: "View all registered users" },
+      { command: "searchuser",         description: "Search user by username: /searchuser [query]" },
       { command: "whois",              description: "Full profile card: /whois [userID]" },
+      { command: "givetickets",        description: "Give/deduct tickets: /givetickets [userID] [amount]" },
       { command: "addpremium",         description: "Grant premium: /addpremium [userID] [days/lifetime]" },
       { command: "removepremium",      description: "Remove premium: /removepremium [userID]" },
+      { command: "resetuser",          description: "Reset to Free + zero balance: /resetuser [userID]" },
       { command: "setstaff",           description: "Set staff role: /setstaff [userID] | limited_admin|full_admin|remove" },
       { command: "setusername",        description: "Set display name: /setusername [userID] | [name]" },
       { command: "broadcast",          description: "Send to all users: /broadcast [message]" },
@@ -101,6 +114,7 @@ export function startTelegramBot(): TelegramBot | null {
       { command: "configall",          description: "Inline character config menu" },
       { command: "configurecharacter", description: "Full config dashboard: /configurecharacter [name]" },
       { command: "createcharacter",    description: "Create: /createcharacter [name] | true/false | [backstory]" },
+      { command: "setvisibility",      description: "Toggle visibility: /setvisibility [name] | public/private" },
       { command: "deletecharacter",    description: "Delete: /deletecharacter [name]" },
       { command: "renamechar",         description: "Rename display: /renamechar [old] | [new]" },
       { command: "renamecharacter",    description: "Rename + update prompt: /renamecharacter [old] | [new]" },
@@ -317,6 +331,209 @@ export function startTelegramBot(): TelegramBot | null {
 
       const greeting = char.initialGreeting ?? `Hey 💜 I'm ${char.name}. ${char.teaserDescription ?? ""}`;
       await bot!.sendMessage(chatId, greeting);
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /profile — user's own stats card
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/profile$/, async (msg) => {
+      const chatId = msg.chat.id;
+      const userId = String(msg.from?.id);
+      await syncUser(userId, msg.from?.username);
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+      if (!user) { await bot!.sendMessage(chatId, "❌ Profile not found. Try /start first."); return; }
+
+      let activeCharName = "None";
+      if (user.activeCharacterId) {
+        const [char] = await db.select({ name: charactersTable.name })
+          .from(charactersTable).where(eq(charactersTable.characterId, user.activeCharacterId));
+        if (char) activeCharName = char.name;
+      }
+
+      const tierEmoji: Record<string, string> = { Free: "🆓", Bronze: "🥉", Silver: "🥈", Gold: "🥇" };
+      const nextClaim = user.lastDailyClaim
+        ? new Date(user.lastDailyClaim.getTime() + 24 * 60 * 60 * 1000)
+        : null;
+      const canClaim = !nextClaim || nextClaim <= new Date();
+      const claimLine = canClaim ? "✅ Daily tickets available — /daily" : `⏳ Next claim: ${nextClaim!.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+
+      await bot!.sendMessage(chatId, [
+        `👤 *Your Profile*`, ``,
+        `🏷 Name: @${user.username ?? "—"}${user.customNickname ? ` _(${user.customNickname})_` : ""}`,
+        `${tierEmoji[user.subscriptionTier] ?? "💎"} Tier: *${user.subscriptionTier}*`,
+        `🎟 Tickets: *${user.ticketBalance}*`,
+        `🤖 Active Companion: *${activeCharName}*`,
+        ``,
+        `📊 *Activity*`,
+        `🎭 Characters Created: *${user.weeklyCreationsCount}* this week`,
+        `${claimLine}`,
+        `🔗 Referral Code: \`${user.referralCode ?? "—"}\``,
+        ``,
+        user.subscriptionTier === "Free"
+          ? `⚡ Upgrade for more tickets & companions — /upgrade`
+          : ``,
+      ].filter(s => s !== "").join("\n"), { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /daily — claim daily +10 tickets
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/daily$/, async (msg) => {
+      const chatId = msg.chat.id;
+      const userId = String(msg.from?.id);
+      await syncUser(userId, msg.from?.username);
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+      if (!user) { await bot!.sendMessage(chatId, "❌ Try /start first."); return; }
+
+      const now = new Date();
+      if (user.lastDailyClaim) {
+        const hours = (now.getTime() - user.lastDailyClaim.getTime()) / (1000 * 60 * 60);
+        if (hours < 24) {
+          const next = new Date(user.lastDailyClaim.getTime() + 24 * 60 * 60 * 1000);
+          const hrs = Math.floor((next.getTime() - now.getTime()) / (1000 * 60 * 60));
+          const mins = Math.floor(((next.getTime() - now.getTime()) % (1000 * 60 * 60)) / (1000 * 60));
+          await bot!.sendMessage(chatId, `⏳ Already claimed today!\n\nCome back in *${hrs}h ${mins}m* for your next +10 tickets.`, { parse_mode: "Markdown" });
+          return;
+        }
+      }
+
+      await db.update(usersTable).set({
+        ticketBalance: sql`ticket_balance + 10`,
+        lastDailyClaim: now,
+      }).where(eq(usersTable.id, userId));
+
+      await db.insert(transactionsTable).values({
+        telegramId: userId,
+        actionType: "daily_claim",
+        ticketAmount: 10,
+      });
+
+      await bot!.sendMessage(chatId,
+        `🎟 *+10 Tickets!*\n\nYour daily reward has been added.\nNew balance: *${(user.ticketBalance ?? 0) + 10}* tickets\n\nCome back tomorrow for more!`,
+        { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /referral — get referral link + count
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/referral$/, async (msg) => {
+      const chatId = msg.chat.id;
+      const userId = String(msg.from?.id);
+      await syncUser(userId, msg.from?.username);
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+      if (!user?.referralCode) { await bot!.sendMessage(chatId, "❌ Try /start first."); return; }
+
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? "z_fantasy_bot";
+      const link = `https://t.me/${botUsername}?start=ref_${user.referralCode}`;
+
+      const [countResult] = await db.select({ c: sql<number>`count(*)` })
+        .from(usersTable).where(eq(usersTable.referredBy, user.referralCode));
+      const referred = Number(countResult?.c ?? 0);
+
+      await bot!.sendMessage(chatId, [
+        `🔗 *Your Referral Link*`, ``,
+        `\`${link}\``,
+        ``,
+        `👥 Friends referred: *${referred}*`,
+        `🎁 Each friend gives you *+15 tickets* when they join!`,
+        ``,
+        `Share this link and earn more tickets every time someone signs up.`,
+      ].join("\n"), { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /upgrade — show premium plans with Open App button
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/upgrade$/, async (msg) => {
+      const chatId = msg.chat.id;
+      await bot!.sendMessage(chatId, [
+        `⚡ *Z-Fantasy Premium*`, ``,
+        `🥉 *Bronze* — 300 ⭐/mo`,
+        `  • 100 Tickets/cycle · Basic avatars`,
+        ``,
+        `🥈 *Silver* — 600 ⭐/mo`,
+        `  • 300 Tickets/cycle · Priority generation · Voice messages`,
+        ``,
+        `🥇 *Gold* — 1050 ⭐/mo`,
+        `  • 1000 Tickets/cycle · All features · Instant generation`,
+        ``,
+        `Tap the button below to open the full checkout inside Z-Fantasy.`,
+      ].join("\n"), {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [[{ text: "💎 View Plans & Subscribe", web_app: { url: appUrl("/premium") } }]],
+        },
+      });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /inventory — list user's created characters
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/inventory$/, async (msg) => {
+      const chatId = msg.chat.id;
+      const userId = String(msg.from?.id);
+      await syncUser(userId, msg.from?.username);
+
+      const chars = await db.select({
+        characterId: charactersTable.characterId,
+        name: charactersTable.name,
+        visibility: charactersTable.visibility,
+        genre: charactersTable.genre,
+      }).from(charactersTable).where(eq(charactersTable.creatorId, userId));
+
+      if (!chars.length) {
+        await bot!.sendMessage(chatId,
+          `🎭 You haven't created any companions yet.\n\nUse /create to build your first one! (costs 25 tickets)`,
+          { reply_markup: { inline_keyboard: [[{ text: "🌐 Create in App", web_app: { url: appUrl("/create") } }]] } });
+        return;
+      }
+
+      const lines = chars.map((c, i) =>
+        `${i + 1}. *${c.name}* — ${c.genre ?? "General"} ${c.visibility === "private" ? "🔒" : "🌐"}`
+      );
+
+      await bot!.sendMessage(chatId,
+        `🎭 *Your Companions (${chars.length})*\n\n${lines.join("\n")}\n\n🔒 Private  🌐 Public`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [[{ text: "🌐 Manage in App", web_app: { url: appUrl("/create") } }]],
+          },
+        });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /create — guided character creation wizard
+    //  Free tier blocked. Costs 25 tickets. Steps: name → bio → genre (button)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/create$/, async (msg) => {
+      const chatId = msg.chat.id;
+      const userId = String(msg.from?.id);
+      await syncUser(userId, msg.from?.username);
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+      if (!user) { await bot!.sendMessage(chatId, "❌ Try /start first."); return; }
+
+      if (user.subscriptionTier === "Free") {
+        await bot!.sendMessage(chatId,
+          `🔒 *Character creation requires a premium subscription.*\n\nFree users can browse and chat — but creating your own companion needs Bronze tier or above.\n\nUse /upgrade to unlock full access.`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: { inline_keyboard: [[{ text: "⚡ View Plans", web_app: { url: appUrl("/premium") } }]] },
+          });
+        return;
+      }
+
+      if ((user.ticketBalance ?? 0) < 25) {
+        await bot!.sendMessage(chatId,
+          `❌ *Insufficient tickets.*\n\nCharacter creation costs *25 tickets*.\nYour balance: *${user.ticketBalance}* tickets.\n\nClaim your /daily or /upgrade for more.`,
+          { parse_mode: "Markdown" });
+        return;
+      }
+
+      pendingCreation.set(chatId, { step: "name" });
+      await bot!.sendMessage(chatId,
+        `🎨 *Let's create your companion!*\n\n*Step 1/3 — Name*\nWhat's your companion's name?\n\n_(Type /cancel at any time to abort)_`,
+        { parse_mode: "Markdown" });
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -804,57 +1021,163 @@ export function startTelegramBot(): TelegramBot | null {
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  ADMIN: /givetickets [userID] [amount]  (use negative to deduct)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/givetickets (\S+) (-?\d+)/, async (msg, match) => {
+      if (!isAdmin(msg)) return;
+      const [, targetId, amountStr] = match ?? [];
+      const amount = Number(amountStr);
+      if (!targetId || isNaN(amount)) {
+        await bot!.sendMessage(msg.chat.id, "Usage: /givetickets userID amount\nUse negative number to deduct.");
+        return;
+      }
+      const [user] = await db.select({ id: usersTable.id, ticketBalance: usersTable.ticketBalance })
+        .from(usersTable).where(eq(usersTable.id, targetId));
+      if (!user) {
+        await bot!.sendMessage(msg.chat.id, `❌ User \`${targetId}\` not found.`, { parse_mode: "Markdown" });
+        return;
+      }
+      await db.update(usersTable)
+        .set({ ticketBalance: sql`ticket_balance + ${amount}` })
+        .where(eq(usersTable.id, targetId));
+      await db.insert(transactionsTable).values({
+        telegramId: targetId,
+        actionType: amount >= 0 ? "admin_grant" : "admin_deduct",
+        ticketAmount: amount,
+      });
+      const verb = amount >= 0 ? `+${amount}` : String(amount);
+      await bot!.sendMessage(msg.chat.id,
+        `✅ User \`${targetId}\` — tickets *${verb}*\nNew balance: *${(user.ticketBalance ?? 0) + amount}*`,
+        { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  ADMIN: /resetuser [userID] — reset to Free + zero ticket balance
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/resetuser (\S+)/, async (msg, match) => {
+      if (!isAdmin(msg)) return;
+      const targetId = match?.[1];
+      if (!targetId) return;
+      await db.update(usersTable)
+        .set({ subscriptionTier: "Free", ticketBalance: 0, weeklyCreationsCount: 0 })
+        .where(eq(usersTable.id, targetId));
+      await bot!.sendMessage(msg.chat.id,
+        `✅ User \`${targetId}\` reset — Free tier, 0 tickets, 0 weekly creations.`,
+        { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  ADMIN: /setvisibility [name] | public/private
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/setvisibility (.+)/, async (msg, match) => {
+      if (!isAdmin(msg)) return;
+      const parts = match?.[1]?.split("|").map(s => s.trim());
+      if (!parts || parts.length < 2) {
+        await bot!.sendMessage(msg.chat.id, "Usage: /setvisibility CharName | public/private");
+        return;
+      }
+      const [name, vis] = parts;
+      if (vis !== "public" && vis !== "private") {
+        await bot!.sendMessage(msg.chat.id, "❌ Visibility must be `public` or `private`.", { parse_mode: "Markdown" });
+        return;
+      }
+      const char = await findCharByName(name);
+      if (!char) { await bot!.sendMessage(msg.chat.id, `❌ *${name}* not found.`, { parse_mode: "Markdown" }); return; }
+      await db.update(charactersTable).set({ visibility: vis }).where(eq(charactersTable.characterId, char.characterId));
+      const icon = vis === "public" ? "🌐" : "🔒";
+      await bot!.sendMessage(msg.chat.id,
+        `✅ *${char.name}* is now ${icon} *${vis}*.`,
+        { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  ADMIN: /searchuser [query] — search by username or ID
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/searchuser (.+)/, async (msg, match) => {
+      if (!isAdmin(msg)) return;
+      const query = match?.[1]?.trim();
+      if (!query) return;
+      const results = await db.select({
+        id: usersTable.id, username: usersTable.username,
+        tier: usersTable.subscriptionTier, balance: usersTable.ticketBalance,
+      }).from(usersTable)
+        .where(sql`id ILIKE ${'%' + query + '%'} OR username ILIKE ${'%' + query + '%'}`)
+        .limit(10);
+      if (!results.length) {
+        await bot!.sendMessage(msg.chat.id, `❌ No users matching \`${query}\`.`, { parse_mode: "Markdown" });
+        return;
+      }
+      const lines = results.map(u =>
+        `• \`${u.id}\` @${u.username ?? "—"} | ${u.tier} | 🎟 ${u.balance}`
+      );
+      await bot!.sendMessage(msg.chat.id,
+        `🔍 *Search results for "${query}":*\n\n${lines.join("\n")}`,
+        { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  /commands — full command reference (public + admin sections)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     bot.onText(/\/commands$/, async (msg) => {
       const admin = isAdmin(msg);
       const publicCmds = [
         `🌐 *Public Commands*`,
-        `/start — Open Z\\-Fantasy with welcome message`,
+        `/start — Welcome message \\+ Open App button`,
+        `/profile — Your stats, balance & active companion`,
+        `/daily — Claim your daily \\+10 tickets`,
+        `/create — Create a new companion \\(25 tickets\\)`,
+        `/inventory — Your created companions`,
+        `/referral — Your referral link \\(\\+15 tickets per friend\\)`,
+        `/upgrade — View premium plans`,
         `/browse — Browse all public companions`,
+        `/character \\[name\\] — View a companion card`,
         `/select \\[name\\] — Switch your active companion`,
-        `/commands — Show this command list`,
+        `/commands — Show this list`,
       ];
       const adminCmds = [
         ``,
-        `🔑 *Admin Commands* \\(unlock with password\\)`,
+        `🔑 *Admin Commands*`,
         ``,
-        `📊 *Stats & Users*`,
-        `/stats — Dashboard \\(users, premium, characters\\)`,
-        `/listusers — List all registered users`,
-        `/whois \\[userID\\] — Full profile card for a user`,
-        `/addpremium \\[userID\\] \\[days/lifetime\\] — Grant premium`,
-        `/removepremium \\[userID\\] — Remove premium`,
+        `📊 *Users*`,
+        `/stats — Dashboard`,
+        `/listusers — List all users`,
+        `/searchuser \\[query\\] — Search user by name or ID`,
+        `/whois \\[userID\\] — Full profile card`,
+        `/givetickets \\[userID\\] \\[amount\\] — Give or deduct tickets`,
+        `/addpremium \\[userID\\] \\[days/lifetime\\]`,
+        `/removepremium \\[userID\\]`,
+        `/resetuser \\[userID\\] — Reset to Free \\+ 0 tickets`,
         `/setstaff \\[userID\\] | limited\\_admin|full\\_admin|remove`,
-        `/setusername \\[userID\\] | \\[name\\] — Set display name`,
-        `/broadcast \\[message\\] — Send to all users`,
+        `/setusername \\[userID\\] | \\[name\\]`,
+        `/broadcast \\[message\\]`,
         ``,
         `🤖 *Characters*`,
         `/listall — List all characters`,
-        `/configall — Interactive character config menu`,
-        `/configurecharacter \\[name\\] — Config dashboard`,
+        `/configall — Interactive config menu`,
+        `/configurecharacter \\[name\\]`,
         `/createcharacter \\[name\\] | true/false | \\[backstory\\]`,
-        `/deletecharacter \\[name\\] — Permanently delete`,
-        `/renamechar \\[old\\] | \\[new\\] — Rename \\(display only\\)`,
-        `/renamecharacter \\[old\\] | \\[new\\] — Rename \\+ update prompt`,
-        `/setprompt \\[name\\] \\[prompt\\] — Set system prompt`,
+        `/setvisibility \\[name\\] | public/private`,
+        `/deletecharacter \\[name\\]`,
+        `/renamechar \\[old\\] | \\[new\\]`,
+        `/renamecharacter \\[old\\] | \\[new\\]`,
+        `/setprompt \\[name\\] \\[prompt\\]`,
         `/settagline \\[name\\] | \\[tagline\\]`,
         `/setgreeting \\[name\\] | \\[message\\]`,
-        `/bulkgreeting \\[name1,name2\\] | \\[greeting\\]`,
-        `/setcharphoto \\[name\\] — Set character avatar`,
+        `/bulkgreeting \\[n1,n2\\] | \\[greeting\\]`,
+        `/setcharphoto \\[name\\]`,
         ``,
         `✨ *Traits & Media*`,
         `/addcustomtrait mood|tone | \\[CharName\\] | \\[desc\\]`,
-        `/viewtraits \\[name\\] — View active traits`,
-        `/resettraits \\[name\\] — Clear all traits`,
-        `/addphoto \\[CharName\\] \\[keyword\\] — Link photo`,
-        `/addvideo \\[CharName\\] \\[keyword\\] — Link video`,
+        `/viewtraits \\[name\\]`,
+        `/resettraits \\[name\\]`,
+        `/addphoto \\[CharName\\] \\[keyword\\]`,
+        `/addvideo \\[CharName\\] \\[keyword\\]`,
         ``,
         `⚙️ *Bot Settings*`,
-        `/setwelcome \\[text\\] — Set /start message`,
-        `/setdesc \\[text\\] — Set bot Telegram description`,
-        `/setbotphoto — Set bot profile picture`,
-        `/addcommand \\[trigger\\] | \\[response\\] — Custom command`,
+        `/setwelcome \\[text\\]`,
+        `/setdesc \\[text\\]`,
+        `/setbotphoto`,
+        `/addcommand \\[trigger\\] | \\[response\\]`,
       ];
 
       const lines = admin ? [...publicCmds, ...adminCmds] : publicCmds;
@@ -899,6 +1222,68 @@ export function startTelegramBot(): TelegramBot | null {
         await db.update(usersTable).set({ activeCharacterId: charId })
           .where(eq(usersTable.id, String(query.from.id)));
         await bot!.sendMessage(chatId, "✅ Character selected! Send me a message to start chatting 💜");
+      }
+
+      if (query.data?.startsWith("createchar_genre_")) {
+        const genre = query.data.replace("createchar_genre_", "");
+        const state = pendingCreation.get(chatId);
+        if (!state || state.step !== "genre" || !state.name || !state.bio) {
+          await bot!.sendMessage(chatId, "❌ Something went wrong. Please try /create again.");
+          pendingCreation.delete(chatId);
+          return;
+        }
+        pendingCreation.delete(chatId);
+
+        const userId = String(query.from.id);
+        const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+        if (!user || (user.ticketBalance ?? 0) < 25) {
+          await bot!.sendMessage(chatId, "❌ Insufficient tickets. Creation cancelled.");
+          return;
+        }
+
+        const systemPrompt = `You are ${state.name}, an AI companion. ${state.bio}`;
+        const [newChar] = await db.insert(charactersTable).values({
+          name: state.name,
+          genre,
+          visibility: "private",
+          teaserDescription: state.bio.slice(0, 100),
+          systemPrompt,
+          initialGreeting: `Hey 💜 I'm ${state.name}. ${state.bio.slice(0, 80)}…`,
+          creatorId: userId,
+        }).returning({ characterId: charactersTable.characterId, name: charactersTable.name });
+
+        await db.update(usersTable).set({
+          ticketBalance: sql`ticket_balance - 25`,
+          weeklyCreationsCount: sql`weekly_creations_count + 1`,
+          activeCharacterId: newChar.characterId,
+        }).where(eq(usersTable.id, userId));
+
+        await db.insert(transactionsTable).values({
+          telegramId: userId,
+          actionType: "character_creation",
+          ticketAmount: -25,
+        });
+
+        await bot!.sendMessage(chatId, [
+          `🎉 *${newChar.name}* is born!`,
+          ``,
+          `🎭 Genre: ${genre}`,
+          `🔒 Visibility: Private (only you can see them)`,
+          `🎟 Tickets used: 25`,
+          ``,
+          `Your companion is now active. Send a message to start chatting, or use /profile to see your balance.`,
+          ``,
+          `_Tip: Use the app to set a photo and make them public._`,
+        ].join("\n"), {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "💬 Chat Now", callback_data: `chat_${newChar.characterId}` },
+              { text: "🌐 Manage in App", web_app: { url: appUrl("/create") } },
+            ]],
+          },
+        });
+        return;
       }
 
       if (query.data?.startsWith("show_char_")) {
@@ -1056,6 +1441,76 @@ export function startTelegramBot(): TelegramBot | null {
 
       // Skip slash commands (handled by onText above)
       if (text.startsWith("/")) return;
+
+      // ── /cancel — abort any pending wizard ───────────────────────────────────
+      if (text.trim().toLowerCase() === "/cancel") {
+        if (pendingCreation.has(chatId)) {
+          pendingCreation.delete(chatId);
+          await bot!.sendMessage(chatId, "❌ Character creation cancelled.");
+        }
+        return;
+      }
+
+      // ── Creation wizard steps ─────────────────────────────────────────────────
+      if (pendingCreation.has(chatId)) {
+        const state = pendingCreation.get(chatId)!;
+
+        if (state.step === "name") {
+          const name = text.trim();
+          if (name.length < 2 || name.length > 40) {
+            await bot!.sendMessage(chatId, "❌ Name must be 2–40 characters. Try again:");
+            return;
+          }
+          const existing = await db.select({ id: charactersTable.characterId })
+            .from(charactersTable).where(ilike(charactersTable.name, name)).limit(1);
+          if (existing.length) {
+            await bot!.sendMessage(chatId, `❌ A companion named *${name}* already exists. Try a different name:`, { parse_mode: "Markdown" });
+            return;
+          }
+          state.name = name;
+          state.step = "bio";
+          pendingCreation.set(chatId, state);
+          await bot!.sendMessage(chatId,
+            `✨ Great name! Now...\n\n*Step 2/3 — Personality & Backstory*\nDescribe your companion's personality, backstory, and how they talk. Be as detailed as you like!\n\n_(e.g. "Aria is a sarcastic elf with a warm heart. She's witty, sarcastic, but fiercely loyal to her friends.")_`,
+            { parse_mode: "Markdown" });
+          return;
+        }
+
+        if (state.step === "bio") {
+          const bio = text.trim();
+          if (bio.length < 10) {
+            await bot!.sendMessage(chatId, "❌ Please write at least a short description (10+ characters).");
+            return;
+          }
+          state.bio = bio;
+          state.step = "genre";
+          pendingCreation.set(chatId, state);
+          await bot!.sendMessage(chatId,
+            `🎭 *Step 3/3 — Genre*\nWhat genre best fits *${state.name}*?`,
+            {
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    { text: "🗡 Fantasy",   callback_data: `createchar_genre_Fantasy` },
+                    { text: "💕 Romance",   callback_data: `createchar_genre_Romance` },
+                    { text: "🚀 Sci-Fi",    callback_data: `createchar_genre_SciFi` },
+                  ],
+                  [
+                    { text: "🌸 Anime",     callback_data: `createchar_genre_Anime` },
+                    { text: "😂 Comedy",    callback_data: `createchar_genre_Comedy` },
+                    { text: "👻 Horror",    callback_data: `createchar_genre_Horror` },
+                  ],
+                  [
+                    { text: "🏛 Historical", callback_data: `createchar_genre_Historical` },
+                    { text: "✨ General",   callback_data: `createchar_genre_General` },
+                  ],
+                ],
+              },
+            });
+          return;
+        }
+      }
 
       // ── Password unlock ──────────────────────────────────────────────────────
       if (text.trim() === ADMIN_PASSWORD) {
