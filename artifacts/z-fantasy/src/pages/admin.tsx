@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe } from "@workspace/api-client-react";
-import { Users, Bot, CreditCard, Activity, Image, DollarSign, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X } from "lucide-react";
+import { Users, Bot, CreditCard, Activity, Image, DollarSign, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
@@ -62,6 +62,20 @@ export function Admin() {
   const [expandedCharId, setExpandedCharId] = useState<string | null>(null);
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
+
+  const [seeding, setSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<{ seeded: number; skipped: number; total: number } | null>(null);
+
+  const runSeed = async () => {
+    setSeeding(true);
+    setSeedResult(null);
+    try {
+      const result = await adminApi<{ seeded: number; skipped: number; total: number }>("POST", "/admin/seed");
+      setSeedResult(result);
+      toast({ title: `✅ Seed complete — ${result.seeded} added, ${result.skipped} skipped` });
+    } catch (e) { toast({ title: "Seed failed", description: String(e), variant: "destructive" }); }
+    finally { setSeeding(false); }
+  };
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -273,7 +287,12 @@ export function Admin() {
       {/* ── Characters ── */}
       {activeTab === "characters" && (
         <div className="space-y-6">
-          <div className="flex items-center gap-2 justify-end">
+          <div className="flex items-center gap-2 justify-end flex-wrap">
+            <button onClick={runSeed} disabled={seeding}
+              className="flex items-center gap-2 text-xs text-yellow-400 border border-yellow-500/50 px-3 py-1.5 rounded-lg hover:bg-yellow-500/10 transition-colors disabled:opacity-50">
+              {seeding ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {seeding ? "Seeding…" : "Seed Default Characters"}
+            </button>
             <button onClick={() => setShowCreateForm(f => !f)}
               className="flex items-center gap-2 text-xs text-primary border border-primary/50 px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
               {showCreateForm ? <X size={14} /> : <Plus size={14} />}
@@ -284,6 +303,11 @@ export function Admin() {
               <RefreshCw size={14} className={configsLoading ? "animate-spin" : ""} /> Refresh
             </button>
           </div>
+          {seedResult && (
+            <div className="text-xs text-center text-muted-foreground bg-card border border-border rounded-lg px-3 py-2">
+              Last seed: <span className="text-green-400 font-bold">{seedResult.seeded} added</span> · <span className="text-muted-foreground">{seedResult.skipped} already existed</span> · {seedResult.total} total defaults
+            </div>
+          )}
 
           {showCreateForm && (
             <div className="p-4 rounded-xl bg-card border border-primary/40 space-y-3 box-glow-pink">
