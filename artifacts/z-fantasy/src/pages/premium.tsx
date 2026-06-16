@@ -46,7 +46,7 @@ export function Premium() {
               }
             });
           } else {
-            toast({ title: "Payment link ready", description: res.invoiceLink });
+            toast({ title: "Open in Telegram", description: "Please open this app inside Telegram to complete payment." });
           }
         },
         onError: () => toast({ title: "Failed to create invoice", variant: "destructive" })

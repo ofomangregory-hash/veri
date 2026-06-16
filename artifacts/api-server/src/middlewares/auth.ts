@@ -23,13 +23,14 @@ function generateReferralCode(): string {
 
 const DEV_USER_ID = "666666";
 
+// These patterns identify the Replit WORKSPACE preview (not the deployed app).
+// .replit.app is the DEPLOYED production domain — never allow dev bypass there.
 const ALLOWED_DEV_HOST_PATTERNS = [
   "localhost",
   "127.0.0.1",
   "0.0.0.0",
-  ".replit.dev",
-  ".replit.app",
   ".picard.replit.dev",
+  ".replit.dev",
 ];
 
 function isDevPreviewRequest(req: Request): boolean {
