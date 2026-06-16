@@ -31,8 +31,14 @@ const BASE_TIER_PRICES: Record<string, Record<string, { stars: number; label: st
 
 const NEON_CARD_PACKS: Record<string, { cards: number; stars: number; label: string }> = {
   starter: { cards: 100,  stars: 200,  label: "Starter Pack — 100 Neon Cards" },
-  booster: { cards: 255,  stars: 500,  label: "Booster Pack — 255 Neon Cards" },
-  mega:    { cards: 510,  stars: 1000, label: "Mega Pack — 510 Neon Cards" },
+  booster: { cards: 270,  stars: 450,  label: "Booster Pack — 270 Neon Cards (250 + 20 bonus)" },
+  mega:    { cards: 550,  stars: 950,  label: "Mega Pack — 550 Neon Cards (500 + 50 bonus)" },
+};
+
+const SUBSCRIPTION_TICKET_PERKS: Record<string, number> = {
+  Bronze: 150,
+  Silver: 350,
+  Gold: 600,
 };
 
 async function resolveStars(tier: string, period: string): Promise<number> {
@@ -201,17 +207,21 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
 
         logger.info({ userId, cards: rawPayload.cards }, "Neon cards purchased");
       } else if (rawPayload.tier) {
+        const tierTickets = SUBSCRIPTION_TICKET_PERKS[rawPayload.tier] ?? 0;
         await db.update(usersTable)
-          .set({ subscriptionTier: rawPayload.tier })
+          .set({
+            subscriptionTier: rawPayload.tier,
+            ticketBalance: tierTickets > 0 ? sql`ticket_balance + ${tierTickets}` : undefined,
+          })
           .where(eq(usersTable.id, userId));
 
         await db.insert(transactionsTable).values({
           telegramId: userId,
           actionType: `subscription_${rawPayload.tier}_${rawPayload.period ?? "unknown"}`,
-          ticketAmount: 0,
+          ticketAmount: tierTickets,
         });
 
-        logger.info({ userId, tier: rawPayload.tier }, "Subscription activated");
+        logger.info({ userId, tier: rawPayload.tier, ticketsGranted: tierTickets }, "Subscription activated");
       }
     } catch (err) {
       logger.error({ err }, "Failed to process payment webhook");

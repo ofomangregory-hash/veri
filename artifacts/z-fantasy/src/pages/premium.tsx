@@ -24,9 +24,9 @@ const PERIOD_NOTE: Record<Period, string> = {
 };
 
 const NEON_PACKS = [
-  { id: "starter", label: "Starter",  cards: 100, stars: 200,  color: "text-cyan-300",  border: "border-cyan-500/50",  glow: "hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]" },
-  { id: "booster", label: "Booster",  cards: 255, stars: 500,  color: "text-violet-300", border: "border-violet-500/50", glow: "hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]" },
-  { id: "mega",    label: "Mega",     cards: 510, stars: 1000, color: "text-pink-300",   border: "border-pink-500/50",   glow: "hover:shadow-[0_0_20px_rgba(236,72,153,0.3)]" },
+  { id: "starter", label: "Starter",  cards: 100, stars: 200,  color: "text-cyan-300",  border: "border-cyan-500/50",  glow: "hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]",  bonus: null },
+  { id: "booster", label: "Booster",  cards: 270, stars: 450,  color: "text-violet-300", border: "border-violet-500/50", glow: "hover:shadow-[0_0_20px_rgba(139,92,246,0.3)]", bonus: "+20 bonus" },
+  { id: "mega",    label: "Mega",     cards: 550, stars: 950,  color: "text-pink-300",   border: "border-pink-500/50",   glow: "hover:shadow-[0_0_20px_rgba(236,72,153,0.3)]", bonus: "+50 bonus" },
 ];
 
 function getToken() {
@@ -242,7 +242,7 @@ export function Premium() {
           </h2>
         </div>
         <p className="text-xs text-muted-foreground mb-4">
-          Neon Cards power character creation (25🃏), selfies (15🃏), and vault unlocks (10🃏). Daily claim gives +5🃏.
+          Neon Cards power character creation (25🃏), selfies (15🃏), and vault unlocks (10🃏). Daily claim gives +10🃏.
         </p>
 
         <div className="grid grid-cols-3 gap-3 mb-4">
@@ -256,7 +256,7 @@ export function Premium() {
               <span className="text-3xl">🃏</span>
               <span className={`text-xs font-black uppercase tracking-wide ${pack.color}`}>{pack.label}</span>
               <span className={`text-lg font-bold ${pack.color}`}>{pack.cards}</span>
-              <span className="text-[10px] text-muted-foreground">cards</span>
+              <span className="text-[10px] text-muted-foreground">{pack.bonus ?? "cards"}</span>
               <span className="text-xs font-semibold text-white mt-1">{pack.stars} ⭐</span>
             </button>
           ))}

@@ -24,15 +24,16 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     res.status(404).json({ error: "User not found" });
     return;
   }
+  const adminOverride = req.isAdmin;
   res.json(GetMeResponse.parse({
     id: user.id,
     username: user.username,
     customNickname: user.customNickname,
     userTraits: user.userTraits,
     activeCharacterId: user.activeCharacterId,
-    ticketBalance: user.ticketBalance,
-    neonCardBalance: user.neonCardBalance,
-    subscriptionTier: user.subscriptionTier,
+    ticketBalance: adminOverride ? 9999 : user.ticketBalance,
+    neonCardBalance: adminOverride ? 9999 : user.neonCardBalance,
+    subscriptionTier: adminOverride ? "Gold" : user.subscriptionTier,
     lastLoginTimestamp: user.lastLoginTimestamp?.toISOString() ?? null,
     weeklyCreationsCount: user.weeklyCreationsCount,
     dailyTriggerRequestsCount: user.dailyTriggerRequestsCount,
@@ -99,7 +100,7 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
   }
 
   const TICKETS_REWARD = 25;
-  const NEON_CARDS_REWARD = 5;
+  const NEON_CARDS_REWARD = 10;
 
   const [updated] = await db.update(usersTable)
     .set({

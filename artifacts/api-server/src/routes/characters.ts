@@ -148,8 +148,8 @@ router.post("/characters", async (req, res): Promise<void> => {
     return;
   }
 
-  // Check Neon Card balance for creation cost
-  if (user.neonCardBalance < CHARACTER_CREATION_NEON_COST) {
+  // Check Neon Card balance for creation cost (admin is exempt)
+  if (!req.isAdmin && user.neonCardBalance < CHARACTER_CREATION_NEON_COST) {
     res.status(402).json({ error: `Insufficient Neon Cards. Character creation costs ${CHARACTER_CREATION_NEON_COST} Neon Cards.` });
     return;
   }
@@ -196,9 +196,9 @@ router.post("/characters", async (req, res): Promise<void> => {
     age: parsed.data.age ?? null,
   }).returning();
 
-  // Deduct Neon Cards and increment weekly counter
+  // Deduct Neon Cards and increment weekly counter (admin is exempt from cost)
   await db.update(usersTable).set({
-    neonCardBalance: sql`neon_card_balance - ${CHARACTER_CREATION_NEON_COST}`,
+    neonCardBalance: req.isAdmin ? undefined : sql`neon_card_balance - ${CHARACTER_CREATION_NEON_COST}`,
     weeklyCreationsCount: sql`weekly_creations_count + 1`,
   }).where(eq(usersTable.id, req.telegramUserId));
 

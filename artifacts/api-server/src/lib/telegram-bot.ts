@@ -22,6 +22,46 @@ const pendingCreation = new Map<number, CreationState>(); // chatId → creation
 // ── Browse carousel session (userId → current index) ─────────────────────────
 const browseSession = new Map<number, number>();
 
+// ── Create-companion checkbox wizard ──────────────────────────────────────────
+interface CWSession {
+  step: "scenes" | "behaviors" | "personalities" | "traits" | "review" | "awaitingName";
+  name: string;
+  genre: string;
+  scenes: number[];
+  behaviors: number[];
+  personalities: number[];
+  traits: number[];
+}
+const createWizardSessions = new Map<number, CWSession>();
+
+const CW_PRESET_NAMES: { name: string; genre: string }[] = [
+  { name: "Nova",      genre: "Modern"   }, { name: "Jade",     genre: "Modern"   }, { name: "Ash",      genre: "Modern"   },
+  { name: "Morrigan",  genre: "Gothic"   }, { name: "Raven",    genre: "Gothic"   }, { name: "Vesper",   genre: "Gothic"   },
+  { name: "Aelindra",  genre: "Fantasy"  }, { name: "Elowyn",   genre: "Fantasy"  }, { name: "Thalion",  genre: "Fantasy"  },
+  { name: "Damien",    genre: "Romance"  }, { name: "Carmilla", genre: "Romance"  }, { name: "Viktor",   genre: "Romance"  },
+  { name: "Hikari",    genre: "Anime"    }, { name: "Yuki",     genre: "Anime"    }, { name: "Ren",      genre: "Anime"    },
+];
+
+function cwCheckboxKeyboard(
+  items: string[],
+  selected: number[],
+  cbPrefix: string,
+  confirmCb: string,
+  confirmLabel: string,
+): TelegramBot.InlineKeyboardMarkup {
+  const rows: TelegramBot.InlineKeyboardButton[][] = [];
+  for (let i = 0; i < items.length; i += 2) {
+    const row: TelegramBot.InlineKeyboardButton[] = [];
+    for (let j = i; j < Math.min(i + 2, items.length); j++) {
+      row.push({ text: `${selected.includes(j) ? "✅" : "⬜"} ${items[j]}`, callback_data: `${cbPrefix}${j}` });
+    }
+    rows.push(row);
+  }
+  rows.push([{ text: `✅ ${confirmLabel}`, callback_data: confirmCb }]);
+  rows.push([{ text: "❌ Cancel", callback_data: "cw_cancel" }]);
+  return { inline_keyboard: rows };
+}
+
 // ── Wizard state ──────────────────────────────────────────────────────────────
 interface WizardState {
   step: "type" | "name" | "scene" | "behavior" | "personality" | "traits" | "mood" | "review";
@@ -200,8 +240,8 @@ export function startTelegramBot(): TelegramBot | null {
     const publicCommands = [
       { command: "start",     description: "Welcome message + Open App button" },
       { command: "profile",   description: "Your stats — balance, tier, active companion" },
-      { command: "daily",     description: "Claim your daily +10 tickets" },
-      { command: "create",    description: "Create a new companion (costs 25 tickets)" },
+      { command: "daily",     description: "Claim your daily +25 tickets & +10 Neon Cards" },
+      { command: "create",    description: "Create a new companion (costs 25 Neon Cards)" },
       { command: "inventory", description: "Your created companions" },
       { command: "referral",  description: "Get your referral link" },
       { command: "premium",   description: "Subscribe with Telegram Stars — pick a plan" },
@@ -221,6 +261,10 @@ export function startTelegramBot(): TelegramBot | null {
       { command: "givetickets",        description: "Give/deduct tickets: /givetickets [userID] [amount]" },
       { command: "addpremium",         description: "Grant premium: /addpremium [userID] [days/lifetime]" },
       { command: "removepremium",      description: "Remove premium: /removepremium [userID]" },
+      { command: "addcards",           description: "Add Neon Cards: /addcards [userID] [amount]" },
+      { command: "removecards",        description: "Deduct Neon Cards: /removecards [userID] [amount]" },
+      { command: "addtickets",         description: "Add tickets: /addtickets [userID] [amount]" },
+      { command: "removetickets",      description: "Deduct tickets: /removetickets [userID] [amount]" },
       { command: "resetuser",          description: "Reset to Free + zero balance: /resetuser [userID]" },
       { command: "setstaff",           description: "Set staff role: /setstaff [userID] | limited_admin|full_admin|remove" },
       { command: "setusername",        description: "Set display name: /setusername [userID] | [name]" },
@@ -671,37 +715,49 @@ export function startTelegramBot(): TelegramBot | null {
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  PUBLIC: /create — guided character creation wizard
-    //  Free tier blocked. Costs 25 tickets. Steps: name → bio → genre (button)
+    //  PUBLIC: /create & /createcharacter — checkbox wizard
+    //  Costs 25 Neon Cards · Max 3 slots · Admin immune
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    bot.onText(/\/create$/, async (msg) => {
+    bot.onText(/^\/(create|createcharacter)$/, async (msg) => {
       const chatId = msg.chat.id;
       const userId = String(msg.from?.id);
       await syncUser(userId, msg.from?.username);
-      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-      if (!user) { await bot!.sendMessage(chatId, "❌ Try /start first."); return; }
 
-      if (user.subscriptionTier === "Free") {
-        await bot!.sendMessage(chatId,
-          `🔒 *Character creation requires a premium subscription.*\n\nFree users can browse and chat — but creating your own companion needs Bronze tier or above.\n\nUse /upgrade to unlock full access.`,
-          {
-            parse_mode: "Markdown",
-            reply_markup: { inline_keyboard: [[{ text: "⚡ View Plans", web_app: { url: appUrl("/premium") } }]] },
-          });
-        return;
+      const adminId = process.env.ADMIN_TELEGRAM_ID;
+      const isAdminUser = userId === adminId || adminSessions.has(msg.from?.id ?? 0);
+
+      if (!isAdminUser) {
+        const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+        if (!user) { await bot!.sendMessage(chatId, "❌ Try /start first."); return; }
+
+        const [slotRow] = await db.select({ c: count() }).from(charactersTable)
+          .where(eq(charactersTable.creatorId, userId));
+        if (Number(slotRow?.c ?? 0) >= 3) {
+          await bot!.sendMessage(chatId,
+            `❌ *Maximum 3 companion slots reached.*\n\nDelete an existing companion in the app to free up a slot.`,
+            { parse_mode: "Markdown" });
+          return;
+        }
+
+        if ((user.neonCardBalance ?? 0) < 25) {
+          await bot!.sendMessage(chatId,
+            `❌ *Insufficient Neon Cards.*\n\nCharacter creation costs *25 🃏 Neon Cards*.\nYour balance: *${user.neonCardBalance ?? 0}* 🃏\n\nVisit /premium to purchase more.`,
+            { parse_mode: "Markdown" });
+          return;
+        }
       }
 
-      if ((user.ticketBalance ?? 0) < 25) {
-        await bot!.sendMessage(chatId,
-          `❌ *Insufficient tickets.*\n\nCharacter creation costs *25 tickets*.\nYour balance: *${user.ticketBalance}* tickets.\n\nClaim your /daily or /upgrade for more.`,
-          { parse_mode: "Markdown" });
-        return;
-      }
+      createWizardSessions.set(chatId, { step: "awaitingName", name: "", genre: "Modern", scenes: [], behaviors: [], personalities: [], traits: [] });
 
-      pendingCreation.set(chatId, { step: "name" });
+      const nameButtons = [
+        ...chunk(CW_PRESET_NAMES.map((n, i) => ({ text: n.name, callback_data: `cw_name_${i}` })), 3),
+        [{ text: "✏️ Type a Custom Name", callback_data: "cw_name_custom" }],
+        [{ text: "❌ Cancel", callback_data: "cw_cancel" }],
+      ];
+
       await bot!.sendMessage(chatId,
-        `🎨 *Let's create your companion!*\n\n*Step 1/3 — Name*\nWhat's your companion's name?\n\n_(Type /cancel at any time to abort)_`,
-        { parse_mode: "Markdown" });
+        `🎨 *Create Your Companion*\n\n*Step 1 — Choose a Name*\nPick a preset or type your own:\n\n_Costs 25 🃏 Neon Cards · Up to 3 companions_`,
+        { parse_mode: "Markdown", reply_markup: { inline_keyboard: nameButtons } });
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -831,6 +887,61 @@ export function startTelegramBot(): TelegramBot | null {
       if (!targetId) return;
       await db.update(usersTable).set({ subscriptionTier: "Free" }).where(eq(usersTable.id, targetId));
       await bot!.sendMessage(msg.chat.id, `✅ User \`${targetId}\` → *Free*`, { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  ADMIN: /addcards /removecards /addtickets /removetickets
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/addcards (\S+) (\S+)/, async (msg, match) => {
+      if (!isAdmin(msg)) return;
+      const [, targetId, amtStr] = match ?? [];
+      const amt = parseInt(amtStr ?? "", 10);
+      if (!targetId || isNaN(amt) || amt <= 0) {
+        await bot!.sendMessage(msg.chat.id, "Usage: /addcards [userID] [amount]");
+        return;
+      }
+      await db.update(usersTable).set({ neonCardBalance: sql`neon_card_balance + ${amt}` }).where(eq(usersTable.id, targetId));
+      await db.insert(transactionsTable).values({ telegramId: targetId, actionType: "admin_addcards", ticketAmount: amt });
+      await bot!.sendMessage(msg.chat.id, `✅ Added *${amt}* 🃏 Neon Cards to \`${targetId}\``, { parse_mode: "Markdown" });
+    });
+
+    bot.onText(/\/removecards (\S+) (\S+)/, async (msg, match) => {
+      if (!isAdmin(msg)) return;
+      const [, targetId, amtStr] = match ?? [];
+      const amt = parseInt(amtStr ?? "", 10);
+      if (!targetId || isNaN(amt) || amt <= 0) {
+        await bot!.sendMessage(msg.chat.id, "Usage: /removecards [userID] [amount]");
+        return;
+      }
+      await db.update(usersTable).set({ neonCardBalance: sql`GREATEST(neon_card_balance - ${amt}, 0)` }).where(eq(usersTable.id, targetId));
+      await db.insert(transactionsTable).values({ telegramId: targetId, actionType: "admin_removecards", ticketAmount: -amt });
+      await bot!.sendMessage(msg.chat.id, `✅ Deducted *${amt}* 🃏 Neon Cards from \`${targetId}\``, { parse_mode: "Markdown" });
+    });
+
+    bot.onText(/\/addtickets (\S+) (\S+)/, async (msg, match) => {
+      if (!isAdmin(msg)) return;
+      const [, targetId, amtStr] = match ?? [];
+      const amt = parseInt(amtStr ?? "", 10);
+      if (!targetId || isNaN(amt) || amt <= 0) {
+        await bot!.sendMessage(msg.chat.id, "Usage: /addtickets [userID] [amount]");
+        return;
+      }
+      await db.update(usersTable).set({ ticketBalance: sql`ticket_balance + ${amt}` }).where(eq(usersTable.id, targetId));
+      await db.insert(transactionsTable).values({ telegramId: targetId, actionType: "admin_addtickets", ticketAmount: amt });
+      await bot!.sendMessage(msg.chat.id, `✅ Added *${amt}* 🎟 tickets to \`${targetId}\``, { parse_mode: "Markdown" });
+    });
+
+    bot.onText(/\/removetickets (\S+) (\S+)/, async (msg, match) => {
+      if (!isAdmin(msg)) return;
+      const [, targetId, amtStr] = match ?? [];
+      const amt = parseInt(amtStr ?? "", 10);
+      if (!targetId || isNaN(amt) || amt <= 0) {
+        await bot!.sendMessage(msg.chat.id, "Usage: /removetickets [userID] [amount]");
+        return;
+      }
+      await db.update(usersTable).set({ ticketBalance: sql`GREATEST(ticket_balance - ${amt}, 0)` }).where(eq(usersTable.id, targetId));
+      await db.insert(transactionsTable).values({ telegramId: targetId, actionType: "admin_removetickets", ticketAmount: -amt });
+      await bot!.sendMessage(msg.chat.id, `✅ Deducted *${amt}* 🎟 tickets from \`${targetId}\``, { parse_mode: "Markdown" });
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1557,6 +1668,280 @@ export function startTelegramBot(): TelegramBot | null {
         return;
       }
 
+      // ── Checkbox create-companion wizard callbacks (cw_*) ────────────────────
+      if (query.data === "cw_cancel" || query.data?.startsWith("cw_")) {
+        const cwUserId = String(query.from.id);
+        const cwAdminId = process.env.ADMIN_TELEGRAM_ID;
+        const isCWAdmin = cwUserId === cwAdminId || adminSessions.has(query.from.id);
+
+        if (query.data === "cw_cancel") {
+          createWizardSessions.delete(chatId);
+          await bot!.editMessageText("❌ Companion creation cancelled.", {
+            chat_id: chatId, message_id: query.message?.message_id,
+          }).catch(() => bot!.sendMessage(chatId, "❌ Companion creation cancelled."));
+          await bot!.answerCallbackQuery(query.id);
+          return;
+        }
+
+        const cwSession = createWizardSessions.get(chatId);
+        if (!cwSession) {
+          await bot!.answerCallbackQuery(query.id, { text: "Session expired — use /createcharacter to start again.", show_alert: true });
+          return;
+        }
+
+        const d = query.data!;
+
+        // ── Preset name selection ──
+        if (d.startsWith("cw_name_")) {
+          const raw = d.replace("cw_name_", "");
+          if (raw === "custom") {
+            cwSession.step = "awaitingName";
+            createWizardSessions.set(chatId, cwSession);
+            await bot!.editMessageText("✏️ *Type your companion's name:*\n_(2–40 characters)_", {
+              chat_id: chatId, message_id: query.message?.message_id, parse_mode: "Markdown",
+            }).catch(() => bot!.sendMessage(chatId, "✏️ Type your companion's name (2–40 chars):"));
+            await bot!.answerCallbackQuery(query.id);
+            return;
+          }
+          const nameIdx = parseInt(raw, 10);
+          const preset = CW_PRESET_NAMES[nameIdx];
+          if (!preset) { await bot!.answerCallbackQuery(query.id); return; }
+          cwSession.name = preset.name;
+          cwSession.genre = preset.genre;
+          cwSession.step = "scenes";
+          createWizardSessions.set(chatId, cwSession);
+          const kbd = cwCheckboxKeyboard(WIZARD_SCENES, cwSession.scenes, "cw_sc_", "cw_sc_ok", "Confirm Scenes");
+          await bot!.sendMessage(chatId,
+            `✅ Name: *${cwSession.name}* _(${cwSession.genre})_\n\n*Step 2 — Scenes* (choose up to 5)\nTap to toggle, then confirm:`,
+            { parse_mode: "Markdown", reply_markup: kbd });
+          await bot!.answerCallbackQuery(query.id);
+          return;
+        }
+
+        // ── Scene toggle ──
+        if (d.startsWith("cw_sc_") && d !== "cw_sc_ok") {
+          const idx = parseInt(d.replace("cw_sc_", ""), 10);
+          if (cwSession.scenes.includes(idx)) {
+            cwSession.scenes = cwSession.scenes.filter(i => i !== idx);
+          } else if (cwSession.scenes.length >= 5) {
+            await bot!.answerCallbackQuery(query.id, { text: "⚠️ Maximum 5 scenes — deselect one first.", show_alert: true });
+            return;
+          } else {
+            cwSession.scenes.push(idx);
+          }
+          createWizardSessions.set(chatId, cwSession);
+          const kbd = cwCheckboxKeyboard(WIZARD_SCENES, cwSession.scenes, "cw_sc_", "cw_sc_ok", "Confirm Scenes");
+          await bot!.editMessageReplyMarkup(kbd, { chat_id: chatId, message_id: query.message?.message_id });
+          await bot!.answerCallbackQuery(query.id);
+          return;
+        }
+
+        // ── Scene confirm ──
+        if (d === "cw_sc_ok") {
+          if (cwSession.scenes.length === 0) {
+            await bot!.answerCallbackQuery(query.id, { text: "⚠️ Select at least 1 scene.", show_alert: true });
+            return;
+          }
+          cwSession.step = "behaviors";
+          createWizardSessions.set(chatId, cwSession);
+          const kbd = cwCheckboxKeyboard(WIZARD_BEHAVIORS, cwSession.behaviors, "cw_bh_", "cw_bh_ok", "Confirm Behaviors");
+          await bot!.sendMessage(chatId,
+            `✅ Scenes: ${cwSession.scenes.map(i => WIZARD_SCENES[i]).join(", ")}\n\n*Step 3 — Behaviors* (choose up to 7):`,
+            { parse_mode: "Markdown", reply_markup: kbd });
+          await bot!.answerCallbackQuery(query.id);
+          return;
+        }
+
+        // ── Behavior toggle ──
+        if (d.startsWith("cw_bh_") && d !== "cw_bh_ok") {
+          const idx = parseInt(d.replace("cw_bh_", ""), 10);
+          if (cwSession.behaviors.includes(idx)) {
+            cwSession.behaviors = cwSession.behaviors.filter(i => i !== idx);
+          } else if (cwSession.behaviors.length >= 7) {
+            await bot!.answerCallbackQuery(query.id, { text: "⚠️ Maximum 7 behaviors — deselect one first.", show_alert: true });
+            return;
+          } else {
+            cwSession.behaviors.push(idx);
+          }
+          createWizardSessions.set(chatId, cwSession);
+          const kbd = cwCheckboxKeyboard(WIZARD_BEHAVIORS, cwSession.behaviors, "cw_bh_", "cw_bh_ok", "Confirm Behaviors");
+          await bot!.editMessageReplyMarkup(kbd, { chat_id: chatId, message_id: query.message?.message_id });
+          await bot!.answerCallbackQuery(query.id);
+          return;
+        }
+
+        // ── Behavior confirm ──
+        if (d === "cw_bh_ok") {
+          if (cwSession.behaviors.length === 0) {
+            await bot!.answerCallbackQuery(query.id, { text: "⚠️ Select at least 1 behavior.", show_alert: true });
+            return;
+          }
+          cwSession.step = "personalities";
+          createWizardSessions.set(chatId, cwSession);
+          const kbd = cwCheckboxKeyboard(WIZARD_PERSONALITIES, cwSession.personalities, "cw_pe_", "cw_pe_ok", "Confirm Personalities");
+          await bot!.sendMessage(chatId,
+            `✅ Behaviors set!\n\n*Step 4 — Personalities* (choose up to 3):`,
+            { parse_mode: "Markdown", reply_markup: kbd });
+          await bot!.answerCallbackQuery(query.id);
+          return;
+        }
+
+        // ── Personality toggle ──
+        if (d.startsWith("cw_pe_") && d !== "cw_pe_ok") {
+          const idx = parseInt(d.replace("cw_pe_", ""), 10);
+          if (cwSession.personalities.includes(idx)) {
+            cwSession.personalities = cwSession.personalities.filter(i => i !== idx);
+          } else if (cwSession.personalities.length >= 3) {
+            await bot!.answerCallbackQuery(query.id, { text: "⚠️ Maximum 3 personalities — deselect one first.", show_alert: true });
+            return;
+          } else {
+            cwSession.personalities.push(idx);
+          }
+          createWizardSessions.set(chatId, cwSession);
+          const kbd = cwCheckboxKeyboard(WIZARD_PERSONALITIES, cwSession.personalities, "cw_pe_", "cw_pe_ok", "Confirm Personalities");
+          await bot!.editMessageReplyMarkup(kbd, { chat_id: chatId, message_id: query.message?.message_id });
+          await bot!.answerCallbackQuery(query.id);
+          return;
+        }
+
+        // ── Personality confirm ──
+        if (d === "cw_pe_ok") {
+          if (cwSession.personalities.length === 0) {
+            await bot!.answerCallbackQuery(query.id, { text: "⚠️ Select at least 1 personality.", show_alert: true });
+            return;
+          }
+          cwSession.step = "traits";
+          createWizardSessions.set(chatId, cwSession);
+          const kbd = cwCheckboxKeyboard(WIZARD_TRAITS, cwSession.traits, "cw_tr_", "cw_tr_ok", "Confirm Traits");
+          await bot!.sendMessage(chatId,
+            `✅ Personalities set!\n\n*Step 5 — Traits* (choose up to 7):`,
+            { parse_mode: "Markdown", reply_markup: kbd });
+          await bot!.answerCallbackQuery(query.id);
+          return;
+        }
+
+        // ── Trait toggle ──
+        if (d.startsWith("cw_tr_") && d !== "cw_tr_ok") {
+          const idx = parseInt(d.replace("cw_tr_", ""), 10);
+          if (cwSession.traits.includes(idx)) {
+            cwSession.traits = cwSession.traits.filter(i => i !== idx);
+          } else if (cwSession.traits.length >= 7) {
+            await bot!.answerCallbackQuery(query.id, { text: "⚠️ Maximum 7 traits — deselect one first.", show_alert: true });
+            return;
+          } else {
+            cwSession.traits.push(idx);
+          }
+          createWizardSessions.set(chatId, cwSession);
+          const kbd = cwCheckboxKeyboard(WIZARD_TRAITS, cwSession.traits, "cw_tr_", "cw_tr_ok", "Confirm Traits");
+          await bot!.editMessageReplyMarkup(kbd, { chat_id: chatId, message_id: query.message?.message_id });
+          await bot!.answerCallbackQuery(query.id);
+          return;
+        }
+
+        // ── Trait confirm → Review ──
+        if (d === "cw_tr_ok") {
+          if (cwSession.traits.length === 0) {
+            await bot!.answerCallbackQuery(query.id, { text: "⚠️ Select at least 1 trait.", show_alert: true });
+            return;
+          }
+          cwSession.step = "review";
+          createWizardSessions.set(chatId, cwSession);
+          const scenesText   = cwSession.scenes.map(i => WIZARD_SCENES[i]).join(", ");
+          const bhText       = cwSession.behaviors.map(i => WIZARD_BEHAVIORS[i]).join(", ");
+          const peText       = cwSession.personalities.map(i => WIZARD_PERSONALITIES[i]).join(", ");
+          const trText       = cwSession.traits.map(i => WIZARD_TRAITS[i]).join(", ");
+          await bot!.sendMessage(chatId, [
+            `🎭 *Review Your Companion*`, ``,
+            `👤 *Name:* ${cwSession.name} _(${cwSession.genre})_`,
+            `🌍 *Scenes:* ${scenesText}`,
+            `⚡ *Behaviors:* ${bhText}`,
+            `🎭 *Personalities:* ${peText}`,
+            `✨ *Traits:* ${trText}`,
+            ``,
+            `_This will cost 25 🃏 Neon Cards._`,
+          ].join("\n"), {
+            parse_mode: "Markdown",
+            reply_markup: { inline_keyboard: [
+              [{ text: "✨ Create Companion", callback_data: "cw_create" }],
+              [{ text: "❌ Cancel",           callback_data: "cw_cancel" }],
+            ]},
+          });
+          await bot!.answerCallbackQuery(query.id);
+          return;
+        }
+
+        // ── Final create ──
+        if (d === "cw_create") {
+          const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, cwUserId));
+          if (!freshUser) { await bot!.answerCallbackQuery(query.id, { text: "❌ User not found.", show_alert: true }); return; }
+
+          if (!isCWAdmin) {
+            const [slot] = await db.select({ c: count() }).from(charactersTable).where(eq(charactersTable.creatorId, cwUserId));
+            if (Number(slot?.c ?? 0) >= 3) {
+              await bot!.answerCallbackQuery(query.id, { text: "❌ Max 3 companion slots reached!", show_alert: true });
+              createWizardSessions.delete(chatId);
+              return;
+            }
+            if ((freshUser.neonCardBalance ?? 0) < 25) {
+              await bot!.answerCallbackQuery(query.id, { text: "❌ Need 25 🃏 Neon Cards to create!", show_alert: true });
+              createWizardSessions.delete(chatId);
+              return;
+            }
+          }
+
+          const systemPrompt = [
+            `You are ${cwSession.name}, a ${cwSession.genre} companion in the Z-Fantasy universe.`,
+            cwSession.scenes.length ? `Setting: ${cwSession.scenes.map(i => WIZARD_SCENES[i]).join("; ")}.` : "",
+            cwSession.behaviors.length ? `Core behaviors: ${cwSession.behaviors.map(i => WIZARD_BEHAVIORS[i]).join(", ")}.` : "",
+            cwSession.personalities.length ? `Personality: ${cwSession.personalities.map(i => WIZARD_PERSONALITIES[i]).join(", ")}.` : "",
+            cwSession.traits.length ? `Special traits: ${cwSession.traits.map(i => WIZARD_TRAITS[i]).join(", ")}.` : "",
+            "Stay fully in character at all times.",
+          ].filter(Boolean).join("\n\n");
+
+          const [newChar] = await db.insert(charactersTable).values({
+            name: cwSession.name,
+            genre: cwSession.genre,
+            visibility: "private",
+            teaserDescription: `A ${cwSession.genre} companion with a unique personality`,
+            systemPrompt,
+            initialGreeting: `Hey 💜 I'm ${cwSession.name}. I've been waiting for you...`,
+            creatorId: cwUserId,
+          }).returning({ characterId: charactersTable.characterId, name: charactersTable.name });
+
+          if (!isCWAdmin) {
+            await db.update(usersTable).set({
+              neonCardBalance: sql`neon_card_balance - 25`,
+              weeklyCreationsCount: sql`weekly_creations_count + 1`,
+              activeCharacterId: newChar.characterId,
+            }).where(eq(usersTable.id, cwUserId));
+            await db.insert(transactionsTable).values({ telegramId: cwUserId, actionType: "character_creation", ticketAmount: -25 });
+          } else {
+            await db.update(usersTable).set({ activeCharacterId: newChar.characterId }).where(eq(usersTable.id, cwUserId));
+          }
+
+          createWizardSessions.delete(chatId);
+
+          await bot!.editMessageText([
+            `🎉 *${newChar.name}* is born!`, ``,
+            `🔒 Visibility: Private`,
+            `🃏 Cost: ${isCWAdmin ? "0 (admin)" : "25 Neon Cards"}`, ``,
+            `Your companion is now active. Send a message to start chatting!`,
+            `_Use the app to add a photo and make them public._`,
+          ].join("\n"), {
+            chat_id: chatId, message_id: query.message?.message_id, parse_mode: "Markdown",
+            reply_markup: { inline_keyboard: [[
+              { text: "💬 Chat Now", callback_data: `chat_${newChar.characterId}` },
+              { text: "🌐 Open App", web_app: { url: appUrl("/create") } },
+            ]]},
+          });
+          await bot!.answerCallbackQuery(query.id, { text: `🎉 ${newChar.name} created!` });
+          return;
+        }
+
+        await bot!.answerCallbackQuery(query.id);
+        return;
+      }
+
       // ── Wizard callbacks ──────────────────────────────────────────────────
       if (query.data?.startsWith("wiz_")) {
         const wizData = query.data;
@@ -2068,6 +2453,27 @@ export function startTelegramBot(): TelegramBot | null {
           await bot!.sendMessage(chatId, "❌ Character creation cancelled.");
         }
         return;
+      }
+
+      // ── createcharacter checkbox wizard: awaiting custom name text ───────────
+      if (createWizardSessions.has(chatId)) {
+        const cwSess = createWizardSessions.get(chatId)!;
+        if (cwSess.step === "awaitingName") {
+          const cwName = text.trim();
+          if (cwName.length < 2 || cwName.length > 40) {
+            await bot!.sendMessage(chatId, "❌ Name must be 2–40 characters. Try again:");
+            return;
+          }
+          cwSess.name = cwName;
+          cwSess.genre = "Custom";
+          cwSess.step = "scenes";
+          createWizardSessions.set(chatId, cwSess);
+          const kbd = cwCheckboxKeyboard(WIZARD_SCENES, cwSess.scenes, "cw_sc_", "cw_sc_ok", "Confirm Scenes");
+          await bot!.sendMessage(chatId,
+            `✅ Name: *${cwSess.name}*\n\n*Step 2 — Scenes* (choose up to 5)\nTap to toggle, then confirm:`,
+            { parse_mode: "Markdown", reply_markup: kbd });
+          return;
+        }
       }
 
       // ── Creation wizard steps ─────────────────────────────────────────────────

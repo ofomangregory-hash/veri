@@ -50,7 +50,7 @@ router.post("/media/unlock", async (req, res): Promise<void> => {
     return;
   }
 
-  if (user.neonCardBalance < VAULT_UNLOCK_NEON_COST) {
+  if (!req.isAdmin && user.neonCardBalance < VAULT_UNLOCK_NEON_COST) {
     res.status(402).json({ error: `Insufficient Neon Cards. Vault unlock costs ${VAULT_UNLOCK_NEON_COST} Neon Cards.` });
     return;
   }

@@ -49,10 +49,10 @@ const AUTO_IMG_FREE = { interval: 5, triggerAt: 2 };
 const AUTO_IMG_PREMIUM = { interval: 6, triggerAt: 4 };
 
 const MSG_COST: Record<string, number> = {
-  Free: 2,
-  Bronze: 0,
-  Silver: 0,
-  Gold: 0,
+  Free: 1,
+  Bronze: 1,
+  Silver: 1,
+  Gold: 1,
 };
 
 const GIFT_CONFIG: Record<string, { cost: number; costGold: number; ap: number; level: number; reaction: string }> = {
@@ -179,20 +179,25 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
   }
 
   const tier = user.subscriptionTier;
+  const isAdminUser = req.isAdmin;
 
-  // Daily message limit check
-  const dailyLimit = DAILY_MSG_LIMITS[tier] ?? Infinity;
-  if (user.dailyMessageCount >= dailyLimit) {
-    res.status(402).json({ error: `Daily message limit of ${dailyLimit} reached for ${tier} tier.` });
-    return;
+  if (!isAdminUser) {
+    // Daily message limit check
+    const dailyLimit = DAILY_MSG_LIMITS[tier] ?? Infinity;
+    if (user.dailyMessageCount >= dailyLimit) {
+      res.status(402).json({ error: `Daily message limit of ${dailyLimit} reached for ${tier} tier.` });
+      return;
+    }
+
+    // Ticket cost check (1 ticket per message for all tiers)
+    const msgCost = MSG_COST[tier] ?? 1;
+    if (user.ticketBalance < msgCost) {
+      res.status(402).json({ error: "Insufficient tickets. Messages cost 1 ticket each." });
+      return;
+    }
   }
 
-  // Ticket cost check (Free tier: 2 tickets/message)
-  const msgCost = MSG_COST[tier] ?? 0;
-  if (msgCost > 0 && user.ticketBalance < msgCost) {
-    res.status(402).json({ error: "Insufficient tickets." });
-    return;
-  }
+  const msgCost = isAdminUser ? 0 : (MSG_COST[tier] ?? 1);
 
   const [character] = await db.select().from(charactersTable)
     .where(eq(charactersTable.characterId, params.data.characterId));
@@ -265,7 +270,7 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
 
   // Deduct tickets and increment daily message count
   await db.update(usersTable).set({
-    ticketBalance: msgCost > 0 ? sql`ticket_balance - ${msgCost}` : user.ticketBalance,
+    ticketBalance: msgCost > 0 ? sql`ticket_balance - ${msgCost}` : undefined,
     dailyMessageCount: sql`daily_message_count + 1`,
   }).where(eq(usersTable.id, req.telegramUserId));
 
@@ -307,18 +312,23 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   }
 
   const tier = user.subscriptionTier;
-  const dailyTriggerLimit = DAILY_TRIGGER_LIMITS[tier] ?? 3;
+  const isSelfieAdmin = req.isAdmin;
 
-  if (user.dailyTriggerRequestsCount >= dailyTriggerLimit) {
-    res.status(402).json({ error: `Daily selfie limit of ${dailyTriggerLimit} reached for ${tier} tier.` });
-    return;
+  if (!isSelfieAdmin) {
+    const dailyTriggerLimit = DAILY_TRIGGER_LIMITS[tier] ?? 3;
+    if (user.dailyTriggerRequestsCount >= dailyTriggerLimit) {
+      res.status(402).json({ error: `Daily selfie limit of ${dailyTriggerLimit} reached for ${tier} tier.` });
+      return;
+    }
+
+    const SELFIE_NEON_COST = 15;
+    if (user.neonCardBalance < SELFIE_NEON_COST) {
+      res.status(402).json({ error: `Insufficient Neon Cards. Selfie requests cost ${SELFIE_NEON_COST} Neon Cards.` });
+      return;
+    }
   }
 
-  const SELFIE_NEON_COST = 15;
-  if (user.neonCardBalance < SELFIE_NEON_COST) {
-    res.status(402).json({ error: `Insufficient Neon Cards. Selfie requests cost ${SELFIE_NEON_COST} Neon Cards.` });
-    return;
-  }
+  const SELFIE_NEON_COST = isSelfieAdmin ? 0 : 15;
 
   const [character] = await db.select().from(charactersTable)
     .where(eq(charactersTable.characterId, params.data.characterId));
@@ -344,9 +354,9 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     imageUrl = getCharacterAssetUrl(character.characterId, "trigger_pool", "default_selfie.jpg");
   }
 
-  // Deduct 25 tickets and increment daily trigger count
+  // Deduct neon cards and increment daily trigger count
   await db.update(usersTable).set({
-    neonCardBalance: sql`neon_card_balance - 15`,
+    neonCardBalance: SELFIE_NEON_COST > 0 ? sql`neon_card_balance - ${SELFIE_NEON_COST}` : undefined,
     dailyTriggerRequestsCount: sql`daily_trigger_requests_count + 1`,
   }).where(eq(usersTable.id, req.telegramUserId));
 
