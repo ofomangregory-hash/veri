@@ -55,6 +55,13 @@ export const SCENES: string[] = [
   "Cozy Coffee Shop", "Haunted Mansion", "Futuristic Lab",
   "Snowy Mountain Cabin", "Mystical Shrine", "Underwater Palace",
   "Desert Oasis", "Dark Carnival",
+  // Adult
+  "Private Penthouse Suite", "Candlelit Boudoir", "Secret Dungeon Chamber",
+  "Luxury Yacht Cabin", "Hot Spring Grotto", "Velvet Lounge After Hours",
+  "Forbidden Basement Club", "Mirrored Dressing Room", "Silk-draped Throne Room",
+  "Rain-soaked Hotel Room", "Secluded Villa Terrace at Midnight",
+  "Opulent Bathhouse", "Private Members' Lounge", "Rooftop Infinity Pool at Night",
+  "Shadowy Burlesque Stage",
 ];
 
 export const BEHAVIORS: string[] = [
@@ -65,6 +72,11 @@ export const BEHAVIORS: string[] = [
   "Sadistic", "Empathetic", "Detached", "Charismatic", "Rebellious",
   "Perfectionist", "Adventurous", "Shy", "Sarcastic", "Idealistic",
   "Pragmatic", "Romantic", "Competitive", "Selfless", "Hedonistic",
+  // Adult
+  "Seductive", "Provocative", "Lustful", "Insatiable", "Worship-giving",
+  "Corruption-seeking", "Pleasure-focused", "Intimacy-craving", "Boundary-testing",
+  "Enticing", "Irresistible Tease", "Power-hungry Lover", "Overstimulating",
+  "Primal", "Euphoria-chasing",
 ];
 
 export const PERSONALITIES: string[] = [
@@ -75,6 +87,11 @@ export const PERSONALITIES: string[] = [
   "The Everyman", "The Seducer", "The Mentor", "The Orphan", "The Destroyer",
   "The Creator", "The Seeker", "Lover-Villain", "Dark Empath", "Stoic Philosopher",
   "Wild Card", "Broken Hearted", "The Obsessed", "The Liberator", "The Mirror",
+  // Adult
+  "The Temptress", "Wicked Sensualist", "The Corruptor", "Pleasure Architect",
+  "The Nymphet", "Dark Courtesan", "Libertine", "The Siren",
+  "Master Manipulator of Desire", "The Voracious", "Enchantress of Flesh",
+  "The Dominatrix", "Velvet Tyrant", "The Devoted Pet", "Hunger Incarnate",
 ];
 
 export const TRAITS: string[] = [
@@ -99,6 +116,10 @@ export const MOODS: string[] = [
   "Warm", "Cold", "Haunted", "Determined", "Flirty",
   "Protective", "Dreamy", "Urgent", "Exhausted", "Electric",
   "Sacred", "Dangerous", "Broken", "Hopeful", "Magnetic",
+  // Adult
+  "Lustful", "Ravenous", "Intoxicated", "Feverish", "Aching",
+  "Possessed", "Insatiable", "Corrupted", "Unraveling", "Dripping Desire",
+  "Breathless", "Obsessed", "Conquered", "Worshipful", "Sinful",
 ];
 
 const TYPE_COLORS: Record<string, string> = {
