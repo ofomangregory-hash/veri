@@ -1,21 +1,45 @@
 import { useState, useEffect, useCallback } from "react";
 import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe } from "@workspace/api-client-react";
-import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign } from "lucide-react";
+import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign, UserCircle, Ticket, CreditCard as CardIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { CharacterWizard } from "@/components/CharacterWizard";
 
-type AdminTab = "stats" | "characters" | "banners" | "pricing" | "broadcast";
+type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "broadcast";
 
 interface SysConfig { key: string; value: unknown; updatedAt: string }
 
+interface UserDetail {
+  id: string;
+  username: string | null;
+  customNickname?: string | null;
+  ticketBalance: number;
+  neonCardBalance: number;
+  subscriptionTier: string;
+  staffPrivileges?: string | null;
+  isAdmin?: boolean;
+  lastLoginTimestamp?: string | null;
+  weeklyCreationsCount?: number;
+  dailyTriggerRequestsCount?: number;
+  nsfwEnabled?: boolean;
+  referralCode?: string | null;
+  avatarUrl?: string | null;
+}
+
 const TIERS = ["Bronze", "Silver", "Gold"] as const;
+const ALL_TIERS = ["Free", "Bronze", "Silver", "Gold"] as const;
 const PERIODS = ["weekly", "monthly", "yearly"] as const;
 const BASE_PRICES: Record<string, Record<string, number>> = {
   Bronze: { weekly: 100, monthly: 300, yearly: 3000 },
   Silver:  { weekly: 200, monthly: 600, yearly: 6000 },
   Gold:    { weekly: 350, monthly: 1050, yearly: 10500 },
 };
+
+const STAFF_ROLES = [
+  { value: "", label: "No Privileges" },
+  { value: "limited_admin", label: "Limited Admin" },
+  { value: "full_admin", label: "Full Admin" },
+];
 
 function getToken() {
   return window.Telegram?.WebApp?.initData || "mock_init_data_for_dev";
@@ -31,10 +55,17 @@ async function adminApi<T = unknown>(method: string, path: string, body?: unknow
   return res.json() as Promise<T>;
 }
 
+function tierColor(tier: string) {
+  if (tier === "Gold") return "text-yellow-400 border-yellow-500/50 bg-yellow-500/10";
+  if (tier === "Silver") return "text-slate-300 border-slate-400/50 bg-slate-400/10";
+  if (tier === "Bronze") return "text-orange-400 border-orange-500/50 bg-orange-500/10";
+  return "text-muted-foreground border-border bg-muted/20";
+}
+
 export function Admin() {
   const { data: me } = useGetMe();
   const { data: stats } = useGetAdminStats();
-  const { data: usersData } = useAdminListUsers({});
+  const { data: usersData, refetch: refetchUsers } = useAdminListUsers({});
   const { data: charsData } = useAdminListCharacters({});
   const { toast } = useToast();
 
@@ -43,8 +74,8 @@ export function Admin() {
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
-    ? ["stats", "characters", "banners", "pricing", "broadcast"]
-    : ["stats", "characters"];
+    ? ["stats", "users", "characters", "banners", "pricing", "broadcast"]
+    : ["stats", "users", "characters"];
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
 
@@ -67,6 +98,59 @@ export function Admin() {
   const [showWizard, setShowWizard] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<{ seeded: number; skipped: number; total: number } | null>(null);
+
+  // ── User Drawer State ─────────────────────────────────────────────────────
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerUser, setDrawerUser] = useState<UserDetail | null>(null);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [editTickets, setEditTickets] = useState("");
+  const [editNeon, setEditNeon] = useState("");
+  const [editTier, setEditTier] = useState("");
+  const [editStaff, setEditStaff] = useState("");
+  const [savingUser, setSavingUser] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+
+  const openUserDrawer = async (userId: string) => {
+    setDrawerOpen(true);
+    setDrawerLoading(true);
+    setDrawerUser(null);
+    try {
+      const data = await adminApi<{ user: UserDetail }>("GET", `/admin/users/${userId}`);
+      const u = data.user;
+      setDrawerUser(u);
+      setEditTickets(String(u.ticketBalance));
+      setEditNeon(String(u.neonCardBalance));
+      setEditTier(u.subscriptionTier);
+      setEditStaff(u.staffPrivileges ?? "");
+    } catch (e) {
+      toast({ title: "Failed to load user", description: String(e), variant: "destructive" });
+      setDrawerOpen(false);
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
+
+  const saveUserChanges = async () => {
+    if (!drawerUser) return;
+    setSavingUser(true);
+    try {
+      const tickets = parseInt(editTickets, 10);
+      const neon = parseInt(editNeon, 10);
+      await adminApi("PATCH", `/admin/users/${drawerUser.id}`, {
+        ticketBalance: isNaN(tickets) ? undefined : tickets,
+        neonCardBalance: isNaN(neon) ? undefined : neon,
+        subscriptionTier: editTier || undefined,
+        staffPrivileges: editStaff === "" ? null : editStaff,
+      });
+      toast({ title: `✅ ${drawerUser.username ?? drawerUser.id} updated` });
+      setDrawerUser(u => u ? { ...u, ticketBalance: isNaN(tickets) ? u.ticketBalance : tickets, neonCardBalance: isNaN(neon) ? u.neonCardBalance : neon, subscriptionTier: editTier, staffPrivileges: editStaff || null } : u);
+      refetchUsers();
+    } catch (e) {
+      toast({ title: "Save failed", description: String(e), variant: "destructive" });
+    } finally {
+      setSavingUser(false);
+    }
+  };
 
   const runSeed = async () => {
     setSeeding(true);
@@ -113,7 +197,7 @@ export function Admin() {
   }, []);
 
   useEffect(() => {
-    if (activeTab !== "stats") loadConfigs();
+    if (activeTab !== "stats" && activeTab !== "users") loadConfigs();
   }, [activeTab, loadConfigs]);
 
   const saveBanner = async (n: 1 | 2) => {
@@ -204,11 +288,18 @@ export function Admin() {
 
   const tabLabel: Record<AdminTab, string> = {
     stats: "📊 Stats",
+    users: "👥 Users",
     characters: "🤖 Characters",
     banners: "🖼 Banners",
     pricing: "💰 Pricing",
     broadcast: "📢 Broadcast",
   };
+
+  const filteredUsers = (usersData?.items ?? []).filter(u => {
+    if (!userSearch.trim()) return true;
+    const q = userSearch.toLowerCase();
+    return (u.username ?? "").toLowerCase().includes(q) || u.id.toLowerCase().includes(q);
+  });
 
   return (
     <>
@@ -271,19 +362,71 @@ export function Admin() {
           </div>
 
           <section>
-            <h2 className="font-bold uppercase tracking-wider text-muted-foreground mb-3 text-xs">Recent Users</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-bold uppercase tracking-wider text-muted-foreground text-xs">Recent Users</h2>
+              <button onClick={() => setActiveTab("users")}
+                className="text-xs text-accent hover:underline">View All →</button>
+            </div>
             <div className="space-y-2">
               {usersData?.items.slice(0, 8).map(u => (
-                <div key={u.id} className="p-3 rounded-lg bg-card border border-border flex justify-between items-center">
+                <button key={u.id} onClick={() => openUserDrawer(u.id)}
+                  className="w-full p-3 rounded-lg bg-card border border-border flex justify-between items-center hover:border-accent/50 transition-colors text-left">
                   <div>
                     <div className="font-bold text-sm">{u.username || u.id.slice(0, 8)}</div>
                     <div className="text-xs text-muted-foreground">{u.subscriptionTier}</div>
                   </div>
-                  <div className="text-sm font-bold text-primary">{u.ticketBalance} 🎟️</div>
-                </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-bold text-primary">{u.ticketBalance} 🎟️</div>
+                    <ChevronRight size={14} className="text-muted-foreground" />
+                  </div>
+                </button>
               ))}
             </div>
           </section>
+        </div>
+      )}
+
+      {/* ── Users CRM ── */}
+      {activeTab === "users" && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Input
+              value={userSearch}
+              onChange={e => setUserSearch(e.target.value)}
+              placeholder="Search by username or ID..."
+              className="bg-card border-border h-9 text-sm flex-1"
+            />
+            <button onClick={() => refetchUsers()}
+              className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors">
+              <RefreshCw size={14} />
+            </button>
+          </div>
+          <div className="text-xs text-muted-foreground">{usersData?.total ?? 0} total users · tap a row to edit</div>
+
+          <div className="space-y-2">
+            {filteredUsers.map(u => (
+              <button key={u.id} onClick={() => openUserDrawer(u.id)}
+                className="w-full p-3 rounded-xl bg-card border border-border flex items-center gap-3 hover:border-accent/50 transition-colors text-left group">
+                <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0 border border-border group-hover:border-accent/40 transition-colors">
+                  <UserCircle size={20} className="text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm truncate">{u.username ? `@${u.username}` : u.id}</div>
+                  <div className="text-xs text-muted-foreground truncate">{u.id}</div>
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${tierColor(u.subscriptionTier)}`}>
+                    {u.subscriptionTier}
+                  </span>
+                  <div className="text-xs text-muted-foreground">{u.ticketBalance} 🎟</div>
+                </div>
+                <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+              </button>
+            ))}
+            {filteredUsers.length === 0 && (
+              <div className="text-center text-muted-foreground text-sm py-8">No users found</div>
+            )}
+          </div>
         </div>
       )}
 
@@ -610,6 +753,187 @@ export function Admin() {
         onCreated={() => { setShowWizard(false); loadConfigs(); }}
       />
     )}
+
+    {/* ── User Detail Drawer ─────────────────────────────────────────────── */}
+    {drawerOpen && (
+      <>
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          onClick={() => setDrawerOpen(false)}
+        />
+
+        {/* Panel */}
+        <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-background border-l border-border shadow-2xl flex flex-col overflow-hidden"
+          style={{ animation: "slideInRight 0.25s ease-out" }}>
+
+          {/* Drawer Header */}
+          <div className="flex items-center gap-3 p-4 border-b border-border shrink-0">
+            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center border border-border shrink-0">
+              <UserCircle size={22} className="text-accent" />
+            </div>
+            <div className="flex-1 min-w-0">
+              {drawerLoading ? (
+                <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+              ) : (
+                <>
+                  <div className="font-bold text-sm truncate">
+                    {drawerUser?.username ? `@${drawerUser.username}` : drawerUser?.id ?? "Loading…"}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">{drawerUser?.id}</div>
+                </>
+              )}
+            </div>
+            <button onClick={() => setDrawerOpen(false)}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Drawer Body */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-5">
+            {drawerLoading ? (
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-14 bg-muted rounded-xl animate-pulse" />
+                ))}
+              </div>
+            ) : drawerUser ? (
+              <>
+                {/* Read-only stats */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-card border border-border">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">NSFW</div>
+                    <div className="text-sm font-bold">{drawerUser.nsfwEnabled ? "Enabled" : "Disabled"}</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-card border border-border">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Last Login</div>
+                    <div className="text-xs font-medium truncate">
+                      {drawerUser.lastLoginTimestamp
+                        ? new Date(drawerUser.lastLoginTimestamp).toLocaleDateString()
+                        : "Never"}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-card border border-border">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Daily Msgs</div>
+                    <div className="text-sm font-bold">{drawerUser.dailyTriggerRequestsCount ?? 0}</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-card border border-border">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Creations</div>
+                    <div className="text-sm font-bold">{drawerUser.weeklyCreationsCount ?? 0}</div>
+                  </div>
+                </div>
+
+                {/* Ticket Balance */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Ticket size={12} className="text-primary" /> Ticket Balance
+                  </label>
+                  <Input
+                    type="number"
+                    value={editTickets}
+                    onChange={e => setEditTickets(e.target.value)}
+                    className="bg-card border-border h-10 text-sm"
+                    placeholder="0"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Current: {drawerUser.ticketBalance} 🎟️</p>
+                </div>
+
+                {/* Neon Card Balance */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <CardIcon size={12} className="text-accent" /> Neon Card Balance
+                  </label>
+                  <Input
+                    type="number"
+                    value={editNeon}
+                    onChange={e => setEditNeon(e.target.value)}
+                    className="bg-card border-border h-10 text-sm"
+                    placeholder="0"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Current: {drawerUser.neonCardBalance} 🃏</p>
+                </div>
+
+                {/* Subscription Tier */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Star size={12} className="text-yellow-400" /> Subscription Tier
+                  </label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {ALL_TIERS.map(t => (
+                      <button key={t} onClick={() => setEditTier(t)}
+                        className={`py-2 rounded-lg text-xs font-bold border transition-all ${
+                          editTier === t
+                            ? tierColor(t) + " ring-1 ring-current"
+                            : "border-border text-muted-foreground hover:text-foreground"
+                        }`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Staff Privileges */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <ShieldCheck size={12} className="text-yellow-400" /> Staff Privileges
+                  </label>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {STAFF_ROLES.map(role => (
+                      <button key={role.value} onClick={() => setEditStaff(role.value)}
+                        className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-all text-left flex items-center gap-2 ${
+                          editStaff === role.value
+                            ? role.value === "full_admin"
+                              ? "border-yellow-500/60 text-yellow-400 bg-yellow-500/10"
+                              : role.value === "limited_admin"
+                              ? "border-accent/60 text-accent bg-accent/10"
+                              : "border-border text-foreground bg-muted/30"
+                            : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                        }`}>
+                        <div className={`w-2 h-2 rounded-full ${editStaff === role.value ? "bg-current" : "bg-muted"}`} />
+                        {role.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : null}
+          </div>
+
+          {/* Drawer Footer */}
+          {!drawerLoading && drawerUser && (
+            <div className="p-4 border-t border-border shrink-0 space-y-2">
+              <button onClick={saveUserChanges} disabled={savingUser}
+                className="w-full py-3 rounded-xl bg-accent text-background font-bold text-sm box-glow-blue disabled:opacity-50 flex items-center justify-center gap-2 transition-all">
+                {savingUser ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                {savingUser ? "Saving…" : "Save Changes"}
+              </button>
+              <button onClick={() => setDrawerOpen(false)}
+                className="w-full py-2.5 rounded-xl border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border/80 transition-all">
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      </>
+    )}
+
+    <style>{`
+      @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to   { transform: translateX(0);    opacity: 1; }
+      }
+    `}</style>
     </>
+  );
+}
+
+// Missing import — add Star icon
+function Star({ size, className }: { size: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
   );
 }
