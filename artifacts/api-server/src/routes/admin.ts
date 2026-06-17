@@ -52,6 +52,7 @@ function serializeUser(u: typeof usersTable.$inferSelect) {
     userTraits: u.userTraits,
     activeCharacterId: u.activeCharacterId,
     ticketBalance: u.ticketBalance,
+    neonCardBalance: u.neonCardBalance ?? 0,
     subscriptionTier: u.subscriptionTier,
     lastLoginTimestamp: u.lastLoginTimestamp?.toISOString() ?? null,
     weeklyCreationsCount: u.weeklyCreationsCount,

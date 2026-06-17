@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, User as UserIcon, Ticket, Copy, Settings, ShieldAlert, Headphones,
   HelpCircle, LifeBuoy, Image, ChevronDown, ChevronRight, Trophy, RotateCcw,
+  BarChart2, MessageCircle, Sparkles, CreditCard, Star, Zap, Users,
 } from "lucide-react";
 import {
   useGetMe,
@@ -10,6 +11,8 @@ import {
   useGetReferralLink,
   useUpdateNsfwSetting,
   useGetMediaVault,
+  useGetMyCharacters,
+  useListConversations,
   getGetMeQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,14 +32,31 @@ const QUEST_TASKS = [
   { id: 5, label: "Unlock a Vault item",      reward: "+8 🎟️",  done: false },
 ];
 
+const TIER_COLOR: Record<string, string> = {
+  Free:   "text-muted-foreground border-border",
+  Bronze: "text-orange-400 border-orange-400/50",
+  Silver: "text-slate-300 border-slate-300/50",
+  Gold:   "text-yellow-400 border-yellow-400/50",
+};
+
+const TIER_GLOW: Record<string, string> = {
+  Free:   "",
+  Bronze: "box-shadow: 0 0 12px rgba(251,146,60,0.4)",
+  Silver: "box-shadow: 0 0 12px rgba(203,213,225,0.4)",
+  Gold:   "box-shadow: 0 0 12px rgba(250,204,21,0.5)",
+};
+
 export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
   const { data: user } = useGetMe();
   const claimTickets = useClaimDailyTickets();
   const updateNsfw = useUpdateNsfwSetting();
   const { data: vaultItems } = useGetMediaVault();
+  const { data: myCharacters } = useGetMyCharacters();
+  const { data: conversations } = useListConversations();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const [expandProfile, setExpandProfile] = useState(false);
   const [expandMedia, setExpandMedia] = useState(false);
   const [expandQuest, setExpandQuest] = useState(false);
   const [expandCache, setExpandCache] = useState(false);
@@ -95,11 +115,14 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
       k.startsWith("chat_") || k.startsWith("conv_") || k.startsWith("msg_")
     );
     keys.forEach(k => localStorage.removeItem(k));
-    // Also clear react-query cache in a soft way — just remove known chat-related keys
     toast({ title: "Conversation Cache Cleared", description: `${keys.length} local entries wiped.` });
   };
 
   const unlockedItems = (Array.isArray(vaultItems) ? vaultItems : []).filter(v => v.unlocked);
+  const tier = user?.subscriptionTier ?? "Free";
+  const tierColor = TIER_COLOR[tier] ?? TIER_COLOR.Free;
+  const charactersCreated = Array.isArray(myCharacters) ? myCharacters.length : 0;
+  const charactersChatted = Array.isArray(conversations) ? conversations.length : 0;
 
   const SectionHeader = ({
     icon: Icon,
@@ -150,25 +173,101 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              {/* Profile Section */}
-              <div className="flex flex-col items-center space-y-3 pb-6 border-b border-border">
-                <div className="w-20 h-20 rounded-full bg-muted border-2 border-primary box-glow-pink flex items-center justify-center overflow-hidden">
-                  {user?.avatarUrl ? (
-                    <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <UserIcon size={40} className="text-primary" />
-                  )}
+
+              {/* ── Profile Card ── */}
+              <div className="rounded-xl border border-secondary/30 overflow-hidden">
+                {/* Avatar + name row */}
+                <div className="flex items-center gap-3 p-4">
+                  <div className="w-14 h-14 rounded-full bg-muted border-2 border-primary box-glow-pink flex items-center justify-center overflow-hidden shrink-0">
+                    {user?.avatarUrl ? (
+                      <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <UserIcon size={28} className="text-primary" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-white truncate">
+                      {user?.customNickname || user?.username || "Guest"}
+                    </h3>
+                    <span className={`inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${tierColor}`}>
+                      {tier} Tier
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setExpandProfile(p => !p)}
+                    className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg bg-background border border-border hover:border-primary/50 transition-colors shrink-0"
+                  >
+                    <BarChart2 size={16} className="text-primary" />
+                    <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Profile</span>
+                  </button>
                 </div>
-                <div className="text-center">
-                  <h3 className="text-lg font-bold text-white">{user?.customNickname || user?.username || "Guest"}</h3>
-                  <div className="inline-block mt-1 px-2 py-0.5 rounded text-xs font-semibold bg-secondary/20 text-secondary border border-secondary/50">
-                    {user?.subscriptionTier || "Free"} Tier
+
+                {/* Balance row */}
+                <div className="flex border-t border-border">
+                  <div className="flex-1 flex flex-col items-center py-3 gap-0.5 border-r border-border">
+                    <span className="text-lg font-bold text-primary">{user?.ticketBalance ?? 0}</span>
+                    <span className="text-[10px] text-muted-foreground">🎟️ Tickets</span>
+                  </div>
+                  <div className="flex-1 flex flex-col items-center py-3 gap-0.5">
+                    <span className="text-lg font-bold text-secondary">{user?.neonCardBalance ?? 0}</span>
+                    <span className="text-[10px] text-muted-foreground">🎴 Neon Cards</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 mt-2 px-4 py-1.5 bg-background rounded-full border border-border">
-                  <span className="text-primary font-bold">{user?.ticketBalance || 0}</span>
-                  <span>🎟️</span>
-                </div>
+
+                {/* Expanded Profile Stats */}
+                <AnimatePresence>
+                  {expandProfile && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="overflow-hidden border-t border-border"
+                    >
+                      <div className="p-4 space-y-4 bg-background/40">
+                        {/* Stat grid */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <StatCell icon={MessageCircle} label="Today's Messages" value={user?.dailyMessageCount ?? 0} color="text-accent" />
+                          <StatCell icon={Sparkles}      label="Today's Selfies"  value={user?.dailyTriggerRequestsCount ?? 0} color="text-pink-400" />
+                          <StatCell icon={Users}         label="Characters Created" value={charactersCreated} color="text-primary" />
+                          <StatCell icon={MessageCircle} label="Chats Started"     value={charactersChatted} color="text-secondary" />
+                          <StatCell icon={Zap}           label="This Week Created" value={user?.weeklyCreationsCount ?? 0} color="text-yellow-400" />
+                          <StatCell icon={Image}         label="Media Unlocked"    value={unlockedItems.length} color="text-green-400" />
+                        </div>
+
+                        {/* Referral code */}
+                        {user?.referralCode && (
+                          <div className="rounded-lg bg-card border border-border p-3">
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Your Referral Code</p>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 text-sm font-mono text-accent truncate">{user.referralCode}</code>
+                              <button
+                                onClick={handleCopyReferral}
+                                className="p-1.5 rounded-md bg-accent/10 border border-accent/30 hover:bg-accent/20 transition-colors"
+                              >
+                                <Copy size={14} className="text-accent" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tier badge with perks */}
+                        <div className={`rounded-lg border p-3 ${tierColor}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Star size={14} />
+                            <span className="text-xs font-bold uppercase tracking-wider">{tier} Plan</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            {tier === "Free"   && "Upgrade to unlock unlimited messages, exclusive characters, and priority image generation."}
+                            {tier === "Bronze" && "200 messages/day · 10 weekly creations · 25 Neon Cards daily bonus."}
+                            {tier === "Silver" && "Unlimited messages · 25 weekly creations · 37 Neon Cards daily bonus · priority queue."}
+                            {tier === "Gold"   && "Everything unlimited · 60 weekly creations · 56 Neon Cards daily · VIP access."}
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Quick Actions */}
@@ -334,7 +433,6 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
               <div className="space-y-2 pt-4 border-t border-border">
                 <h4 className="text-sm font-semibold text-muted-foreground tracking-wider uppercase">Help</h4>
 
-                {/* FAQ accordion */}
                 {[
                   { q: "How do I earn more tickets?", a: "Claim your free daily tickets from the menu, invite friends using your referral link, or complete quests in the Quest Hub." },
                   { q: "What is NSFW mode?", a: "Enabling NSFW allows more mature, explicit content in conversations. It can be toggled on or off at any time in Settings." },
@@ -370,7 +468,6 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
                   </div>
                 ))}
 
-                {/* Customer Support deep link */}
                 <button
                   onClick={() => {
                     if (typeof window !== "undefined" && (window as { Telegram?: { WebApp?: { openTelegramLink?: (url: string) => void } } }).Telegram?.WebApp?.openTelegramLink) {
@@ -391,5 +488,25 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
         </>
       )}
     </AnimatePresence>
+  );
+}
+
+function StatCell({
+  icon: Icon,
+  label,
+  value,
+  color,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: number;
+  color: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1 p-3 rounded-lg bg-card border border-border">
+      <Icon size={14} className={color} />
+      <span className={`text-lg font-bold ${color}`}>{value}</span>
+      <span className="text-[10px] text-muted-foreground leading-tight">{label}</span>
+    </div>
   );
 }
