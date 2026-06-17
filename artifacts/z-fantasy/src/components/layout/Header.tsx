@@ -19,7 +19,15 @@ export function Header({ onOpenDrawer }: HeaderProps) {
       </button>
 
       <div className="flex flex-col items-center leading-none select-none">
-        <div className="font-black text-2xl tracking-[0.25em] text-foreground text-glow-purple uppercase">
+        <div
+          className="font-black tracking-[0.25em] uppercase"
+          style={{
+            fontSize: "clamp(1.5rem, 5vw, 2rem)",
+            color: "#00f0ff",
+            textShadow: "0 0 10px rgba(0,240,255,0.9), 0 0 30px rgba(0,240,255,0.5), 0 0 60px rgba(0,240,255,0.3)",
+            letterSpacing: "0.3em",
+          }}
+        >
           Z-FANTASY
         </div>
         <div

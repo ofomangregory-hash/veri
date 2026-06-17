@@ -2598,6 +2598,23 @@ export function startTelegramBot(): TelegramBot | null {
 
       // ── AI routing ────────────────────────────────────────────────────────────
       const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+      const isAdminUser = userId === process.env.ADMIN_TELEGRAM_ID || adminSessions.has(msg.from?.id ?? 0);
+
+      // Ticket gate: admins bypass; public users need at least 1 ticket
+      if (!isAdminUser) {
+        const balance = user?.ticketBalance ?? 0;
+        if (balance < 1) {
+          await bot!.sendMessage(chatId,
+            `🎟️ You're out of tickets!\n\nEarn more by:\n• /daily — claim +25 tickets\n• /premium — subscribe for bonus packs\n• /referral — invite friends for +15 each`,
+          );
+          return;
+        }
+        // Deduct 1 ticket atomically
+        await db.update(usersTable)
+          .set({ ticketBalance: sql`GREATEST(ticket_balance - 1, 0)` })
+          .where(eq(usersTable.id, userId));
+      }
+
       let systemPrompt = "You are a helpful AI companion in the Z-Fantasy universe.";
       let characterName = "Companion";
 
@@ -2620,14 +2637,17 @@ export function startTelegramBot(): TelegramBot | null {
 
       try {
         const reply = await generateAIReply(
-          systemPrompt, [], text, characterName,
+          systemPrompt,
+          [],
+          text,
+          characterName,
           user?.customNickname ?? null,
           user?.userTraits ?? null,
           user?.nsfwEnabled ?? false,
         );
         await bot!.sendMessage(chatId, reply);
       } catch (err) {
-        logger.error({ err }, "AI response failed");
+        logger.error({ err }, "AI response failed in bot");
         await bot!.sendMessage(chatId, "⚡ Having trouble right now — try again in a moment!");
       }
     });

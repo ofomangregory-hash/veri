@@ -102,6 +102,7 @@ export function Admin() {
   // ── User Drawer State ─────────────────────────────────────────────────────
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerUser, setDrawerUser] = useState<UserDetail | null>(null);
+  const [drawerTxns, setDrawerTxns] = useState<Array<{ transactionId: string; actionType: string; ticketAmount: number; timestamp: string }>>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [editTickets, setEditTickets] = useState("");
   const [editNeon, setEditNeon] = useState("");
@@ -114,10 +115,15 @@ export function Admin() {
     setDrawerOpen(true);
     setDrawerLoading(true);
     setDrawerUser(null);
+    setDrawerTxns([]);
     try {
-      const data = await adminApi<{ user: UserDetail }>("GET", `/admin/users/${userId}`);
+      const data = await adminApi<{
+        user: UserDetail;
+        transactions: Array<{ transactionId: string; actionType: string; ticketAmount: number; timestamp: string }>;
+      }>("GET", `/admin/users/${userId}`);
       const u = data.user;
       setDrawerUser(u);
+      setDrawerTxns((data.transactions ?? []).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 20));
       setEditTickets(String(u.ticketBalance));
       setEditNeon(String(u.neonCardBalance));
       setEditTier(u.subscriptionTier);
@@ -896,6 +902,37 @@ export function Admin() {
                     ))}
                   </div>
                 </div>
+
+                {/* Transaction History */}
+                {drawerTxns.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <div className="flex-1 h-px bg-border" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-2">Transaction History</span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {drawerTxns.map(txn => {
+                        const isCredit = txn.ticketAmount >= 0;
+                        const label = txn.actionType.replace(/_/g, " ").replace(/^subscription /, "Sub: ");
+                        return (
+                          <div key={txn.transactionId}
+                            className="flex items-center justify-between px-3 py-2 rounded-lg bg-card border border-border text-xs">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate capitalize">{label}</div>
+                              <div className="text-muted-foreground text-[10px]">
+                                {new Date(txn.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </div>
+                            </div>
+                            <div className={`font-bold shrink-0 ml-2 ${isCredit ? "text-green-400" : "text-red-400"}`}>
+                              {isCredit ? "+" : ""}{txn.ticketAmount} 🎟
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </>
             ) : null}
           </div>

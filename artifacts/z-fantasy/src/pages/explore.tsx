@@ -159,8 +159,8 @@ export function Explore() {
 
           {/* Bottom Sheet */}
           <div
-            className="relative w-full max-w-lg rounded-t-3xl overflow-hidden border border-border border-b-0 shadow-2xl"
-            style={{ background: "linear-gradient(180deg, #0d0d1a 0%, #12121f 100%)" }}
+            className="relative w-full max-w-lg rounded-t-3xl overflow-y-auto border border-border border-b-0 shadow-2xl"
+            style={{ background: "linear-gradient(180deg, #0d0d1a 0%, #12121f 100%)", maxHeight: "85vh" }}
             onClick={e => e.stopPropagation()}
           >
             {/* Hero image */}
@@ -189,7 +189,7 @@ export function Explore() {
             </div>
 
             {/* Content */}
-            <div className="px-5 pb-8 pt-3 space-y-4">
+            <div className="px-5 pb-8 pt-3 space-y-4" style={{ paddingBottom: "2rem" }}>
               {/* Name */}
               <div>
                 <h2 className="text-2xl font-bold text-white tracking-wide">{selectedChar.name}</h2>
