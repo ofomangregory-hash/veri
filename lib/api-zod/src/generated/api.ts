@@ -610,7 +610,9 @@ export const AdminUpdateUserParams = zod.object({
 
 export const AdminUpdateUserBody = zod.object({
   "ticketBalance": zod.number().optional(),
+  "neonCardBalance": zod.number().optional(),
   "subscriptionTier": zod.string().optional(),
+  "staffPrivileges": zod.string().nullish(),
   "clearUnlockedMedia": zod.boolean().optional(),
   "customNickname": zod.string().optional()
 })

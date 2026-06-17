@@ -194,7 +194,9 @@ router.patch("/admin/users/:userId", async (req, res): Promise<void> => {
 
   const updates: Partial<typeof usersTable.$inferInsert> = {};
   if (parsed.data.ticketBalance != null) updates.ticketBalance = parsed.data.ticketBalance;
+  if (parsed.data.neonCardBalance != null) updates.neonCardBalance = parsed.data.neonCardBalance;
   if (parsed.data.subscriptionTier != null) updates.subscriptionTier = parsed.data.subscriptionTier;
+  if (parsed.data.staffPrivileges !== undefined) updates.staffPrivileges = parsed.data.staffPrivileges ?? null;
   if (parsed.data.customNickname != null) updates.customNickname = parsed.data.customNickname;
   if (parsed.data.clearUnlockedMedia) updates.unlockedMediaArray = [];
 
