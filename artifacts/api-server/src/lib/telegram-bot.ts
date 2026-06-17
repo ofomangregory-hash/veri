@@ -1,4 +1,4 @@
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot, { type InlineKeyboardMarkup, type InlineKeyboardButton, type Message, type InlineQueryResult } from "node-telegram-bot-api";
 import { db, usersTable, charactersTable, systemConfigurationsTable, transactionsTable } from "@workspace/db";
 import { eq, sql, count, like, ilike } from "drizzle-orm";
 import { logger } from "./logger";
@@ -49,10 +49,10 @@ function cwCheckboxKeyboard(
   cbPrefix: string,
   confirmCb: string,
   confirmLabel: string,
-): TelegramBot.InlineKeyboardMarkup {
-  const rows: TelegramBot.InlineKeyboardButton[][] = [];
+): InlineKeyboardMarkup {
+  const rows: InlineKeyboardButton[][] = [];
   for (let i = 0; i < items.length; i += 2) {
-    const row: TelegramBot.InlineKeyboardButton[] = [];
+    const row: InlineKeyboardButton[] = [];
     for (let j = i; j < Math.min(i + 2, items.length); j++) {
       row.push({ text: `${selected.includes(j) ? "✅" : "⬜"} ${items[j]}`, callback_data: `${cbPrefix}${j}` });
     }
@@ -177,7 +177,7 @@ function buildWizardPrompt(w: WizardState): string {
 let bot: TelegramBot | null = null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-function isAdmin(msg: TelegramBot.Message): boolean {
+function isAdmin(msg: Message): boolean {
   const id = msg.from?.id;
   if (!id) return false;
   return String(id) === process.env.ADMIN_TELEGRAM_ID || adminSessions.has(id);
@@ -421,7 +421,7 @@ export function startTelegramBot(): TelegramBot | null {
         char.initialGreeting ? `💬 _"${char.initialGreeting.slice(0, 120)}${char.initialGreeting.length > 120 ? "…" : ""}"_` : "",
       ].filter(Boolean).join("\n");
 
-      const markup: TelegramBot.InlineKeyboardMarkup = {
+      const markup: InlineKeyboardMarkup = {
         inline_keyboard: [[
           { text: "💬 Chat Now", callback_data: `chat_${char.characterId}` },
           { text: "🌐 Open App", web_app: { url: appUrl(`/chat/${char.characterId}`) } },
@@ -467,7 +467,7 @@ export function startTelegramBot(): TelegramBot | null {
       browseSession.set(chatId, 0);
       const char = characters[0]!;
       const caption = `✨ *${char.name}* _(${char.genre})_\n${char.teaserDescription ?? ""}\n\n_Card 1 of ${characters.length}_`;
-      const markup: TelegramBot.InlineKeyboardMarkup = {
+      const markup: InlineKeyboardMarkup = {
         inline_keyboard: [
           [
             { text: "◀ Previous", callback_data: "browse_prev" },
@@ -1493,7 +1493,7 @@ export function startTelegramBot(): TelegramBot | null {
 
         const char = characters[next]!;
         const caption = `✨ *${char.name}* _(${char.genre})_\n${char.teaserDescription ?? ""}\n\n_Card ${next + 1} of ${characters.length}_`;
-        const markup: TelegramBot.InlineKeyboardMarkup = {
+        const markup: InlineKeyboardMarkup = {
           inline_keyboard: [
             [
               { text: "◀ Previous", callback_data: "browse_prev" },
@@ -1507,12 +1507,12 @@ export function startTelegramBot(): TelegramBot | null {
         };
 
         try {
-          if (char.avatarUrl && query.message?.photo) {
+          if (char.avatarUrl && (query.message as Message | undefined)?.photo) {
             await (bot as unknown as {
               editMessageMedia: (media: object, options: object) => Promise<unknown>
             }).editMessageMedia(
               { type: "photo", media: char.avatarUrl, caption, parse_mode: "Markdown" },
-              { chat_id: chatId, message_id: query.message.message_id, reply_markup: markup }
+              { chat_id: chatId, message_id: query.message?.message_id, reply_markup: markup }
             );
           } else {
             await bot!.editMessageText(caption, {
@@ -2179,7 +2179,7 @@ export function startTelegramBot(): TelegramBot | null {
             : "",
         ].filter(Boolean).join("\n");
 
-        const markup: TelegramBot.InlineKeyboardMarkup = {
+        const markup: InlineKeyboardMarkup = {
           inline_keyboard: [[
             { text: "💬 Chat Now", callback_data: `chat_${char.characterId}` },
             { text: "🌐 Open App", web_app: { url: appUrl(`/chat/${char.characterId}`) } },
@@ -2231,7 +2231,7 @@ export function startTelegramBot(): TelegramBot | null {
 
         const visible = characters.filter(c => c.visibility === "public" || isAdminUser);
 
-        const results: TelegramBot.InlineQueryResult[] = visible.map(char => {
+        const results: InlineQueryResult[] = visible.map(char => {
           const traitsLine = "";
           const caption = [
             `💜 *${char.name}*`,
@@ -2243,7 +2243,7 @@ export function startTelegramBot(): TelegramBot | null {
             traitsLine,
           ].filter(Boolean).join("\n");
 
-          const replyMarkup: TelegramBot.InlineKeyboardMarkup = {
+          const replyMarkup: InlineKeyboardMarkup = {
             inline_keyboard: [[
               { text: "💬 Chat in Bot", url: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME ?? "z_fantasy_bot"}?start=char_${char.characterId}` },
               { text: "🌐 Open App", web_app: { url: appUrl(`/chat/${char.characterId}`) } },

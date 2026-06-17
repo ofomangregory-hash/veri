@@ -346,7 +346,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   try {
     imageUrl = await generateCharacterSelfie({
       characterName: character.name,
-      genre: character.genre,
+      genre: character.genre ?? "Fantasy",
       systemPrompt: character.systemPrompt ?? "",
       teaserDescription: character.teaserDescription,
       imageSeed,

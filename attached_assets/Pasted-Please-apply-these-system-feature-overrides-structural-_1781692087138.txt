@@ -1,0 +1,41 @@
+Please apply these system feature overrides, structural UI re-themes, and backend message-polling repairs across the repository files immediately:
+
+1. ABSOLUTE ADMIN TAB ENFORCEMENT & SECURITY LOCKDOWN
+- Frontend Navigation Bar: Overwrite the layout visibility conditions for the Admin Dashboard panel tab. 
+- The Admin tab button MUST render visible on the screen navigation tray if and only if:
+  * The active user account session ID equals '8704633862' (Your verified Telegram ID) OR equals the mock development preview environment string '666666'.
+- For any other public user ID, completely strip out, isolate, and remove the Admin tab component from the DOM tree. If a public user tries to manually route to the '/admin' web path, block them instantly and drop an access-denied screen layout.
+
+2. CHATBOT MESSAGE REPLY FIX (Restore Broken Conversation Loops)
+- Audit the primary Telegram Bot messaging webhook or long-polling controller module file.
+- The bot is failing to send back text responses because the text event listener is either missing an internal database connection await thread or choking on the recent currency changes.
+- Ensure that when a message is caught:
+  * Check the user's 'ticket_balance'. If it is an admin, always bypass checks. If it is a public user, check if balance >= 1. If valid, deduct exactly 1 ticket in Supabase, then trigger the OpenRouter API stream thread.
+  * Wrap the OpenRouter axios request object in a strict try-catch envelope. Ensure it passes a clean 'model' parameter (e.g., 'gryphe/mythomax-l2-13b' or similar valid engine string) and that it appends the character's core 'system_prompt' attributes perfectly as the system context message payload.
+  * Natively fire 'bot.sendMessage(chatId, aiReplyText)' inside the resolve loop to guarantee text output hits the Telegram UI.
+
+3. PERCHANCE AI AUTOMATED AVATAR GENERATION FOR CREATED CHARACTERS
+- Update the Character Creation backend controller and wizard form logic (Web and Bot platforms).
+- When a user builds a new character, if they leave the image avatar file upload input slot blank or empty, do not show a generic breaking placeholder image.
+- Instantly invoke our Perchance AI Text-to-Image API pipeline to generate a custom face-locked profile picture on the fly:
+  * Compile a highly descriptive appearance prompt using the character's user-provided name, traits array, behaviors, and personality attributes.
+  * Programmatically fetch the image from: https://perchance.org
+  * Take that fresh binary image stream, upload it straight to our automated cloud engine repository bucket ('https://telegra.ph'), and save the resulting permanent link as the 'avatar_url' inside the Supabase 'characters' table automatically.
+
+4. UI STYLING FIXES (Bio Sheet Layout & App Name Typography)
+- App Name Scaling: Locate your landing page and header dashboard components. Make the master text title significantly larger. Re-render it with a bright, glowing cyberpunk neon blue visual styling, and embed the fluid, slanted italicized calligraphy script reading 'Sweet Dreams'.
+- Bio Card Mobile View Optimization: Locate the character details bio canvas sheet overlay that slides up when a user clicks a newly installed companion card.
+- Apply strict CSS styling boundaries ('max-height: 85vh', 'overflow-y: auto', 'padding-bottom: 2rem') to the sheet container element. This guarantees the character statistics, descriptor content fields, and action buttons fit inside the user's mobile screen area without overflowing or locking up the viewport.
+
+5. USER PROFILE DRAWER EXTENSION inside ADMIN CRM
+- In the Admin CRM panel dashboard view, add an interactive action drawer menu layout.
+- When the Admin clicks on any user profile table row record, slide open an elegant side panel drawer window displaying their detailed statistics pulled straight from Supabase.
+- Populate this drawer with real-time operational database controls linked to instant asynchronous API modification endpoints:
+  * An input numeric selector field to directly edit and update their 'ticket_balance' or 'card_balance'.
+  * A dropdown select input element to change their 'subscription_tier' level string live (Free, Bronze, Silver, Gold).
+  * A checkbox toggle button switch labeled 'Staff Privileges' to grant or revoke system dashboard editing permissions on the fly.
+
+6. SECURE SUPABASE ENVIRONMENT EXTRACTION
+- When compiling database pool queries or fetching remote public character lists to hydrate the carousel grids, ensure the codebase exclusively reads from your secure backend secrets environment variables: process.env.SUPABASE_URL and process.env.DATABASE_URL. Do not leave any plain-text developer test strings or old staging URLs saved inside the file functions.
+
+Generate the exact updated, production-ready TypeScript and React configuration components cleanly without using shorthand comments or incomplete code lines.
