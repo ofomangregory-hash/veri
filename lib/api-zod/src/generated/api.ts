@@ -34,7 +34,9 @@ export const GetMeResponse = zod.object({
   "unlockedMediaArray": zod.array(zod.string()).optional(),
   "nsfwEnabled": zod.boolean(),
   "avatarUrl": zod.string().nullish(),
-  "referralCode": zod.string().nullish()
+  "referralCode": zod.string().nullish(),
+  "isAdmin": zod.boolean().optional(),
+  "staffPrivileges": zod.string().nullish()
 })
 
 
@@ -61,7 +63,9 @@ export const UpdateProfileResponse = zod.object({
   "unlockedMediaArray": zod.array(zod.string()).optional(),
   "nsfwEnabled": zod.boolean(),
   "avatarUrl": zod.string().nullish(),
-  "referralCode": zod.string().nullish()
+  "referralCode": zod.string().nullish(),
+  "isAdmin": zod.boolean().optional(),
+  "staffPrivileges": zod.string().nullish()
 })
 
 
@@ -99,7 +103,9 @@ export const UpdateNsfwSettingResponse = zod.object({
   "unlockedMediaArray": zod.array(zod.string()).optional(),
   "nsfwEnabled": zod.boolean(),
   "avatarUrl": zod.string().nullish(),
-  "referralCode": zod.string().nullish()
+  "referralCode": zod.string().nullish(),
+  "isAdmin": zod.boolean().optional(),
+  "staffPrivileges": zod.string().nullish()
 })
 
 
@@ -526,7 +532,9 @@ export const AdminListUsersResponse = zod.object({
   "unlockedMediaArray": zod.array(zod.string()).optional(),
   "nsfwEnabled": zod.boolean(),
   "avatarUrl": zod.string().nullish(),
-  "referralCode": zod.string().nullish()
+  "referralCode": zod.string().nullish(),
+  "isAdmin": zod.boolean().optional(),
+  "staffPrivileges": zod.string().nullish()
 })),
   "total": zod.number(),
   "page": zod.number()
@@ -556,7 +564,9 @@ export const AdminGetUserResponse = zod.object({
   "unlockedMediaArray": zod.array(zod.string()).optional(),
   "nsfwEnabled": zod.boolean(),
   "avatarUrl": zod.string().nullish(),
-  "referralCode": zod.string().nullish()
+  "referralCode": zod.string().nullish(),
+  "isAdmin": zod.boolean().optional(),
+  "staffPrivileges": zod.string().nullish()
 }),
   "transactions": zod.array(zod.object({
   "transactionId": zod.string(),
@@ -620,7 +630,9 @@ export const AdminUpdateUserResponse = zod.object({
   "unlockedMediaArray": zod.array(zod.string()).optional(),
   "nsfwEnabled": zod.boolean(),
   "avatarUrl": zod.string().nullish(),
-  "referralCode": zod.string().nullish()
+  "referralCode": zod.string().nullish(),
+  "isAdmin": zod.boolean().optional(),
+  "staffPrivileges": zod.string().nullish()
 })
 
 

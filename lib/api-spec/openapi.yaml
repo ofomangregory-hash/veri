@@ -692,6 +692,8 @@ components:
         nsfwEnabled: { type: boolean }
         avatarUrl: { type: ["string", "null"] }
         referralCode: { type: ["string", "null"] }
+        isAdmin: { type: boolean }
+        staffPrivileges: { type: ["string", "null"] }
 
     ProfileUpdate:
       type: object

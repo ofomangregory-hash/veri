@@ -32,6 +32,9 @@ export interface User {
   avatarUrl?: string | null;
   /** @nullable */
   referralCode?: string | null;
+  isAdmin?: boolean;
+  /** @nullable */
+  staffPrivileges?: string | null;
 }
 
 export interface ProfileUpdate {
