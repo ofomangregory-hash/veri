@@ -1,0 +1,24 @@
+Please apply these 3 precise TypeScript type-checking overrides to resolve our compilation errors in the api-server package immediately:
+
+1. ENABLE ESMODULEINTEROP COMPILATION FLAGS (Fixes 10 default import errors)
+- Locate the root or core TypeScript configuration layout file: 'tsconfig.base.json' (or the main 'tsconfig.json' in artifacts/api-server).
+- Under the 'compilerOptions' object configuration tree block, add or force-update these two crucial compatibility parameters to true:
+  "esModuleInterop": true,
+  "allowSyntheticDefaultImports": true
+- This satisfies the compiler requirement and allows the node-telegram-bot-api namespace to import cleanly via standard default import assignments across our bot logic files.
+
+2. ADD TYPE GUARD ON MAYBEINACCESSIBLEMESSAGE (Fixes 1 message layout error)
+- Locate the message listener event handlers inside the Telegram Bot module file where incoming chat message objects are evaluated.
+- Before trying to parse or destructure standard text strings or parameters (like 'msg.text') out of an incoming event message layout, add an explicit type guard or check to ensure it is a real message entity:
+  if (!msg || 'date' in msg === false) {
+    return; // Completely filter out and ignore MaybeInaccessibleMessage / deleted message payloads
+  }
+
+3. SATISFY STRICT NULL SAFETY CHECKS IN CONVERSATIONS (Fixes 1 strictNullChecks error)
+- Open 'conversations.ts' (or your conversation tracking state machine file).
+- Locate the line throwing a strictNullChecks violation (where a database query row or a state element is assumed to exist instantly).
+- Wrap that section with an explicit conditional fallback string rule. For instance, if a tracking variable or text content property can technically evaluate to null or undefined during streaming loops, satisfy the compiler using fallback operators or types:
+  const messageText = currentMessage?.text || '';
+  const userIdString = currentUserId ? String(currentUserId) : '';
+
+Generate the exact updated code file configurations cleanly without any shorthand notes, empty blocks, or incomplete TODO structures.
