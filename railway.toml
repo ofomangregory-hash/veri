@@ -1,8 +1,6 @@
 [build]
 builder = "NIXPACKS"
-# We run pnpm install inside the setup phase manually to override npm
-installCommand = "pnpm install"
-buildCommand = "pnpm install && BASE_PATH=/ pnpm --filter @workspace/z-fantasy run build && pnpm --filter @workspace/api-server run build"
+buildCommand = "pnpm install --no-frozen-lockfile && BASE_PATH=/ pnpm --filter @workspace/z-fantasy run build && pnpm --filter @workspace/api-server run build"
 
 [deploy]
 startCommand = "NODE_ENV=production pnpm --filter @workspace/api-server run start"
