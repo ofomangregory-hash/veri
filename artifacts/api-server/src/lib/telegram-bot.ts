@@ -233,6 +233,19 @@ export function startTelegramBot(): TelegramBot | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) { logger.warn("TELEGRAM_BOT_TOKEN not set — bot disabled"); return null; }
 
+  // ── Load persisted app domain from DB (overrides env var if set) ─────────────
+  void (async () => {
+    try {
+      const domainRow = await getConfig("app_domain");
+      if (domainRow && typeof domainRow.domain === "string" && domainRow.domain) {
+        process.env.APP_DOMAIN = domainRow.domain;
+        logger.info({ domain: domainRow.domain }, "App domain loaded from DB config");
+      }
+    } catch {
+      // non-fatal — fall back to env var
+    }
+  })();
+
   try {
     bot = new TelegramBot(token, { polling: true });
 
@@ -291,6 +304,7 @@ export function startTelegramBot(): TelegramBot | null {
       { command: "resettraits",        description: "Clear all traits: /resettraits [name]" },
       { command: "addphoto",           description: "Link photo: /addphoto [CharName] [keyword]" },
       { command: "addvideo",           description: "Link video: /addvideo [CharName] [keyword]" },
+      { command: "setdomain",           description: "Set app URL domain: /setdomain [domain]" },
       { command: "setwelcome",         description: "Set /start message: /setwelcome [text]" },
       { command: "setdesc",            description: "Set bot description: /setdesc [text]" },
       { command: "setbotphoto",        description: "Set bot profile picture" },
@@ -993,6 +1007,27 @@ export function startTelegramBot(): TelegramBot | null {
         try { await bot!.sendMessage(u.id, text); sent++; } catch { failed++; }
       }
       await bot!.sendMessage(msg.chat.id, `📢 Done — ✅ ${sent} sent, ❌ ${failed} failed`);
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  ADMIN: /setdomain [domain] — update the mini-app URL used in all buttons
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/setdomain (.+)/, async (msg, match) => {
+      if (!isAdmin(msg)) return;
+      const raw = match?.[1]?.trim();
+      if (!raw) {
+        await bot!.sendMessage(msg.chat.id,
+          `📡 *Current app domain:*\n\`${process.env.APP_DOMAIN ?? "not set"}\`\n\nTo update: \`/setdomain example.up.railway.app\``,
+          { parse_mode: "Markdown" });
+        return;
+      }
+      // Strip https:// or http:// if user included it
+      const domain = raw.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+      process.env.APP_DOMAIN = domain;
+      await upsertConfig("app_domain", { domain });
+      await bot!.sendMessage(msg.chat.id,
+        `✅ *App domain updated!*\n\nAll bot buttons now point to:\n\`https://${domain}\``,
+        { parse_mode: "Markdown" });
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
