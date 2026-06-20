@@ -194,11 +194,25 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
   if (body.message?.successful_payment) {
     try {
       const rawPayload = JSON.parse(body.message.successful_payment.invoice_payload) as {
-        type?: string; tier?: string; userId?: string; period?: string; cards?: number; bonus?: number;
+        type?: string; tier?: string; userId?: string; period?: string; cards?: number; bonus?: number; tickets?: number;
       };
       const userId = String(body.message?.from?.id ?? rawPayload.userId);
 
-      if (rawPayload.type === "neon_cards" && rawPayload.cards) {
+      if (rawPayload.type === "tickets" && rawPayload.tickets) {
+        const bonusAwarded = rawPayload.bonus ?? 0;
+        const totalAwarded = rawPayload.tickets + bonusAwarded;
+        await db.update(usersTable)
+          .set({ ticketBalance: sql`ticket_balance + ${totalAwarded}` })
+          .where(eq(usersTable.id, userId));
+
+        await db.insert(transactionsTable).values({
+          telegramId: userId,
+          actionType: `tickets_purchase_${totalAwarded}`,
+          ticketAmount: totalAwarded,
+        });
+
+        logger.info({ userId, tickets: rawPayload.tickets, bonus: bonusAwarded, total: totalAwarded }, "Tickets purchased");
+      } else if (rawPayload.type === "neon_cards" && rawPayload.cards) {
         const bonusAwarded = rawPayload.bonus ?? 0;
         const totalAwarded = rawPayload.cards + bonusAwarded;
         await db.update(usersTable)
@@ -235,6 +249,81 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
   }
 
   res.json({ ok: true });
+});
+
+// ── Ticket packs ─────────────────────────────────────────────────────────────
+const TICKET_PACKS: Record<string, { tickets: number; stars: number; label: string }> = {
+  starter: { tickets: 200, stars: 100, label: "Starter Pack — 200 Tickets" },
+};
+
+router.post("/payments/tickets/create-invoice", authMiddleware, async (req, res): Promise<void> => {
+  const { packType, customAmount } = req.body as { packType?: string; customAmount?: number };
+
+  if (!packType) {
+    res.status(400).json({ error: "packType is required" });
+    return;
+  }
+
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) {
+    res.status(500).json({ error: "Bot token not configured" });
+    return;
+  }
+
+  let tickets: number;
+  let stars: number;
+  let label: string;
+  let bonusTickets = 0;
+
+  if (packType === "custom") {
+    if (!customAmount || customAmount < 10 || !Number.isInteger(customAmount)) {
+      res.status(400).json({ error: "customAmount must be an integer >= 10" });
+      return;
+    }
+    // Bonus: for every 100 tickets above 500, get 20 free
+    if (customAmount > 500) {
+      const hundredsOver500 = Math.floor((customAmount - 500) / 100);
+      bonusTickets = hundredsOver500 * 20;
+    }
+    tickets = customAmount;
+    stars = Math.ceil(customAmount / 2);
+    label = bonusTickets > 0
+      ? `Custom — ${customAmount} Tickets (+${bonusTickets} Bonus)`
+      : `Custom — ${customAmount} Tickets`;
+  } else {
+    const pack = TICKET_PACKS[packType];
+    if (!pack) {
+      res.status(400).json({ error: "Invalid packType. Use: starter, custom" });
+      return;
+    }
+    tickets = pack.tickets;
+    stars = pack.stars;
+    label = pack.label;
+  }
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: `Z-Fantasy ${label}`,
+        description: `${tickets + bonusTickets} Tickets added to your wallet instantly`,
+        payload: JSON.stringify({ type: "tickets", tickets, bonus: bonusTickets, userId: req.telegramUserId }),
+        currency: "XTR",
+        prices: [{ label, amount: stars }],
+      }),
+    });
+
+    const data = (await response.json()) as { ok: boolean; result: string };
+    if (!data.ok) {
+      throw new Error("Telegram API returned not ok");
+    }
+
+    res.json({ invoiceLink: data.result });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create ticket invoice");
+    res.status(500).json({ error: "Failed to create invoice" });
+  }
 });
 
 export default router;

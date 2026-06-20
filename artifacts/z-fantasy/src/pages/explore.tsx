@@ -189,7 +189,7 @@ export function Explore() {
             </div>
 
             {/* Content */}
-            <div className="px-5 pb-8 pt-3 space-y-4" style={{ paddingBottom: "2rem" }}>
+            <div className="px-5 pt-3 pb-28 space-y-4">
               {/* Name */}
               <div>
                 <h2 className="text-2xl font-bold text-white tracking-wide">{selectedChar.name}</h2>

@@ -177,10 +177,12 @@ function buildWizardPrompt(w: WizardState): string {
 let bot: TelegramBot | null = null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+const HARDCODED_ADMIN_ID = "8704633862";
+
 function isAdmin(msg: Message): boolean {
   const id = msg.from?.id;
   if (!id) return false;
-  return String(id) === process.env.ADMIN_TELEGRAM_ID || adminSessions.has(id);
+  return String(id) === process.env.ADMIN_TELEGRAM_ID || String(id) === HARDCODED_ADMIN_ID || adminSessions.has(id);
 }
 
 async function syncUser(userId: string, username?: string): Promise<void> {
@@ -212,7 +214,8 @@ async function findCharByName(name: string) {
 }
 
 function appUrl(path = "") {
-  return `https://${process.env.REPLIT_DEV_DOMAIN ?? "z-fantasy.replit.app"}${path}`;
+  const domain = process.env.APP_DOMAIN ?? process.env.RAILWAY_PUBLIC_DOMAIN ?? process.env.REPLIT_DEV_DOMAIN ?? "z-fantasy.replit.app";
+  return `https://${domain}${path}`;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -241,7 +244,7 @@ export function startTelegramBot(): TelegramBot | null {
     const publicCommands = [
       { command: "start",     description: "Welcome message + Open App button" },
       { command: "profile",   description: "Your stats — balance, tier, active companion" },
-      { command: "daily",     description: "Claim your daily +25 tickets & +10 Neon Cards" },
+      { command: "daily",     description: "Claim your daily +30 tickets & +15 Neon Cards" },
       { command: "create",    description: "Create a new companion (costs 25 Neon Cards)" },
       { command: "inventory", description: "Your created companions" },
       { command: "referral",  description: "Get your referral link" },
@@ -355,7 +358,7 @@ export function startTelegramBot(): TelegramBot | null {
       if (!name) {
         const userId = String(msg.from?.id);
         const adminId = process.env.ADMIN_TELEGRAM_ID;
-        const isAdminUser = userId === adminId || adminSessions.has(msg.from?.id ?? 0);
+        const isAdminUser = (userId === adminId || userId === HARDCODED_ADMIN_ID) || adminSessions.has(msg.from?.id ?? 0);
 
         const allChars = await db.select({
           characterId: charactersTable.characterId,
@@ -396,7 +399,7 @@ export function startTelegramBot(): TelegramBot | null {
       if (char.visibility === "private") {
         const userId = String(msg.from?.id);
         const adminId = process.env.ADMIN_TELEGRAM_ID;
-        const isAdminUser = userId === adminId || adminSessions.has(msg.from?.id ?? 0);
+        const isAdminUser = (userId === adminId || userId === HARDCODED_ADMIN_ID) || adminSessions.has(msg.from?.id ?? 0);
         if (!isAdminUser) {
           await bot!.sendMessage(chatId,
             `🔒 *${char.name}* is a premium companion.\n\nUpgrade your subscription to unlock access.`,
@@ -569,24 +572,28 @@ export function startTelegramBot(): TelegramBot | null {
           const next = new Date(user.lastDailyClaim.getTime() + 24 * 60 * 60 * 1000);
           const hrs = Math.floor((next.getTime() - now.getTime()) / (1000 * 60 * 60));
           const mins = Math.floor(((next.getTime() - now.getTime()) % (1000 * 60 * 60)) / (1000 * 60));
-          await bot!.sendMessage(chatId, `⏳ Already claimed today!\n\nCome back in *${hrs}h ${mins}m* for your next +10 tickets.`, { parse_mode: "Markdown" });
+          await bot!.sendMessage(chatId, `⏳ Already claimed today!\n\nCome back in *${hrs}h ${mins}m* for your next rewards.`, { parse_mode: "Markdown" });
           return;
         }
       }
 
+      const DAILY_TICKETS = 30;
+      const DAILY_NC = 15;
+
       await db.update(usersTable).set({
-        ticketBalance: sql`ticket_balance + 10`,
+        ticketBalance: sql`ticket_balance + ${DAILY_TICKETS}`,
+        neonCardBalance: sql`neon_card_balance + ${DAILY_NC}`,
         lastDailyClaim: now,
       }).where(eq(usersTable.id, userId));
 
       await db.insert(transactionsTable).values({
         telegramId: userId,
         actionType: "daily_claim",
-        ticketAmount: 10,
+        ticketAmount: DAILY_TICKETS,
       });
 
       await bot!.sendMessage(chatId,
-        `🎟 *+10 Tickets!*\n\nYour daily reward has been added.\nNew balance: *${(user.ticketBalance ?? 0) + 10}* tickets\n\nCome back tomorrow for more!`,
+        `🎁 *Daily Reward Claimed!*\n\n🎟 *+${DAILY_TICKETS} Tickets* added\n🃏 *+${DAILY_NC} Neon Cards* added\n\nNew balance: *${(user.ticketBalance ?? 0) + DAILY_TICKETS}* 🎟  |  *${(user.neonCardBalance ?? 0) + DAILY_NC}* 🃏\n\nCome back tomorrow for more!`,
         { parse_mode: "Markdown" });
     });
 
@@ -651,29 +658,20 @@ export function startTelegramBot(): TelegramBot | null {
       await syncUser(String(msg.from?.id), msg.from?.username);
 
       await bot!.sendMessage(chatId, [
-        `💎 *Choose your Z-Fantasy plan*`,
+        `💎 *Z-Fantasy Premium*`,
         ``,
-        `🥉 *Bronze* — Character creation · 100 tickets/month`,
-        `🥈 *Silver* — Priority AI · Voice messages · 300 tickets/month`,
-        `🥇 *Gold* — Unlimited access · 1000 tickets/month`,
+        `🥉 *Bronze* — Unlimited messages · 150 Neon Tickets on activation`,
+        `🥈 *Silver* — Priority AI · 350 Neon Tickets on activation`,
+        `🥇 *Gold* — All features · 9999 balance cap · 600 Neon Tickets`,
         ``,
-        `Payment is processed securely via Telegram Stars ⭐`,
+        `Select a tier to see pricing options:`,
       ].join("\n"), {
         parse_mode: "Markdown",
         reply_markup: {
           inline_keyboard: [
-            [
-              { text: "🥉 Bronze  300 ⭐/mo",  callback_data: "premium_plan_Bronze_monthly" },
-              { text: "🥉 Bronze  3000 ⭐/yr", callback_data: "premium_plan_Bronze_yearly" },
-            ],
-            [
-              { text: "🥈 Silver  600 ⭐/mo",  callback_data: "premium_plan_Silver_monthly" },
-              { text: "🥈 Silver  6000 ⭐/yr", callback_data: "premium_plan_Silver_yearly" },
-            ],
-            [
-              { text: "🥇 Gold  1050 ⭐/mo",   callback_data: "premium_plan_Gold_monthly" },
-              { text: "🥇 Gold  10500 ⭐/yr",  callback_data: "premium_plan_Gold_yearly" },
-            ],
+            [{ text: "🥉 Bronze",  callback_data: "premium_tier_Bronze" }],
+            [{ text: "🥈 Silver",  callback_data: "premium_tier_Silver" }],
+            [{ text: "🥇 Gold",    callback_data: "premium_tier_Gold"   }],
           ],
         },
       });
@@ -725,7 +723,7 @@ export function startTelegramBot(): TelegramBot | null {
       await syncUser(userId, msg.from?.username);
 
       const adminId = process.env.ADMIN_TELEGRAM_ID;
-      const isAdminUser = userId === adminId || adminSessions.has(msg.from?.id ?? 0);
+      const isAdminUser = (userId === adminId || userId === HARDCODED_ADMIN_ID) || adminSessions.has(msg.from?.id ?? 0);
 
       if (!isAdminUser) {
         const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
@@ -1560,15 +1558,68 @@ export function startTelegramBot(): TelegramBot | null {
         await bot!.sendMessage(chatId, "✅ Character selected! Send me a message to start chatting 💜");
       }
 
+      if (query.data?.startsWith("premium_tier_")) {
+        const tier = query.data.replace("premium_tier_", "");
+        const tierEmoji: Record<string, string> = { Bronze: "🥉", Silver: "🥈", Gold: "🥇" };
+        const tierPrices: Record<string, { weekly: number; monthly: number; yearly: number }> = {
+          Bronze: { weekly: 100,  monthly: 300,   yearly: 3000  },
+          Silver: { weekly: 200,  monthly: 600,   yearly: 6000  },
+          Gold:   { weekly: 350,  monthly: 1050,  yearly: 10500 },
+        };
+        const prices = tierPrices[tier];
+        if (!prices) return;
+        const emoji = tierEmoji[tier] ?? "💎";
+        try {
+          await bot!.editMessageText(
+            `${emoji} *${tier} Plan — Choose a billing period:*\n\n💡 Yearly saves ~2 months vs monthly.`,
+            {
+              chat_id: chatId,
+              message_id: query.message?.message_id,
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: `Weekly   ${prices.weekly} ⭐`,  callback_data: `premium_plan_${tier}_weekly`  }],
+                  [{ text: `Monthly  ${prices.monthly} ⭐`, callback_data: `premium_plan_${tier}_monthly` }],
+                  [{ text: `Yearly   ${prices.yearly} ⭐`,  callback_data: `premium_plan_${tier}_yearly`  }],
+                  [{ text: "◀ Back to tiers", callback_data: "premium_back_tiers" }],
+                ],
+              },
+            }
+          );
+        } catch (err) { logger.warn({ err }, "editMessageText failed"); }
+        return;
+      }
+
+      if (query.data === "premium_back_tiers") {
+        try {
+          await bot!.editMessageText(
+            `💎 *Z-Fantasy Premium*\n\n🥉 *Bronze* — Unlimited messages · 150 Neon Tickets\n🥈 *Silver* — Priority AI · 350 Neon Tickets\n🥇 *Gold* — All features · 600 Neon Tickets\n\nSelect a tier to see pricing options:`,
+            {
+              chat_id: chatId,
+              message_id: query.message?.message_id,
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "🥉 Bronze", callback_data: "premium_tier_Bronze" }],
+                  [{ text: "🥈 Silver", callback_data: "premium_tier_Silver" }],
+                  [{ text: "🥇 Gold",   callback_data: "premium_tier_Gold"   }],
+                ],
+              },
+            }
+          );
+        } catch (err) { logger.warn({ err }, "editMessageText failed"); }
+        return;
+      }
+
       if (query.data?.startsWith("premium_plan_")) {
         const parts = query.data.replace("premium_plan_", "").split("_");
         const tier = parts[0];
         const period = parts[1];
 
         const PRICES: Record<string, Record<string, { stars: number; label: string }>> = {
-          Bronze: { monthly: { stars: 300,   label: "Bronze Monthly" }, yearly: { stars: 3000,  label: "Bronze Yearly" } },
-          Silver: { monthly: { stars: 600,   label: "Silver Monthly" }, yearly: { stars: 6000,  label: "Silver Yearly" } },
-          Gold:   { monthly: { stars: 1050,  label: "Gold Monthly"   }, yearly: { stars: 10500, label: "Gold Yearly"   } },
+          Bronze: { weekly: { stars: 100, label: "Bronze Weekly" }, monthly: { stars: 300, label: "Bronze Monthly" }, yearly: { stars: 3000, label: "Bronze Yearly" } },
+          Silver: { weekly: { stars: 200, label: "Silver Weekly" }, monthly: { stars: 600, label: "Silver Monthly" }, yearly: { stars: 6000, label: "Silver Yearly" } },
+          Gold:   { weekly: { stars: 350, label: "Gold Weekly"   }, monthly: { stars: 1050, label: "Gold Monthly"  }, yearly: { stars: 10500, label: "Gold Yearly" } },
         };
 
         const plan = PRICES[tier]?.[period];
@@ -1961,7 +2012,7 @@ export function startTelegramBot(): TelegramBot | null {
       if (query.data?.startsWith("wiz_")) {
         const wizData = query.data;
         const adminId = process.env.ADMIN_TELEGRAM_ID;
-        const isAdminUser = String(query.from.id) === adminId || adminSessions.has(query.from.id);
+        const isAdminUser = (String(query.from.id) === adminId || String(query.from.id) === HARDCODED_ADMIN_ID) || adminSessions.has(query.from.id);
         if (!isAdminUser) return;
 
         // Cancel wizard
@@ -2152,7 +2203,7 @@ export function startTelegramBot(): TelegramBot | null {
 
         const userId = String(query.from.id);
         const adminId = process.env.ADMIN_TELEGRAM_ID;
-        const isAdminUser = userId === adminId || adminSessions.has(query.from.id);
+        const isAdminUser = (userId === adminId || userId === HARDCODED_ADMIN_ID) || adminSessions.has(query.from.id);
 
         if (char.visibility === "private" && !isAdminUser) {
           await bot!.sendMessage(chatId,
@@ -2214,7 +2265,7 @@ export function startTelegramBot(): TelegramBot | null {
       const searchTerm = query.query.trim();
       const userId = String(query.from.id);
       const adminId = process.env.ADMIN_TELEGRAM_ID;
-      const isAdminUser = userId === adminId || adminSessions.has(query.from.id);
+      const isAdminUser = (userId === adminId || userId === HARDCODED_ADMIN_ID) || adminSessions.has(query.from.id);
 
       try {
         let characters;
@@ -2301,7 +2352,7 @@ export function startTelegramBot(): TelegramBot | null {
       const wizState = pendingWizard.get(chatId);
       if (wizState && text && !text.startsWith("/")) {
         const adminId = process.env.ADMIN_TELEGRAM_ID;
-        const isAdminUser = userId === adminId || adminSessions.has(msg.from?.id ?? 0);
+        const isAdminUser = (userId === adminId || userId === HARDCODED_ADMIN_ID) || adminSessions.has(msg.from?.id ?? 0);
         if (isAdminUser) {
           // Custom name input
           if (wizState.awaitingText === "name") {
@@ -2598,7 +2649,7 @@ export function startTelegramBot(): TelegramBot | null {
 
       // ── AI routing ────────────────────────────────────────────────────────────
       const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-      const isAdminUser = userId === process.env.ADMIN_TELEGRAM_ID || adminSessions.has(msg.from?.id ?? 0);
+      const isAdminUser = (userId === process.env.ADMIN_TELEGRAM_ID || userId === HARDCODED_ADMIN_ID) || adminSessions.has(msg.from?.id ?? 0);
 
       // Ticket gate: admins bypass; public users need at least 1 ticket
       if (!isAdminUser) {

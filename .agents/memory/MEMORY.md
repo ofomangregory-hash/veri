@@ -1,3 +1,4 @@
 - [Z-Fantasy stack decisions](z-fantasy-stack.md) — auth, DB upsert pattern, cron, and AI failover quirks worth knowing for future work
 - [Supabase character data source](supabase-characters.md) — characters live in Supabase, not local Replit PostgreSQL; triggerMetadataArray is an array in Supabase but Zod expects object|null
 - [Flat monorepo build order](flat-build-order.md) — esbuild build.mjs must not wipe dist/public/ (vite frontend output); also needs src/generated/index.ts barrel
+- [Economy and admin rules](economy-admin.md) — gifts cost neon cards (not tickets); daily claim is 30 tickets + 15 NC flat; hardcoded admin ID 8704633862; tickets: 2 stars=1 ticket; Railway deploy uses railway.toml

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useCreateInvoice, InvoiceRequestTier, InvoiceRequestPeriod } from "@workspace/api-client-react";
-import { Star, Zap, Infinity, Shield, CheckCircle2, CreditCard } from "lucide-react";
+import { Star, Zap, Infinity, Shield, CheckCircle2, CreditCard, Ticket } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type Period = "weekly" | "monthly" | "yearly";
@@ -37,30 +37,35 @@ export function Premium() {
   const [period, setPeriod] = useState<Period>("monthly");
   const [paidTier, setPaidTier] = useState<string | null>(null);
   const [cardsBought, setCardsBought] = useState<number | null>(null);
+  const [ticketsBought, setTicketsBought] = useState<number | null>(null);
   const [customCards, setCustomCards] = useState("");
+  const [customTickets, setCustomTickets] = useState("");
   const [buyingPack, setBuyingPack] = useState<string | null>(null);
+  const [buyingTickets, setBuyingTickets] = useState<string | null>(null);
   const createInvoice = useCreateInvoice();
   const { toast } = useToast();
+
+  function openInvoiceSafe(link: string, onPaid?: () => void) {
+    if (window.Telegram?.WebApp?.openInvoice) {
+      window.Telegram.WebApp.openInvoice(link, (status) => {
+        if (status === "paid") { onPaid?.(); }
+        else if (status === "cancelled") { toast({ title: "Payment cancelled" }); }
+        else if (status === "failed") { toast({ title: "Payment failed", description: "Please try again.", variant: "destructive" }); }
+      });
+    } else {
+      window.open(link, "_blank");
+    }
+  }
 
   const handleSubscribe = (tier: InvoiceRequestTier, tierName: string) => {
     createInvoice.mutate(
       { data: { tier, period: period as typeof InvoiceRequestPeriod[keyof typeof InvoiceRequestPeriod] } },
       {
         onSuccess: (res) => {
-          if (window.Telegram?.WebApp?.openInvoice) {
-            window.Telegram.WebApp.openInvoice(res.invoiceLink, (status) => {
-              if (status === "paid") {
-                setPaidTier(tierName);
-                setTimeout(() => setPaidTier(null), 4000);
-              } else if (status === "cancelled") {
-                toast({ title: "Payment cancelled" });
-              } else if (status === "failed") {
-                toast({ title: "Payment failed", description: "Please try again.", variant: "destructive" });
-              }
-            });
-          } else {
-            toast({ title: "Open in Telegram", description: "Please open this app inside Telegram to complete payment." });
-          }
+          openInvoiceSafe(res.invoiceLink, () => {
+            setPaidTier(tierName);
+            setTimeout(() => setPaidTier(null), 4000);
+          });
         },
         onError: () => toast({ title: "Failed to create invoice", variant: "destructive" })
       }
@@ -86,25 +91,46 @@ export function Premium() {
 
       const { invoiceLink } = await res.json() as { invoiceLink: string };
 
-      if (window.Telegram?.WebApp?.openInvoice) {
-        window.Telegram.WebApp.openInvoice(invoiceLink, (status) => {
-          if (status === "paid") {
-            const amount = customAmount ?? NEON_PACKS.find(p => p.id === packId)?.cards ?? 0;
-            setCardsBought(amount);
-            setTimeout(() => setCardsBought(null), 4000);
-          } else if (status === "cancelled") {
-            toast({ title: "Payment cancelled" });
-          } else if (status === "failed") {
-            toast({ title: "Payment failed", variant: "destructive" });
-          }
-        });
-      } else {
-        toast({ title: "Open in Telegram", description: "Please open inside Telegram to pay." });
-      }
+      openInvoiceSafe(invoiceLink, () => {
+        const amount = customAmount ?? NEON_PACKS.find(p => p.id === packId)?.cards ?? 0;
+        setCardsBought(amount);
+        setTimeout(() => setCardsBought(null), 4000);
+      });
     } catch (err) {
       toast({ title: "Error", description: String(err), variant: "destructive" });
     } finally {
       setBuyingPack(null);
+    }
+  };
+
+  const handleBuyTickets = async (packType: string, customAmount?: number) => {
+    setBuyingTickets(packType);
+    try {
+      const body: Record<string, unknown> = { packType };
+      if (packType === "custom" && customAmount) body.customAmount = customAmount;
+
+      const res = await fetch("/api/payments/tickets/create-invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? "Failed");
+      }
+
+      const { invoiceLink } = await res.json() as { invoiceLink: string };
+
+      openInvoiceSafe(invoiceLink, () => {
+        const amount = customAmount ?? 200;
+        setTicketsBought(amount);
+        setTimeout(() => setTicketsBought(null), 4000);
+      });
+    } catch (err) {
+      toast({ title: "Error", description: String(err), variant: "destructive" });
+    } finally {
+      setBuyingTickets(null);
     }
   };
 
@@ -243,7 +269,7 @@ export function Premium() {
           </h2>
         </div>
         <p className="text-xs text-muted-foreground mb-4">
-          Neon Cards power character creation (25🃏), selfies (15🃏), and vault unlocks (10🃏). Daily claim gives +10🃏.
+          Neon Cards power character creation (25🃏), selfies (15🃏), and gifts. Daily claim gives +15🃏.
         </p>
 
         <div className="grid grid-cols-3 gap-3 mb-4">
@@ -303,9 +329,94 @@ export function Premium() {
         </div>
       </div>
 
+      {/* ── Ticket Shop ── */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <Ticket size={18} className="text-yellow-400" />
+          <h2 className="text-lg font-bold uppercase tracking-widest text-yellow-400" style={{ textShadow: "0 0 10px rgba(250,204,21,0.7)" }}>
+            Ticket Shop
+          </h2>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Tickets fuel AI messages. 2 Stars = 1 Ticket. Orders over 500 get +20 bonus per 100.
+        </p>
+
+        {/* Fixed starter pack */}
+        <button
+          onClick={() => handleBuyTickets("starter")}
+          disabled={buyingTickets === "starter"}
+          className="w-full p-4 rounded-2xl bg-card border border-yellow-500/40 hover:shadow-[0_0_20px_rgba(250,204,21,0.25)] transition-all flex items-center justify-between mb-3 disabled:opacity-50"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">🎟</span>
+            <div className="text-left">
+              <p className="text-sm font-black text-yellow-400 uppercase tracking-wide">Starter Pack</p>
+              <p className="text-xs text-muted-foreground">200 Tickets instantly</p>
+            </div>
+          </div>
+          <span className="text-sm font-bold text-white">100 ⭐</span>
+        </button>
+
+        {/* Custom ticket amount */}
+        <div className="p-4 rounded-2xl bg-card border border-border">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Custom Amount (2 Stars : 1 Ticket)</p>
+          {(() => {
+            const customTicketAmt = parseInt(customTickets, 10);
+            const customTicketStars = !isNaN(customTicketAmt) && customTicketAmt >= 10 ? Math.ceil(customTicketAmt / 2) : null;
+            const customTicketBonus = !isNaN(customTicketAmt) && customTicketAmt > 500
+              ? Math.floor((customTicketAmt - 500) / 100) * 20 : 0;
+            return (
+              <>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min={10}
+                    step={1}
+                    value={customTickets}
+                    onChange={e => setCustomTickets(e.target.value)}
+                    placeholder="Min 10 tickets"
+                    className="flex-1 h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-yellow-400/60"
+                  />
+                  <button
+                    onClick={() => handleBuyTickets("custom", customTicketAmt)}
+                    disabled={customTicketStars === null || buyingTickets === "custom"}
+                    className="px-4 h-10 rounded-lg border border-yellow-500/50 text-yellow-400 font-bold text-sm hover:bg-yellow-500/10 transition-colors disabled:opacity-40"
+                  >
+                    {customTicketStars !== null ? `${customTicketStars} ⭐` : "Buy"}
+                  </button>
+                </div>
+                {customTicketStars !== null && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      Receive <span className="text-yellow-300 font-bold">{customTicketAmt + customTicketBonus} Tickets</span> for <span className="text-white font-bold">{customTicketStars} ⭐</span>
+                    </span>
+                    {customTicketBonus > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border bg-yellow-500/20 text-yellow-300 border-yellow-500/50">
+                        +{customTicketBonus} Bonus
+                      </span>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      </div>
+
       <p className="text-center text-[10px] text-muted-foreground mt-6">
         Payments processed via Telegram Stars. Native checkout sheet opens inside your app.
       </p>
+
+      {/* Tickets purchased overlay */}
+      {ticketsBought !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-card border border-yellow-400 rounded-3xl p-10 flex flex-col items-center gap-4 shadow-[0_0_60px_rgba(250,204,21,0.4)]">
+            <span className="text-6xl">🎟</span>
+            <h2 className="text-2xl font-bold uppercase tracking-widest text-yellow-400">+{ticketsBought} Tickets!</h2>
+            <p className="text-muted-foreground text-center text-sm">Tickets added to your wallet.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -406,10 +406,11 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     return;
   }
 
-  const cost = tier === "Gold" ? gift.costGold : gift.cost;
+  const isGiftAdmin = req.isAdmin;
+  const cost = isGiftAdmin ? 0 : (tier === "Gold" ? gift.costGold : gift.cost);
 
-  if (user.ticketBalance < cost) {
-    res.status(402).json({ error: `Insufficient tickets. This gift costs ${cost} tickets.` });
+  if (!isGiftAdmin && user.neonCardBalance < cost) {
+    res.status(402).json({ error: `Insufficient Neon Cards. This gift costs ${cost} 🃏.` });
     return;
   }
 
@@ -435,10 +436,12 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
 
-  // Deduct tickets
-  await db.update(usersTable).set({
-    ticketBalance: sql`ticket_balance - ${cost}`,
-  }).where(eq(usersTable.id, req.telegramUserId));
+  // Deduct neon cards
+  if (cost > 0) {
+    await db.update(usersTable).set({
+      neonCardBalance: sql`neon_card_balance - ${cost}`,
+    }).where(eq(usersTable.id, req.telegramUserId));
+  }
 
   await db.insert(transactionsTable).values({
     telegramId: req.telegramUserId,
