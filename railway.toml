@@ -1,5 +1,5 @@
 [build]
-builder = "nixpacks"
+builder = "NIXPACKS"
 buildCommand = "pnpm install && BASE_PATH=/ pnpm --filter @workspace/z-fantasy run build && pnpm --filter @workspace/api-server run build"
 
 [deploy]
