@@ -36,6 +36,7 @@ minimumReleaseAgeExclude:
 
 packages:
   - artifacts/*
+  - client
   - lib/*
   - lib/integrations/*
   - scripts
