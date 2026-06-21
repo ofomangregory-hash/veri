@@ -25,25 +25,25 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     return;
   }
   const adminOverride = req.isAdmin;
-  res.json(GetMeResponse.parse({
-    id: user.id,
-    username: user.username,
-    customNickname: user.customNickname,
-    userTraits: user.userTraits,
-    activeCharacterId: user.activeCharacterId,
-    ticketBalance: adminOverride ? 9999 : user.ticketBalance,
-    neonCardBalance: adminOverride ? 9999 : user.neonCardBalance,
-    subscriptionTier: adminOverride ? "Gold" : user.subscriptionTier,
-    lastLoginTimestamp: user.lastLoginTimestamp?.toISOString() ?? null,
-    weeklyCreationsCount: user.weeklyCreationsCount,
-    dailyTriggerRequestsCount: user.dailyTriggerRequestsCount,
-    unlockedMediaArray: user.unlockedMediaArray,
-    nsfwEnabled: user.nsfwEnabled,
-    avatarUrl: user.avatarUrl,
-    referralCode: user.referralCode,
-    staffPrivileges: user.staffPrivileges ?? null,
-    isAdmin: req.isAdmin,
-  }));
+      res.json(GetMeResponse.parse({
+      id: user.id,
+      username: user.username,
+      customNickname: user.customNickname || "",
+      userTraits: user.userTraits || "",
+      activeCharacterId: user.activeCharacterId || "",
+      ticketBalance: adminOverride ? 9999 : user.ticketBalance,
+      neonCardBalance: adminOverride ? 9999 : user.neonCardBalance,
+      subscriptionTier: adminOverride ? "Gold" : user.subscriptionTier,
+      lastLoginTimestamp: user.lastLoginTimestamp ? user.lastLoginTimestamp.toISOString() : null,
+      weeklyCreationsCount: user.weeklyCreationsCount ?? 0,
+      dailyTriggerRequestsCount: user.dailyTriggerRequestsCount ?? 0,
+      unlockedMediaArray: user.unlockedMediaArray || [],
+      nsfwEnabled: !!user.nsfwEnabled,
+      avatarUrl: user.avatarUrl || "",
+      referralCode: user.referralCode || "",
+      staffPrivileges: user.staffPrivileges ?? null,
+      isAdmin: req.isAdmin,
+    }));
 });
 
 router.patch("/auth/profile", async (req, res): Promise<void> => {
