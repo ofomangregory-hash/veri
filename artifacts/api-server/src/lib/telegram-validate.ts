@@ -24,8 +24,21 @@ export interface ValidatedInitData {
 export function validateTelegramInitData(initData: string): ValidatedInitData {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-  // Dev/test bypass — no bot token configured or explicit mock flag
-  if (initData === "mock_init_data_for_dev" || !botToken) {
+  // Dev/test bypass — explicit mock flag
+  if (initData === "mock_init_data_for_dev") {
+    return {
+      user: { id: 666666, username: "dev_user", first_name: "Dev" },
+      auth_date: Math.floor(Date.now() / 1000),
+      hash: "mock",
+    };
+  }
+
+  // No bot token configured — can't validate HMAC
+  if (!botToken) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Server misconfiguration: TELEGRAM_BOT_TOKEN not set. Cannot validate Telegram auth.");
+    }
+    // Dev fallback only
     return {
       user: { id: 666666, username: "dev_user", first_name: "Dev" },
       auth_date: Math.floor(Date.now() / 1000),

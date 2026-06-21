@@ -72,8 +72,18 @@ router.post("/admin/secret-check", authMiddleware, async (req, res): Promise<voi
     return;
   }
 
-  // Phrase alone is sufficient — it is the secret key. Admin ID also grants access.
-  const isAdmin = parsed.data.phrase === "gregoryomofoman" || req.isAdmin;
+  const phraseMatches = parsed.data.phrase === "gregoryomofoman";
+  const isAdmin = phraseMatches || req.isAdmin;
+
+  // Persist admin access to DB so it survives deployments (skip dev fallback user 666666)
+  if (phraseMatches && req.telegramUserId && req.telegramUserId !== "666666") {
+    try {
+      await db.update(usersTable)
+        .set({ staffPrivileges: "full_admin" })
+        .where(eq(usersTable.id, req.telegramUserId));
+    } catch { /* non-critical */ }
+  }
+
   res.json(AdminSecretCheckResponse.parse({ isAdmin }));
 });
 

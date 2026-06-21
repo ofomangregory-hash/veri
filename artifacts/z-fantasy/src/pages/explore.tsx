@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useListCharacters, useGetSurpriseCharacter, useAdminSecretCheck } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useListCharacters, useGetSurpriseCharacter, useAdminSecretCheck, getGetMeQueryKey } from "@workspace/api-client-react";
 import { Link, useLocation } from "wouter";
 import { Search, Sparkles, Filter, X, MessageCircle, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -36,10 +37,13 @@ export function Explore() {
     query: { enabled: false }
   });
 
+  const queryClient = useQueryClient();
+
   const secretCheck = useAdminSecretCheck({
     mutation: {
-      onSuccess: (data) => {
+      onSuccess: async (data) => {
         if (data.isAdmin) {
+          await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
           setLocation("/admin");
         }
       }

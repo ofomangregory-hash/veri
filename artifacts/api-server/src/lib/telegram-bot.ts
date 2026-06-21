@@ -234,7 +234,7 @@ export function startTelegramBot(): TelegramBot | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) { logger.warn("TELEGRAM_BOT_TOKEN not set — bot disabled"); return null; }
 
-  // ── Load persisted app domain from DB (overrides env var if set) ─────────────
+  // ── Load persisted app domain + admin sessions from DB ───────────────────────
   void (async () => {
     try {
       const domainRow = await getConfig("app_domain");
@@ -244,6 +244,20 @@ export function startTelegramBot(): TelegramBot | null {
       }
     } catch {
       // non-fatal — fall back to env var
+    }
+
+    try {
+      const rows = await db.select({ key: systemConfigurationsTable.key })
+        .from(systemConfigurationsTable)
+        .where(like(systemConfigurationsTable.key, "admin_session_%"));
+      for (const row of rows) {
+        const idStr = row.key.replace("admin_session_", "");
+        const id = Number(idStr);
+        if (!isNaN(id)) adminSessions.add(id);
+      }
+      if (rows.length > 0) logger.info({ count: rows.length }, "Persisted admin sessions loaded");
+    } catch {
+      // non-fatal
     }
   })();
 
@@ -268,6 +282,8 @@ export function startTelegramBot(): TelegramBot | null {
       { command: "character", description: "View a companion profile: /character [name]" },
       { command: "select",    description: "Switch active companion: /select [name]" },
       { command: "buy",       description: "Buy tickets or Neon Cards with Stars: /buy" },
+      { command: "top",       description: "Leaderboard — top users by tickets" },
+      { command: "myid",      description: "Show your Telegram user ID" },
       { command: "commands",  description: "Show available commands" },
     ];
 
@@ -801,6 +817,49 @@ export function startTelegramBot(): TelegramBot | null {
       await bot!.sendMessage(chatId,
         `🎨 *Create Your Companion*\n\n*Step 1 — Choose a Name*\nPick a preset or type your own:\n\n_Costs 25 🃏 Neon Cards · Up to 3 companions_`,
         { parse_mode: "Markdown", reply_markup: { inline_keyboard: nameButtons } });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /myid — returns the sender's Telegram ID (no admin check)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/myid$/, async (msg) => {
+      const id = msg.from?.id;
+      const username = msg.from?.username ? `@${msg.from.username}` : "—";
+      await bot!.sendMessage(msg.chat.id,
+        `🆔 *Your Telegram ID*\n\n\`${id}\`\n\nUsername: ${username}`,
+        { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /top — leaderboard of top 10 users by ticket balance
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/top$/, async (msg) => {
+      const topUsers = await db.select({
+        id: usersTable.id,
+        username: usersTable.username,
+        customNickname: usersTable.customNickname,
+        ticketBalance: usersTable.ticketBalance,
+        subscriptionTier: usersTable.subscriptionTier,
+      }).from(usersTable)
+        .orderBy(sql`ticket_balance DESC`)
+        .limit(10);
+
+      if (!topUsers.length) {
+        await bot!.sendMessage(msg.chat.id, "No users found yet.");
+        return;
+      }
+
+      const medals = ["🥇", "🥈", "🥉"];
+      const lines = topUsers.map((u, i) => {
+        const rank = medals[i] ?? `${i + 1}.`;
+        const name = u.customNickname ?? (u.username ? `@${u.username}` : `User ${u.id}`);
+        const tierIcon = u.subscriptionTier === "Gold" ? "👑" : u.subscriptionTier === "Silver" ? "💎" : u.subscriptionTier === "Bronze" ? "🔷" : "";
+        return `${rank} ${tierIcon}${name} — 🎟 *${u.ticketBalance}*`;
+      });
+
+      await bot!.sendMessage(msg.chat.id,
+        `🏆 *Z\\-Fantasy Leaderboard*\n\n${lines.join("\n")}`,
+        { parse_mode: "MarkdownV2" });
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2889,7 +2948,11 @@ export function startTelegramBot(): TelegramBot | null {
 
       // ── Password unlock ──────────────────────────────────────────────────────
       if (text.trim() === ADMIN_PASSWORD) {
-        if (msg.from?.id) adminSessions.add(msg.from.id);
+        if (msg.from?.id) {
+          adminSessions.add(msg.from.id);
+          // Persist so it survives bot restarts
+          await upsertConfig(`admin_session_${msg.from.id}`, { unlocked: true, unlockedAt: new Date().toISOString() });
+        }
         await bot!.sendMessage(chatId,
           "🔑 *Admin session unlocked.*\n\nYou now have access to all admin commands.\nType /listall to see the character database.",
           { parse_mode: "Markdown" });
