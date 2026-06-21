@@ -19,31 +19,41 @@ const router: IRouter = Router();
 router.use(authMiddleware);
 
 router.get("/auth/me", async (req, res): Promise<void> => {
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
+  const [user] = await db.select().from(userTable).where(eq(userTable.id, req.telegramUserId));
+  
+  // Strict admin validation for your explicit account details
+  const isExplicitAdmin = 
+    req.telegramUserId === "8704633862" || 
+    req.telegramUserId === 8704633862 || 
+    user?.username === "zxeelen" || 
+    user?.username === "@zxeelen";
+
+  const adminOverride = req.isAdmin || isExplicitAdmin;
+
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  const adminOverride = req.isAdmin;
-      res.json(GetMeResponse.parse({
-      id: user.id,
-      username: user.username,
-      customNickname: user.customNickname || "",
-      userTraits: user.userTraits || "",
-      activeCharacterId: user.activeCharacterId || "",
-      ticketBalance: adminOverride ? 9999 : user.ticketBalance,
-      neonCardBalance: adminOverride ? 9999 : user.neonCardBalance,
-      subscriptionTier: adminOverride ? "Gold" : user.subscriptionTier,
-      lastLoginTimestamp: user.lastLoginTimestamp ? user.lastLoginTimestamp.toISOString() : null,
-      weeklyCreationsCount: user.weeklyCreationsCount ?? 0,
-      dailyTriggerRequestsCount: user.dailyTriggerRequestsCount ?? 0,
-      unlockedMediaArray: user.unlockedMediaArray || [],
-      nsfwEnabled: !!user.nsfwEnabled,
-      avatarUrl: user.avatarUrl || "",
-      referralCode: user.referralCode || "",
-      staffPrivileges: user.staffPrivileges ?? null,
-      isAdmin: req.isAdmin,
-    }));
+
+  res.json(GetMeResponse.parse({
+    id: user.id,
+    username: user.username || "zxeelen",
+    customNickname: user.customNickname || "Admin",
+    userTraits: user.userTraits || "",
+    activeCharacterId: user.activeCharacterId || "",
+    ticketBalance: adminOverride ? 9999 : (user.ticketBalance ?? 0),
+    neonCardBalance: adminOverride ? 9999 : (user.neonCardBalance ?? 0),
+    subscriptionTier: adminOverride ? "Gold" : (user.subscriptionTier || "Free"),
+    lastLoginTimestamp: user.lastLoginTimestamp ? new Date(user.lastLoginTimestamp).toISOString() : null,
+    weeklyCreationsCount: user.weeklyCreationsCount ?? 0,
+    dailyTriggerRequestsCount: user.dailyTriggerRequestsCount ?? 0,
+    unlockedMediaArray: user.unlockedMediaArray || [],
+    nsfwEnabled: !!user.nsfwEnabled,
+    avatarUrl: user.avatarUrl || "",
+    referralCode: user.referralCode || "",
+    staffPrivileges: adminOverride ? "all" : (user.staffPrivileges ?? null),
+    isAdmin: adminOverride,
+  }));
 });
 
 router.patch("/auth/profile", async (req, res): Promise<void> => {
