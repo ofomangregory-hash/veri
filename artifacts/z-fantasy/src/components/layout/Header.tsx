@@ -38,13 +38,13 @@ export function Header({ onOpenDrawer }: HeaderProps) {
         </div>
       </div>
 
-      <div className="flex flex-col items-end gap-1">
+      <div className="flex flex-col items-end gap-1 min-w-0">
         <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-card border border-primary/40 box-glow-pink">
-          <span className="text-xs font-bold text-primary">{user?.ticketBalance ?? 0}</span>
+          <span className="text-xs font-bold text-primary tabular-nums">{(user?.ticketBalance ?? 0).toLocaleString()}</span>
           <span className="text-xs drop-shadow-[0_0_6px_rgba(255,0,127,0.8)]">🎟️</span>
         </div>
         <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-card border border-cyan-400/40">
-          <span className="text-xs font-bold text-cyan-400">{user?.neonCardBalance ?? 0}</span>
+          <span className="text-xs font-bold text-cyan-400 tabular-nums">{(user?.neonCardBalance ?? 0).toLocaleString()}</span>
           <span className="text-xs" style={{ textShadow: "0 0 6px rgba(0,240,255,0.8)" }}>🃏</span>
         </div>
       </div>

@@ -368,7 +368,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   await db.insert(transactionsTable).values({
     telegramId: req.telegramUserId,
     actionType: "selfie_request",
-    ticketAmount: -25,
+    ticketAmount: 0,
   });
 
   const [refreshedUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));

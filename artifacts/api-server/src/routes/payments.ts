@@ -253,7 +253,9 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
 
 // ── Ticket packs ─────────────────────────────────────────────────────────────
 const TICKET_PACKS: Record<string, { tickets: number; stars: number; label: string }> = {
-  starter: { tickets: 200, stars: 100, label: "Starter Pack — 200 Tickets" },
+  starter:  { tickets: 300,  stars: 100,  label: "Starter Pack — 300 Tickets" },
+  booster:  { tickets: 900,  stars: 300,  label: "Booster Pack — 900 Tickets (800 + 100 bonus)" },
+  mega:     { tickets: 2100, stars: 700,  label: "Mega Pack — 2100 Tickets (1800 + 300 bonus)" },
 };
 
 router.post("/payments/tickets/create-invoice", authMiddleware, async (req, res): Promise<void> => {
@@ -280,20 +282,22 @@ router.post("/payments/tickets/create-invoice", authMiddleware, async (req, res)
       res.status(400).json({ error: "customAmount must be an integer >= 10" });
       return;
     }
-    // Bonus: for every 100 tickets above 500, get 20 free
-    if (customAmount > 500) {
-      const hundredsOver500 = Math.floor((customAmount - 500) / 100);
-      bonusTickets = hundredsOver500 * 20;
+    // Bonus: for every 300 tickets above 900, get 60 free (20% bonus)
+    if (customAmount > 900) {
+      const blocksOver900 = Math.floor((customAmount - 900) / 300);
+      bonusTickets = blocksOver900 * 60;
+    } else if (customAmount > 600) {
+      bonusTickets = 30; // 10% bonus
     }
     tickets = customAmount;
-    stars = Math.ceil(customAmount / 2);
+    stars = Math.ceil(customAmount / 3);  // 3 tickets per 1 Star
     label = bonusTickets > 0
       ? `Custom — ${customAmount} Tickets (+${bonusTickets} Bonus)`
       : `Custom — ${customAmount} Tickets`;
   } else {
     const pack = TICKET_PACKS[packType];
     if (!pack) {
-      res.status(400).json({ error: "Invalid packType. Use: starter, custom" });
+      res.status(400).json({ error: "Invalid packType. Use: starter, booster, mega, custom" });
       return;
     }
     tickets = pack.tickets;

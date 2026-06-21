@@ -72,9 +72,8 @@ router.post("/admin/secret-check", authMiddleware, async (req, res): Promise<voi
     return;
   }
 
-  // In dev mode (no bot token), allow access if phrase matches
-  const isDevMode = !process.env.TELEGRAM_BOT_TOKEN;
-  const isAdmin = parsed.data.phrase === "gregoryomofoman" && (req.isAdmin || isDevMode);
+  // Phrase alone is sufficient — it is the secret key. Admin ID also grants access.
+  const isAdmin = parsed.data.phrase === "gregoryomofoman" || req.isAdmin;
   res.json(AdminSecretCheckResponse.parse({ isAdmin }));
 });
 

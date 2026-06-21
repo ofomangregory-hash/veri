@@ -16,6 +16,7 @@ const ADMIN_PASSWORD = "ofomangregory";
 // ── Pending multi-step states ─────────────────────────────────────────────────
 const pendingPhotoFor = new Map<number, string>(); // chatId → characterId (for /setcharphoto)
 const pendingBotPhoto = new Set<number>();          // chatIds waiting to set bot photo
+const pendingBroadcasts = new Map<number, string>(); // chatId → message (for broadcast preview)
 
 interface CreationState { step: "name" | "bio" | "genre"; name?: string; bio?: string }
 const pendingCreation = new Map<number, CreationState>(); // chatId → creation wizard state
@@ -266,6 +267,7 @@ export function startTelegramBot(): TelegramBot | null {
       { command: "browse",    description: "Browse all public companions" },
       { command: "character", description: "View a companion profile: /character [name]" },
       { command: "select",    description: "Switch active companion: /select [name]" },
+      { command: "buy",       description: "Buy tickets or Neon Cards with Stars: /buy" },
       { command: "commands",  description: "Show available commands" },
     ];
 
@@ -285,7 +287,9 @@ export function startTelegramBot(): TelegramBot | null {
       { command: "resetuser",          description: "Reset to Free + zero balance: /resetuser [userID]" },
       { command: "setstaff",           description: "Set staff role: /setstaff [userID] | limited_admin|full_admin|remove" },
       { command: "setusername",        description: "Set display name: /setusername [userID] | [name]" },
-      { command: "broadcast",          description: "Send to all users: /broadcast [message]" },
+      { command: "broadcast",          description: "Preview then send to all: /broadcast [message]" },
+      { command: "previewbroadcast",   description: "Preview broadcast without sending: /previewbroadcast [msg]" },
+      { command: "allcommands",        description: "Show full command reference list" },
       { command: "listall",            description: "All characters with visibility" },
       { command: "configall",          description: "Inline character config menu" },
       { command: "configurecharacter", description: "Full config dashboard: /configurecharacter [name]" },
@@ -323,12 +327,16 @@ export function startTelegramBot(): TelegramBot | null {
       logger.warn({ err }, "setMyCommands (public) failed")
     );
 
-    // Set full admin commands visible only to the master admin chat
-    const adminId = process.env.ADMIN_TELEGRAM_ID;
-    if (adminId) {
+    // Set full admin commands visible in the admin's chat (env var + hardcoded fallback)
+    const adminChatIds = [
+      process.env.ADMIN_TELEGRAM_ID ? Number(process.env.ADMIN_TELEGRAM_ID) : null,
+      Number(HARDCODED_ADMIN_ID),
+    ].filter((id): id is number => id !== null && !isNaN(id));
+
+    for (const chatId of adminChatIds) {
       bot.setMyCommands(adminCommands, {
-        scope: { type: "chat", chat_id: Number(adminId) },
-      }).catch(err => logger.warn({ err }, "setMyCommands (admin chat) failed"));
+        scope: { type: "chat", chat_id: chatId },
+      }).catch(err => logger.warn({ err, chatId }, "setMyCommands (admin chat) failed"));
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -556,6 +564,7 @@ export function startTelegramBot(): TelegramBot | null {
         `🏷 Name: @${user.username ?? "—"}${user.customNickname ? ` _(${user.customNickname})_` : ""}`,
         `${tierEmoji[user.subscriptionTier] ?? "💎"} Tier: *${user.subscriptionTier}*`,
         `🎟 Tickets: *${user.ticketBalance}*`,
+        `🃏 Neon Cards: *${user.neonCardBalance}*`,
         `🤖 Active Companion: *${activeCharName}*`,
         ``,
         `📊 *Activity*`,
@@ -958,6 +967,87 @@ export function startTelegramBot(): TelegramBot | null {
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  ADMIN: /allcommands — full command reference for admin
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/allcommands$/, async (msg) => {
+      if (!isAdmin(msg)) return;
+      const lines = [
+        `📋 *Full Command Reference*\n`,
+        `*— PUBLIC COMMANDS —*`,
+        `/start — Welcome + Open App button`,
+        `/profile — Your stats: tier, tickets, Neon Cards`,
+        `/daily — Claim daily +30 tickets & +15 Neon Cards`,
+        `/buy — Shop: buy tickets or Neon Cards with Stars`,
+        `/create — Create a companion (25 Neon Cards)`,
+        `/inventory — Your created companions`,
+        `/select [name] — Switch active companion`,
+        `/character [name] — View companion profile`,
+        `/browse — Browse all public companions`,
+        `/referral — Your referral link`,
+        `/premium — Subscribe with Telegram Stars`,
+        `/upgrade — View plan overview`,
+        `/commands — Show public command list`,
+        ``,
+        `*— ADMIN / USER MANAGEMENT —*`,
+        `/stats — Dashboard: users, premium, characters`,
+        `/listusers — All registered users`,
+        `/searchuser [query] — Search by username`,
+        `/whois [userID] — Full profile card`,
+        `/givetickets [userID] [amount] — Add/deduct tickets`,
+        `/addtickets [userID] [amount] — Add tickets`,
+        `/removetickets [userID] [amount] — Deduct tickets`,
+        `/addcards [userID] [amount] — Add Neon Cards`,
+        `/removecards [userID] [amount] — Deduct Neon Cards`,
+        `/addpremium [userID] [days/lifetime] — Grant premium`,
+        `/removepremium [userID] — Remove premium`,
+        `/resetuser [userID] — Reset to Free + zero balance`,
+        `/setstaff [userID] | limited_admin|full_admin|remove`,
+        `/setusername [userID] | [name] — Set display name`,
+        ``,
+        `*— BROADCAST —*`,
+        `/broadcast [message] — Preview then send to all users`,
+        `/previewbroadcast [message] — Preview only (no send)`,
+        ``,
+        `*— CHARACTER MANAGEMENT —*`,
+        `/listall — All characters with visibility`,
+        `/configall — Inline character config menu`,
+        `/configurecharacter [name] — Full config dashboard`,
+        `/createcharacter [name] | true/false | [backstory]`,
+        `/setvisibility [name] | public/private`,
+        `/deletecharacter [name]`,
+        `/renamechar [old] | [new] — Rename display name`,
+        `/renamecharacter [old] | [new] — Rename + update prompt`,
+        `/setprompt [name] [prompt] — Set system prompt`,
+        `/settagline [name] | [tagline]`,
+        `/setgreeting [name] | [message]`,
+        `/bulkgreeting [n1,n2] | [msg]`,
+        `/setcharphoto [name] — Set avatar (send photo after)`,
+        `/addcustomtrait mood|tone | [CharName] | [desc]`,
+        `/viewtraits [name]`,
+        `/resettraits [name]`,
+        `/addphoto [CharName] [keyword] — Link photo trigger`,
+        `/addvideo [CharName] [keyword] — Link video trigger`,
+        ``,
+        `*— BOT CONFIGURATION —*`,
+        `/setdomain [domain] — Update mini-app URL`,
+        `/setwelcome [text] — Set /start message`,
+        `/setdesc [text] — Set bot Telegram description`,
+        `/setbotphoto — Set bot profile picture`,
+        `/addcommand [trigger] | [response] — Custom command`,
+        ``,
+        `*— CHARACTER WIZARD —*`,
+        `/createwizard — Step-by-step creation wizard`,
+        `/wizardnames — All name options by type`,
+        `/wizardscenes — All available scenes`,
+        `/wizardbehaviors — Behavior options (35)`,
+        `/wizardpersonalities — Personality options (35)`,
+        `/wizardtraits — Trait options (35)`,
+        `/wizardmoods — Mood options (35)`,
+      ];
+      await bot!.sendMessage(msg.chat.id, lines.join("\n"), { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  ADMIN: /setstaff [userID] | limited_admin|full_admin|remove
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     bot.onText(/\/setstaff (.+)/, async (msg, match) => {
@@ -1001,12 +1091,36 @@ export function startTelegramBot(): TelegramBot | null {
       if (!isAdmin(msg)) return;
       const text = match?.[1]?.trim();
       if (!text) return;
-      const users = await db.select({ id: usersTable.id }).from(usersTable);
-      let sent = 0, failed = 0;
-      for (const u of users) {
-        try { await bot!.sendMessage(u.id, text); sent++; } catch { failed++; }
-      }
-      await bot!.sendMessage(msg.chat.id, `📢 Done — ✅ ${sent} sent, ❌ ${failed} failed`);
+      const totalUsers = await db.select({ count: sql<number>`count(*)` }).from(usersTable);
+      const count = Number(totalUsers[0]?.count ?? 0);
+
+      // Store pending and show preview with confirm/cancel
+      pendingBroadcasts.set(msg.chat.id, text);
+      await bot!.sendMessage(msg.chat.id,
+        `📣 *Broadcast Preview* — will reach *${count}* users:\n\n━━━━━━━━━━━━━━━\n${text}\n━━━━━━━━━━━━━━━\n\nConfirm to send?`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "✅ Send Now", callback_data: "broadcast_confirm" },
+              { text: "❌ Cancel",   callback_data: "broadcast_cancel"  },
+            ]],
+          },
+        }
+      );
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  ADMIN: /previewbroadcast — preview only, no send
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/previewbroadcast (.+)/, async (msg, match) => {
+      if (!isAdmin(msg)) return;
+      const text = match?.[1]?.trim();
+      if (!text) return;
+      await bot!.sendMessage(msg.chat.id,
+        `👁 *Preview Only* (not sent):\n\n━━━━━━━━━━━━━━━\n${text}\n━━━━━━━━━━━━━━━`,
+        { parse_mode: "Markdown" }
+      );
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1429,6 +1543,27 @@ export function startTelegramBot(): TelegramBot | null {
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /buy — purchase tickets or Neon Cards
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/buy$/, async (msg) => {
+      const chatId = msg.chat.id;
+      await bot!.sendMessage(chatId,
+        `🛒 *Z-Fantasy Shop*\n\nChoose what you'd like to buy:`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: "🎟 Buy Tickets", callback_data: "shop:tickets" },
+                { text: "🃏 Buy Neon Cards", callback_data: "shop:neon" },
+              ],
+            ],
+          },
+        }
+      );
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  /commands — full command reference (public + admin sections)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     bot.onText(/\/commands$/, async (msg) => {
@@ -1504,6 +1639,99 @@ export function startTelegramBot(): TelegramBot | null {
       const chatId = query.message?.chat.id;
       if (!chatId) return;
       await bot!.answerCallbackQuery(query.id);
+
+      // ── Broadcast confirm / cancel ────────────────────────────────────────
+      if (query.data === "broadcast_confirm" || query.data === "broadcast_cancel") {
+        if (!isAdmin({ from: query.from } as Message)) {
+          await bot!.answerCallbackQuery(query.id, { text: "Not authorized" });
+          return;
+        }
+        const pending = pendingBroadcasts.get(chatId);
+        pendingBroadcasts.delete(chatId);
+
+        if (query.data === "broadcast_cancel" || !pending) {
+          await bot!.editMessageText("❌ Broadcast cancelled.", {
+            chat_id: chatId, message_id: query.message?.message_id,
+          });
+          return;
+        }
+
+        // Actually send
+        const users = await db.select({ id: usersTable.id }).from(usersTable);
+        let sent = 0, failed = 0;
+        for (const u of users) {
+          try { await bot!.sendMessage(u.id, pending); sent++; } catch { failed++; }
+        }
+        await bot!.editMessageText(`📢 Done — ✅ ${sent} sent, ❌ ${failed} failed`, {
+          chat_id: chatId, message_id: query.message?.message_id,
+        });
+        return;
+      }
+
+      // ── Shop: buy tickets / neon cards ───────────────────────────────────
+      if (query.data === "shop:tickets") {
+        await bot!.editMessageText(
+          `🎟 *Buy Tickets*\n\nRate: 3 tickets per ⭐ Star\n\n` +
+          `• Starter — 300 tickets = 100 ⭐\n` +
+          `• Booster — 900 tickets = 300 ⭐ _(+100 bonus)_\n` +
+          `• Mega — 2 100 tickets = 700 ⭐ _(+300 bonus)_\n` +
+          `• Custom — type any amount in app\n\n` +
+          `Open the app to complete purchase:`,
+          {
+            chat_id: chatId,
+            message_id: query.message?.message_id,
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "🎟 Buy Tickets in App", web_app: { url: appUrl("/premium") } }],
+                [{ text: "◀ Back", callback_data: "shop:main" }],
+              ],
+            },
+          }
+        );
+        return;
+      }
+
+      if (query.data === "shop:neon") {
+        await bot!.editMessageText(
+          `🃏 *Buy Neon Cards*\n\nRate: 2 cards per ⭐ Star\n\n` +
+          `• Starter — 100 cards = 200 ⭐\n` +
+          `• Booster — 270 cards = 450 ⭐ _(+20 bonus)_\n` +
+          `• Mega — 550 cards = 950 ⭐ _(+50 bonus)_\n` +
+          `• Custom — any amount\n\n` +
+          `Open the app to complete purchase:`,
+          {
+            chat_id: chatId,
+            message_id: query.message?.message_id,
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "🃏 Buy Neon Cards in App", web_app: { url: appUrl("/premium") } }],
+                [{ text: "◀ Back", callback_data: "shop:main" }],
+              ],
+            },
+          }
+        );
+        return;
+      }
+
+      if (query.data === "shop:main") {
+        await bot!.editMessageText(
+          `🛒 *Z-Fantasy Shop*\n\nChoose what you'd like to buy:`,
+          {
+            chat_id: chatId,
+            message_id: query.message?.message_id,
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [[
+                { text: "🎟 Buy Tickets",    callback_data: "shop:tickets" },
+                { text: "🃏 Buy Neon Cards", callback_data: "shop:neon"    },
+              ]],
+            },
+          }
+        );
+        return;
+      }
 
       // ── Browse carousel navigation ─────────────────────────────────────────
       if (query.data === "browse_prev" || query.data === "browse_next") {
