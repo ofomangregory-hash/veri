@@ -1,5 +1,5 @@
 import TelegramBot, { type InlineKeyboardMarkup, type InlineKeyboardButton, type Message, type InlineQueryResult } from "node-telegram-bot-api";
-import { db, usersTable, charactersTable, systemConfigurationsTable, transactionsTable } from "@workspace/db";
+import { db, usersTable, charactersTable, systemConfigurationsTable, transactionsTable, conversationsTable } from "@workspace/db";
 import { eq, sql, count, like, ilike } from "drizzle-orm";
 import { logger } from "./logger";
 import { generateAIReply } from "./openrouter";
@@ -557,19 +557,40 @@ export function startTelegramBot(): TelegramBot | null {
         ? new Date(user.lastDailyClaim.getTime() + 24 * 60 * 60 * 1000)
         : null;
       const canClaim = !nextClaim || nextClaim <= new Date();
-      const claimLine = canClaim ? "✅ Daily tickets available — /daily" : `⏳ Next claim: ${nextClaim!.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      const claimLine = canClaim ? "✅ Daily rewards ready — /daily" : `⏳ Next claim: ${nextClaim!.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+
+      // Fetch conversation stats
+      const convRows = await db.select().from(conversationsTable).where(eq(conversationsTable.userId, userId));
+      const totalConvs = convRows.length;
+      const totalMessages = convRows.reduce((sum, c) => {
+        const history = (c.messageHistory as Array<{ role: string }>) ?? [];
+        return sum + history.filter(m => m.role === "user").length;
+      }, 0);
+      const activeConv = user.activeCharacterId
+        ? convRows.find(c => c.characterId === user.activeCharacterId)
+        : null;
+      const activeAP = activeConv?.affectionPoints ?? 0;
+      const apLevel = activeAP >= 300 ? "💜 Devoted" : activeAP >= 150 ? "❤️ Warm" : activeAP >= 50 ? "🤍 Friendly" : "💙 New";
 
       await bot!.sendMessage(chatId, [
         `👤 *Your Profile*`, ``,
         `🏷 Name: @${user.username ?? "—"}${user.customNickname ? ` _(${user.customNickname})_` : ""}`,
         `${tierEmoji[user.subscriptionTier] ?? "💎"} Tier: *${user.subscriptionTier}*`,
-        `🎟 Tickets: *${user.ticketBalance}*`,
-        `🃏 Neon Cards: *${user.neonCardBalance}*`,
-        `🤖 Active Companion: *${activeCharName}*`,
         ``,
-        `📊 *Activity*`,
-        `🎭 Characters Created: *${user.weeklyCreationsCount}* this week`,
-        `${claimLine}`,
+        `💰 *Wallet*`,
+        `🎟 Tickets: *${user.ticketBalance.toLocaleString()}*`,
+        `🃏 Neon Cards: *${user.neonCardBalance.toLocaleString()}*`,
+        ``,
+        `🤖 *Companion*`,
+        `Active: *${activeCharName}*`,
+        activeConv ? `Affection: *${activeAP} AP* — ${apLevel}` : ``,
+        ``,
+        `📊 *Stats*`,
+        `💬 Total messages sent: *${totalMessages.toLocaleString()}*`,
+        `🎭 Companions chatted: *${totalConvs}*`,
+        `🎨 Characters created: *${user.weeklyCreationsCount}* this week`,
+        ``,
+        claimLine,
         `🔗 Referral Code: \`${user.referralCode ?? "—"}\``,
         ``,
         user.subscriptionTier === "Free"

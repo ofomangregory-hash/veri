@@ -52,12 +52,8 @@ function serializeCharacter(c: NormalizedCharacter) {
   };
 }
 
-const TIER_WEEKLY_LIMITS: Record<string, number> = {
-  Free: 0,
-  Bronze: 10,
-  Silver: 25,
-  Gold: Infinity,
-};
+// Free users must upgrade — paid tiers are unlimited (NC cost is the gate)
+const FREE_USER_BLOCKED = true;
 
 router.get("/characters", async (req, res): Promise<void> => {
   const parsed = ListCharactersQueryParams.safeParse(req.query);
@@ -155,13 +151,8 @@ router.post("/characters", async (req, res): Promise<void> => {
   }
 
   const tier = user.subscriptionTier;
-  const weeklyLimit = TIER_WEEKLY_LIMITS[tier] ?? 0;
-  if (tier === "Free" && user.weeklyCreationsCount >= 1) {
+  if (FREE_USER_BLOCKED && tier === "Free") {
     res.status(402).json({ error: "Free users must upgrade to create characters." });
-    return;
-  }
-  if (weeklyLimit !== Infinity && user.weeklyCreationsCount >= weeklyLimit) {
-    res.status(402).json({ error: `Weekly creation limit reached for ${tier} tier.` });
     return;
   }
 
