@@ -58,12 +58,22 @@ export function Explore() {
     }
   });
 
+  const triggerSecretCheck = (val: string) => {
+    if (val === "gregoryomofoman") {
+      secretCheck.mutate({ data: { phrase: val } });
+    }
+  };
+
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchQuery(val);
     setPage(1);
-    if (val === "gregoryomofoman") {
-      secretCheck.mutate({ data: { phrase: val } });
+    triggerSecretCheck(val);
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      triggerSecretCheck(searchQuery);
     }
   };
 
@@ -85,6 +95,7 @@ export function Explore() {
           <Input 
             value={searchQuery}
             onChange={handleSearchChange}
+            onKeyDown={handleSearchKeyDown}
             placeholder="Search desires..."
             className="pl-10 bg-card border-secondary/50 focus-visible:ring-primary h-11"
           />
