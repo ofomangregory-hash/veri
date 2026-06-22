@@ -316,6 +316,7 @@ export function startTelegramBot(): TelegramBot | null {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const publicCommands = [
       { command: "start",     description: "Welcome message + Open App button" },
+      { command: "balance",   description: "Quick wallet check — tickets & Neon Cards" },
       { command: "profile",   description: "Your stats — balance, tier, active companion" },
       { command: "daily",     description: "Claim your daily +30 tickets & +15 Neon Cards" },
       { command: "create",    description: "Create a new companion (costs 25 Neon Cards)" },
@@ -658,6 +659,40 @@ export function startTelegramBot(): TelegramBot | null {
           ? `⚡ Upgrade for more tickets & companions — /upgrade`
           : ``,
       ].filter(s => s !== "").join("\n"), { parse_mode: "Markdown" });
+    });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  PUBLIC: /balance — quick wallet snapshot
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    bot.onText(/\/balance$/, async (msg) => {
+      const chatId = msg.chat.id;
+      const userId = String(msg.from?.id);
+      await syncUser(userId, msg.from?.username);
+      const [user] = await db.select({
+        ticketBalance: usersTable.ticketBalance,
+        neonCardBalance: usersTable.neonCardBalance,
+        subscriptionTier: usersTable.subscriptionTier,
+        lastDailyClaim: usersTable.lastDailyClaim,
+      }).from(usersTable).where(eq(usersTable.id, userId));
+      if (!user) { await bot!.sendMessage(chatId, "❌ No account found. Send /start to register."); return; }
+
+      const nextClaim = user.lastDailyClaim
+        ? new Date(user.lastDailyClaim.getTime() + 24 * 60 * 60 * 1000)
+        : null;
+      const canClaim = !nextClaim || nextClaim <= new Date();
+      const claimLine = canClaim
+        ? "✅ Daily reward ready — /daily"
+        : `⏳ Next claim in ${Math.ceil((nextClaim!.getTime() - Date.now()) / 3600000)}h`;
+
+      await bot!.sendMessage(chatId, [
+        `💰 *Your Wallet*`,
+        ``,
+        `🎟 Tickets: *${user.ticketBalance.toLocaleString()}*`,
+        `🃏 Neon Cards: *${user.neonCardBalance.toLocaleString()}*`,
+        `💎 Tier: *${user.subscriptionTier}*`,
+        ``,
+        claimLine,
+      ].join("\n"), { parse_mode: "Markdown" });
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
