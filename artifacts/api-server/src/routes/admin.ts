@@ -22,7 +22,7 @@ import {
   AdminSecretCheckResponse,
 } from "@workspace/api-zod";
 import { authMiddleware, adminOnly } from "../middlewares/auth";
-import { uploadBase64ToCloudinary, getGenreDefaultAvatar } from "../lib/cloudinary";
+import { getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterAvatar } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import { listSupabaseCharacters, createSupabaseCharacter } from "../lib/supabaseCharacters";
@@ -418,18 +418,7 @@ router.post("/admin/upload-media", async (req, res): Promise<void> => {
     return;
   }
 
-  try {
-    const { url, publicId } = await uploadBase64ToCloudinary(
-      parsed.data.base64Data,
-      parsed.data.characterId,
-      parsed.data.folder as "profile" | "auto_loop" | "trigger_pool" | "generate",
-      parsed.data.filename,
-    );
-    res.json(AdminUploadMediaResponse.parse({ url, publicId }));
-  } catch (err) {
-    req.log.error({ err }, "Cloudinary upload failed");
-    res.status(500).json({ error: "Upload failed. Cloudinary not configured." });
-  }
+  res.status(501).json({ error: "Image upload via base64 is not supported. Provide a direct image URL instead." });
 });
 
 // ─── System Configuration (CMS) ───────────────────────────────────────────────

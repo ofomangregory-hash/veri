@@ -18,6 +18,7 @@ import {
 import { authMiddleware } from "../middlewares/auth";
 import { getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterAvatar } from "../lib/imageGenerator";
+
 import { logger } from "../lib/logger";
 import {
   listSupabaseCharacters,

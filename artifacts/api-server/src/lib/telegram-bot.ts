@@ -280,6 +280,35 @@ export function startTelegramBot(): TelegramBot | null {
   try {
     bot = new TelegramBot(token, { polling: true });
 
+    // ── Global handler safety net ─────────────────────────────────────────────
+    // Monkeypatches onText and on so ANY uncaught error inside a handler:
+    //   1. Gets logged with full stack
+    //   2. Sends a friendly reply to the user instead of silently dropping it
+    // This makes all 60+ handlers safe without touching each one individually.
+    const _origOnText = bot.onText.bind(bot);
+    bot.onText = (regexp, callback) => {
+      _origOnText(regexp, async (msg, match) => {
+        try {
+          await (callback as (msg: any, match: any) => Promise<void>)(msg, match);
+        } catch (err) {
+          logger.error({ err }, "Bot onText handler error");
+          try { await bot!.sendMessage(msg.chat.id, "⚠️ Something went wrong. Please try again in a moment."); } catch { /* ignore */ }
+        }
+      });
+    };
+
+    const _origOn = bot.on.bind(bot);
+    bot.on = (event: any, callback: any) => {
+      _origOn(event, async (...args: any[]) => {
+        try {
+          await callback(...args);
+        } catch (err) {
+          logger.error({ err, event }, "Bot event handler error");
+        }
+      });
+      return bot!;
+    };
+
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  COMMAND VISIBILITY — setMyCommands
     //  Public users see only 4 commands; admin commands are fully hidden from

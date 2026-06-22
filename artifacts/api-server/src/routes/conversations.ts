@@ -17,7 +17,7 @@ import {
 } from "@workspace/api-zod";
 import { authMiddleware } from "../middlewares/auth";
 import { generateAIReply } from "../lib/openrouter";
-import { getAutoLoopImage, getGenreDefaultAvatar, getCharacterAssetUrl } from "../lib/cloudinary";
+import { getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterSelfie } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import { getSupabaseCharacterById, type NormalizedCharacter } from "../lib/supabaseCharacters";
@@ -249,7 +249,7 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
   const shouldIncludeImage = positionInLoop === loop.triggerAt && conv.dailyAutoImageCount < dailyAutoLimit;
 
   if (shouldIncludeImage) {
-    autoImageUrl = getAutoLoopImage(character.characterId);
+    autoImageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre ?? "Fantasy");
   }
 
   const timestamp = new Date().toISOString();
@@ -454,7 +454,7 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
   // Scenario image for secret_key gift
   let scenarioImageUrl: string | null = null;
   if (parsed.data.giftType === "secret_key") {
-    scenarioImageUrl = getCharacterAssetUrl(params.data.characterId, "generate", "intimate_1.jpg");
+    scenarioImageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre ?? "Fantasy");
   }
 
   res.json(SendGiftResponse.parse({
