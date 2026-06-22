@@ -234,6 +234,21 @@ export function startTelegramBot(): TelegramBot | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) { logger.warn("TELEGRAM_BOT_TOKEN not set — bot disabled"); return null; }
 
+  // ── Polling guard: never run long-polling in production ────────────────────
+  // Two instances polling the same bot token causes Telegram 409 Conflict.
+  // Production (Railway) should use webhooks or a single dedicated worker.
+  // Set TELEGRAM_POLLING=true to force polling on in any environment.
+  const isProduction = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
+  const forcePolling = process.env.TELEGRAM_POLLING === "true";
+  if (isProduction && !forcePolling) {
+    logger.info(
+      { NODE_ENV: process.env.NODE_ENV, RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT },
+      "Production environment detected — Telegram polling disabled to prevent 409 Conflict. " +
+      "Set TELEGRAM_POLLING=true to override."
+    );
+    return null;
+  }
+
   // ── Load persisted app domain + admin sessions from DB ───────────────────────
   void (async () => {
     try {
