@@ -9,8 +9,16 @@ export function initAuth() {
     tg.expand();
   }
 
-  const initData = tg?.initData || "";
-  setAuthTokenGetter(() => initData);
+  // Getter is lazy: reads initData fresh on every request so it works even if
+  // the Telegram WebApp JS finishes loading after initAuth() is called.
+  // Falls back to the dev bypass token only when running outside Telegram
+  // (Replit preview, local dev). The backend middleware blocks this token in
+  // production via NODE_ENV check, so it never reaches Railway users.
+  setAuthTokenGetter(() => {
+    const live = window.Telegram?.WebApp?.initData;
+    if (live) return live;
+    return "mock_init_data_for_dev";
+  });
 }
 
 // Add Telegram types for global window
