@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, sql, or } from "drizzle-orm";
+import crypto from "crypto";
 import { db, usersTable, charactersTable, conversationsTable, transactionsTable, systemConfigurationsTable } from "@workspace/db";
 import {
   GetAdminStatsResponse,
@@ -65,7 +66,26 @@ function serializeUser(u: typeof usersTable.$inferSelect) {
   };
 }
 
-// Secret phrase check — validates admin access from the explore search bar
+// ── Admin secret phrase verification ─────────────────────────────────────────
+// The phrase is compared server-side using a timing-safe hash check.
+// Set ADMIN_SECRET env var to your chosen passphrase.  If not set, falls back
+// to the legacy default so existing deployments keep working.
+const LEGACY_PHRASE = "gregoryomofoman";
+const ADMIN_SECRET_HASH = (() => {
+  const secret = process.env.ADMIN_SECRET?.trim() || LEGACY_PHRASE;
+  return crypto.createHash("sha256").update(secret).digest("hex");
+})();
+
+function phraseMatchesSecret(input: string): boolean {
+  if (!input) return false;
+  const inputHash = crypto.createHash("sha256").update(input.trim()).digest("hex");
+  try {
+    return crypto.timingSafeEqual(Buffer.from(inputHash, "hex"), Buffer.from(ADMIN_SECRET_HASH, "hex"));
+  } catch {
+    return false;
+  }
+}
+
 router.post("/admin/secret-check", authMiddleware, async (req, res): Promise<void> => {
   const parsed = AdminSecretCheckBody.safeParse(req.body);
   if (!parsed.success) {
@@ -73,7 +93,7 @@ router.post("/admin/secret-check", authMiddleware, async (req, res): Promise<voi
     return;
   }
 
-  const phraseMatches = parsed.data.phrase === "gregoryomofoman";
+  const phraseMatches = phraseMatchesSecret(parsed.data.phrase);
   const isAdmin = phraseMatches || req.isAdmin;
 
   // Persist admin access to DB so it survives deployments (skip dev fallback user 666666)

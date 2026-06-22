@@ -59,8 +59,8 @@ export function Explore() {
   });
 
   const triggerSecretCheck = (val: string) => {
-    if (val === "gregoryomofoman") {
-      secretCheck.mutate({ data: { phrase: val } });
+    if (val.trim().length >= 6) {
+      secretCheck.mutate({ data: { phrase: val.trim() } });
     }
   };
 
@@ -68,7 +68,6 @@ export function Explore() {
     const val = e.target.value;
     setSearchQuery(val);
     setPage(1);
-    triggerSecretCheck(val);
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
