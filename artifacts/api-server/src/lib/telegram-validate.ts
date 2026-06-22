@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { logger } from "./logger";
 
 export interface TelegramUser {
   id: number;
@@ -44,9 +45,26 @@ export function validateTelegramInitData(initData: string): ValidatedInitData {
     throw new Error("Telegram auth failed: empty initData");
   }
 
+  // Detect clearly non-initData strings (dev tokens, plain text, etc.)
+  // Real initData always contains at least "auth_date=", "hash=", "user="
+  if (!initData.includes("hash=") || !initData.includes("auth_date=")) {
+    logger.warn(
+      { payloadSnippet: initData.slice(0, 120) },
+      "Telegram auth failed: payload is not a valid initData string (missing hash= or auth_date=)"
+    );
+    throw new Error(
+      "Telegram auth failed: payload is not valid Telegram initData. " +
+      "This endpoint requires the initData string from window.Telegram.WebApp.initData."
+    );
+  }
+
   const params = new URLSearchParams(initData);
   const incomingHash = params.get("hash");
   if (!incomingHash) {
+    logger.warn(
+      { payloadSnippet: initData.slice(0, 120), keys: Array.from(params.keys()) },
+      "Telegram auth failed: hash parameter missing after URLSearchParams parse"
+    );
     throw new Error("Telegram auth failed: missing hash parameter");
   }
 
@@ -107,8 +125,6 @@ export function validateTelegramInitData(initData: string): ValidatedInitData {
 }
 
 export function extractInitData(authHeader: string | undefined): string {
-  // Fail-closed: missing or empty Authorization header is never silently
-  // promoted to a mock token. The validator will throw and return 401.
   if (!authHeader || authHeader.trim() === "") return "";
   return authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 }
