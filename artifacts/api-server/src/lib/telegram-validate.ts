@@ -16,15 +16,24 @@ export interface ValidatedInitData {
   start_param?: string;
 }
 
+const MAX_AUTH_AGE_SECONDS = 86400;
+
 /**
  * Validates the Telegram WebApp initData string using HMAC-SHA256.
- * Returns parsed user data if valid, throws if invalid.
- * In dev mode (no bot token or mock initData), injects mock user 666666.
+ *
+ * Algorithm (per Telegram docs):
+ *   1. Extract "hash" field from URL-encoded initData.
+ *   2. Alphabetically sort all remaining key=value pairs.
+ *   3. Join them with "\n" → data-check-string.
+ *   4. secret_key = HMAC-SHA256("WebAppData", bot_token)
+ *   5. expected_hash = HMAC-SHA256(secret_key, data-check-string) as hex
+ *   6. Timing-safe compare expected_hash === incoming hash.
+ *
+ * Returns parsed user data if valid, throws on any failure.
  */
 export function validateTelegramInitData(initData: string): ValidatedInitData {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-  // Dev/test bypass — explicit mock flag
   if (initData === "mock_init_data_for_dev") {
     return {
       user: { id: 666666, username: "dev_user", first_name: "Dev" },
@@ -33,12 +42,12 @@ export function validateTelegramInitData(initData: string): ValidatedInitData {
     };
   }
 
-  // No bot token configured — can't validate HMAC
   if (!botToken) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error("Server misconfiguration: TELEGRAM_BOT_TOKEN not set. Cannot validate Telegram auth.");
+      throw new Error(
+        "Server misconfiguration: TELEGRAM_BOT_TOKEN not set. Cannot validate Telegram auth."
+      );
     }
-    // Dev fallback only
     return {
       user: { id: 666666, username: "dev_user", first_name: "Dev" },
       auth_date: Math.floor(Date.now() / 1000),
@@ -47,8 +56,10 @@ export function validateTelegramInitData(initData: string): ValidatedInitData {
   }
 
   const params = new URLSearchParams(initData);
-  const hash = params.get("hash");
-  if (!hash) throw new Error("Missing hash");
+  const incomingHash = params.get("hash");
+  if (!incomingHash) {
+    throw new Error("Telegram auth failed: missing hash parameter");
+  }
 
   params.delete("hash");
 
@@ -62,26 +73,51 @@ export function validateTelegramInitData(initData: string): ValidatedInitData {
     .update(botToken)
     .digest();
 
-  const expectedHash = crypto
+  const expectedHashBuffer = crypto
     .createHmac("sha256", secretKey)
     .update(dataCheckString)
-    .digest("hex");
+    .digest();
 
-  if (expectedHash !== hash) {
-    throw new Error("Invalid initData signature");
+  const incomingHashBuffer = Buffer.from(incomingHash, "hex");
+
+  if (
+    expectedHashBuffer.length !== incomingHashBuffer.length ||
+    !crypto.timingSafeEqual(expectedHashBuffer, incomingHashBuffer)
+  ) {
+    throw new Error("Telegram auth failed: invalid initData signature");
+  }
+
+  const authDate = parseInt(params.get("auth_date") ?? "0", 10);
+  const ageSeconds = Math.floor(Date.now() / 1000) - authDate;
+  if (ageSeconds > MAX_AUTH_AGE_SECONDS) {
+    throw new Error(
+      `Telegram auth failed: initData expired (age=${ageSeconds}s, max=${MAX_AUTH_AGE_SECONDS}s)`
+    );
   }
 
   const userStr = params.get("user");
-  if (!userStr) throw new Error("Missing user in initData");
-  const user: TelegramUser = JSON.parse(userStr);
+  if (!userStr) throw new Error("Telegram auth failed: missing user field in initData");
 
-  const authDate = parseInt(params.get("auth_date") ?? "0", 10);
+  let user: TelegramUser;
+  try {
+    user = JSON.parse(userStr);
+  } catch {
+    throw new Error("Telegram auth failed: could not parse user JSON");
+  }
 
-  return { user, auth_date: authDate, hash, start_param: params.get("start_param") ?? undefined };
+  if (!user.id || typeof user.id !== "number") {
+    throw new Error("Telegram auth failed: user.id is missing or not a number");
+  }
+
+  return {
+    user,
+    auth_date: authDate,
+    hash: incomingHash,
+    start_param: params.get("start_param") ?? undefined,
+  };
 }
 
 export function extractInitData(authHeader: string | undefined): string {
-  // In dev mode with no auth header, return the mock token
   if (!authHeader) return "mock_init_data_for_dev";
   return authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 }

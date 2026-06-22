@@ -95,8 +95,13 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     const userId = String(validated.user.id);
     req.telegramUserId = userId;
     req.telegramUsername = validated.user.username;
+
     const HARDCODED_ADMIN_ID = "8704633862";
-    req.isAdmin = userId === process.env.ADMIN_TELEGRAM_ID || userId === HARDCODED_ADMIN_ID;
+    const userIdNum = Number(userId);
+    const envAdminId = (process.env.ADMIN_TELEGRAM_ID ?? "").trim();
+    const isHardcoded = userIdNum === Number(HARDCODED_ADMIN_ID);
+    const isEnvAdmin = envAdminId !== "" && userIdNum === Number(envAdminId);
+    req.isAdmin = isHardcoded || isEnvAdmin;
 
     // Load staffPrivileges from DB (non-blocking, best-effort)
     try {

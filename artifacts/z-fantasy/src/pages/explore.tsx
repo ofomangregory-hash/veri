@@ -43,10 +43,18 @@ export function Explore() {
     mutation: {
       onSuccess: async (data) => {
         if (data.isAdmin) {
+          setSearchQuery("");
           await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
           setLocation("/admin");
+        } else {
+          setSearchQuery("");
+          toast({ title: "Access denied", variant: "destructive" });
         }
-      }
+      },
+      onError: () => {
+        setSearchQuery("");
+        toast({ title: "Access denied", variant: "destructive" });
+      },
     }
   });
 
