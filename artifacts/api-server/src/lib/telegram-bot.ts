@@ -592,7 +592,7 @@ export function startTelegramBot(): TelegramBot | null {
       const claimLine = canClaim ? "✅ Daily rewards ready — /daily" : `⏳ Next claim: ${nextClaim!.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 
       // Fetch conversation stats
-      const convRows = await db.select().from(conversationsTable).where(eq(conversationsTable.userId, userId));
+      const convRows = await db.select().from(conversationsTable).where(eq(conversationsTable.telegramId, String(userId)));
       const totalConvs = convRows.length;
       const totalMessages = convRows.reduce((sum, c) => {
         const history = (c.messageHistory as Array<{ role: string }>) ?? [];
