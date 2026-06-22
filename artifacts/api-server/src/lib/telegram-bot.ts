@@ -278,16 +278,18 @@ export function startTelegramBot(): TelegramBot | null {
   })();
 
   try {
-    bot = new TelegramBot(token, { polling: true });
+    // Create bot WITHOUT auto-polling so we can clear webhooks first
+    bot = new TelegramBot(token, { polling: false });
 
     // ── Global handler safety net ─────────────────────────────────────────────
     // Monkeypatches onText and on so ANY uncaught error inside a handler:
-    //   1. Gets logged with full stack
-    //   2. Sends a friendly reply to the user instead of silently dropping it
-    // This makes all 60+ handlers safe without touching each one individually.
+    //   1. Logs every incoming message for Railway live-log visibility
+    //   2. Catches and logs errors instead of silently dropping them
+    //   3. Sends a friendly reply on error instead of leaving user hanging
     const _origOnText = bot.onText.bind(bot);
     bot.onText = (regexp, callback) => {
       _origOnText(regexp, async (msg, match) => {
+        logger.info({ userId: msg.from?.id, username: msg.from?.username, text: msg.text }, "[BOT UPDATE] Message received");
         try {
           await (callback as (msg: any, match: any) => Promise<void>)(msg, match);
         } catch (err) {
@@ -300,6 +302,10 @@ export function startTelegramBot(): TelegramBot | null {
     const _origOn = bot.on.bind(bot);
     bot.on = (event: any, callback: any) => {
       _origOn(event, async (...args: any[]) => {
+        if (event === "message") {
+          const msg = args[0] as any;
+          logger.info({ userId: msg?.from?.id, username: msg?.from?.username, text: msg?.text, event }, "[BOT UPDATE] Event received");
+        }
         try {
           await callback(...args);
         } catch (err) {
@@ -3232,7 +3238,24 @@ export function startTelegramBot(): TelegramBot | null {
 
     bot.on("polling_error", (err) => logger.error({ err }, "Telegram polling error"));
 
-    logger.info("Telegram bot started (polling)");
+    // ── Webhook cleanup + polling startup ─────────────────────────────────────
+    // Deletes any ghost webhook and drops backed-up updates before polling.
+    // This fixes Telegram 409 Conflict and stuck update loops on Railway.
+    void (async () => {
+      try {
+        await bot!.deleteWebhook({ drop_pending_updates: true });
+        logger.info("Webhook cleared and pending updates dropped");
+      } catch (err) {
+        logger.warn({ err }, "deleteWebhook failed — continuing to start polling anyway");
+      }
+      try {
+        await bot!.startPolling({ restart: false });
+        logger.info("Telegram bot polling active");
+      } catch (err) {
+        logger.error({ err }, "Bot polling startup failed — commands will not respond");
+      }
+    })();
+
     return bot;
   } catch (err) {
     logger.error({ err }, "Failed to start Telegram bot");
