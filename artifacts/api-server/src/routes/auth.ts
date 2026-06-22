@@ -18,22 +18,40 @@ const router: IRouter = Router();
 
 router.use(authMiddleware);
 
+/**
+ * Normalizes the staffPrivileges field before Zod validation.
+ * Railway DB can return a boolean (true/false) from the text column when
+ * data was inserted directly — Zod expects string | null and will throw
+ * "Expected string, received boolean" without this guard.
+ */
+function normalizeStaffPrivileges(val: unknown): string | null {
+  if (val === true) return "full_admin";
+  if (val === false || val === null || val === undefined) return null;
+  if (typeof val === "string" && val.length > 0) return val;
+  return null;
+}
+
 router.get("/auth/me", async (req, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  const adminOverride = req.isAdmin;
+
+  const staffPrivileges = normalizeStaffPrivileges(user.staffPrivileges);
+  // isAdmin is true if: hardcoded/env admin ID, OR staffPrivileges === "full_admin"
+  // (covers users who unlocked via the secret phrase)
+  const isAdmin = req.isAdmin || staffPrivileges === "full_admin";
+
   res.json(GetMeResponse.parse({
     id: user.id,
     username: user.username,
     customNickname: user.customNickname,
     userTraits: user.userTraits,
     activeCharacterId: user.activeCharacterId,
-    ticketBalance: adminOverride ? 9999 : user.ticketBalance,
-    neonCardBalance: adminOverride ? 9999 : user.neonCardBalance,
-    subscriptionTier: adminOverride ? "Gold" : user.subscriptionTier,
+    ticketBalance: isAdmin ? 9999 : user.ticketBalance,
+    neonCardBalance: isAdmin ? 9999 : user.neonCardBalance,
+    subscriptionTier: isAdmin ? "Gold" : user.subscriptionTier,
     lastLoginTimestamp: user.lastLoginTimestamp?.toISOString() ?? null,
     weeklyCreationsCount: user.weeklyCreationsCount,
     dailyTriggerRequestsCount: user.dailyTriggerRequestsCount,
@@ -41,8 +59,8 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     nsfwEnabled: user.nsfwEnabled,
     avatarUrl: user.avatarUrl,
     referralCode: user.referralCode,
-    staffPrivileges: user.staffPrivileges ?? null,
-    isAdmin: req.isAdmin,
+    staffPrivileges,
+    isAdmin,
   }));
 });
 
