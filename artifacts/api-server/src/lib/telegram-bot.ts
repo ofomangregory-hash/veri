@@ -4,6 +4,7 @@ import { eq, sql, count, like, ilike } from "drizzle-orm";
 import { logger } from "./logger";
 import { generateAIReply } from "./openrouter";
 import { generateCharacterAvatar } from "./imageGenerator";
+import { createSupabaseCharacter } from "./supabaseCharacters";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Trait { type: string; name: string; description: string }
@@ -1286,12 +1287,20 @@ export function startTelegramBot(): TelegramBot | null {
         return;
       }
       const [name, visStr, backstory] = parts;
-      await db.insert(charactersTable).values({
-        name, visibility: visStr === "true" ? "public" : "private",
+      const visibility1 = visStr === "true" ? "public" : "private";
+      const systemPrompt1 = `You are ${name}, an AI companion. ${backstory}`;
+      const creatorId1 = String(msg.from?.id);
+      const [pgChar1] = await db.insert(charactersTable).values({
+        name, visibility: visibility1,
         teaserDescription: backstory, genre: "General",
-        systemPrompt: `You are ${name}, an AI companion. ${backstory}`,
-        creatorId: String(msg.from?.id),
-      });
+        systemPrompt: systemPrompt1,
+        creatorId: creatorId1,
+      }).returning({ characterId: charactersTable.characterId });
+      createSupabaseCharacter({
+        characterId: pgChar1.characterId,
+        creatorId: creatorId1, name, visibility: visibility1,
+        systemPrompt: systemPrompt1, teaserDescription: backstory,
+      }).catch(err => logger.warn({ err }, "bot /createcharacter: Supabase mirror failed"));
       await bot!.sendMessage(msg.chat.id, `✅ *${name}* created.`, { parse_mode: "Markdown" });
     });
 
@@ -2051,6 +2060,14 @@ export function startTelegramBot(): TelegramBot | null {
           avatarUrl: botAvatarUrl,
         }).returning({ characterId: charactersTable.characterId, name: charactersTable.name });
 
+        createSupabaseCharacter({
+          characterId: newChar.characterId,
+          creatorId: userId, name: state.name, visibility: "private",
+          systemPrompt, teaserDescription: state.bio.slice(0, 100),
+          initialGreeting: `Hey 💜 I'm ${state.name}. ${state.bio.slice(0, 80)}…`,
+          avatarUrl: botAvatarUrl ?? null, imageSeed: botCharSeed,
+        }).catch(err => logger.warn({ err }, "bot wizard: Supabase mirror failed"));
+
         await db.update(usersTable).set({
           neonCardBalance: sql`neon_card_balance - 25`,
           weeklyCreationsCount: sql`weekly_creations_count + 1`,
@@ -2332,6 +2349,15 @@ export function startTelegramBot(): TelegramBot | null {
             avatarUrl: cwAvatarUrl,
           }).returning({ characterId: charactersTable.characterId, name: charactersTable.name });
 
+          createSupabaseCharacter({
+            characterId: newChar.characterId,
+            creatorId: cwUserId, name: cwSession.name, visibility: "private",
+            systemPrompt, teaserDescription: `A ${cwSession.genre} companion with a unique personality`,
+            initialGreeting: `Hey 💜 I'm ${cwSession.name}. I've been waiting for you...`,
+            avatarUrl: cwAvatarUrl ?? null, imageSeed: cwSeed,
+            tags: [cwSession.genre],
+          }).catch(err => logger.warn({ err }, "bot cw wizard: Supabase mirror failed"));
+
           if (!isCWAdmin) {
             await db.update(usersTable).set({
               neonCardBalance: sql`neon_card_balance - 25`,
@@ -2530,6 +2556,14 @@ export function startTelegramBot(): TelegramBot | null {
             creatorId: String(query.from.id),
             tags: [state.characterType ?? "Modern", ...state.behaviors.slice(0, 3)],
           }).returning({ characterId: charactersTable.characterId, name: charactersTable.name });
+
+          createSupabaseCharacter({
+            characterId: newChar.characterId,
+            creatorId: String(query.from.id), name: state.characterName, visibility,
+            systemPrompt, teaserDescription: state.bio ?? null,
+            initialGreeting: state.greeting ?? `Hey 💜 I'm ${state.characterName}.`,
+            tags: [state.characterType ?? "Modern", ...state.behaviors.slice(0, 3)],
+          }).catch(err => logger.warn({ err }, "bot createwizard: Supabase mirror failed"));
 
           pendingWizard.delete(chatId);
 

@@ -140,6 +140,7 @@ export async function getSupabaseCharacterById(characterId: string): Promise<Nor
 }
 
 export async function createSupabaseCharacter(values: {
+  characterId?: string;
   creatorId: string;
   name: string;
   visibility: "public" | "private";
@@ -153,22 +154,25 @@ export async function createSupabaseCharacter(values: {
 }): Promise<NormalizedCharacter | null> {
   if (!supabase) return null;
 
+  const payload: Record<string, unknown> = {
+    creator_id: values.creatorId,
+    name: values.name,
+    visibility: values.visibility,
+    system_prompt: values.systemPrompt,
+    avatar_url: values.avatarUrl ?? null,
+    teaser_description: values.teaserDescription ?? null,
+    initial_greeting: values.initialGreeting ?? null,
+    tags: values.tags ?? [],
+    tagline: values.tagline ?? null,
+    image_seed: values.imageSeed ? parseInt(values.imageSeed) : null,
+    trigger_metadata_array: [],
+    status_level: 1,
+  };
+  if (values.characterId) payload.character_id = values.characterId;
+
   const { data, error } = await supabase
     .from("characters")
-    .insert({
-      creator_id: values.creatorId,
-      name: values.name,
-      visibility: values.visibility,
-      system_prompt: values.systemPrompt,
-      avatar_url: values.avatarUrl ?? null,
-      teaser_description: values.teaserDescription ?? null,
-      initial_greeting: values.initialGreeting ?? null,
-      tags: values.tags ?? [],
-      tagline: values.tagline ?? null,
-      image_seed: values.imageSeed ? parseInt(values.imageSeed) : null,
-      trigger_metadata_array: [],
-      status_level: 1,
-    })
+    .insert(payload)
     .select("*")
     .single();
 
