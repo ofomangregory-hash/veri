@@ -9,7 +9,7 @@ export function initAuth() {
     tg.expand();
   }
 
-  const initData = tg?.initData || "mock_init_data_for_dev";
+  const initData = tg?.initData || "";
   setAuthTokenGetter(() => initData);
 }
 

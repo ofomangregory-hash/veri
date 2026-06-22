@@ -39,6 +39,11 @@ async function ensureSystemConfigTable(): Promise<void> {
 }
 
 async function main() {
+  // ── Startup env checks ────────────────────────────────────────────────────
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    logger.error("CRITICAL: TELEGRAM_BOT_TOKEN is not set — all Telegram auth requests will fail with 401");
+  }
+
   await ensureSystemConfigTable();
 
   app.listen(port, (err) => {
