@@ -1,0 +1,37 @@
+Please apply these system-wide updates across the codebase to resolve our deployment, user experience, and administrative data visibility roadblocks:
+
+1. Fix Admin Panel Global Character Visibility (Backend Endpoint & Query):
+Our admin panel is currently failing to display existing characters. It must display ALL system characters—including public characters, private characters, and characters created by other premium users.
+- Please locate the backend route or controller responsible for fetching characters for the Admin View (e.g., inside the api-server routes or admin controllers).
+- Inspect the Supabase / database query logic. Ensure that when a request is verified as coming from the ADMIN_ID, it completely bypasses the standard visibility filters (like 'is_public = true' or 'user_id = auth.uid()').
+- The administrative fetch query should execute a global select, for example:
+  let query = supabase.from('characters').select('*'); // No user_id or privacy restrictions applied for validated admins.
+- Ensure the frontend admin component maps, reads, and renders this incoming global data array cleanly.
+
+2. Audit and Fix General Admin Panel Vulnerabilities & Integrity:
+- Audit the admin dashboard components for any broken endpoints or data dependencies.
+- Ensure that any administrative action buttons (e.g., Delete Character, Edit System Settings, Force Moderation) explicitly verify the session's ADMIN_ID on the backend server before execution, adhering to a strict fail-closed security architecture.
+
+3. Fix Railway Healthcheck Failure (Backend Endpoint):
+Our Railway deployment fails during startup because its healthcheck pings to 'Path: /api/health' return 'service unavailable'. 
+- Verify or add an explicit, unauthenticated GET route for '/api/health' in the main backend entry file.
+- It must respond instantly with a 200 status code:
+  router.get('/api/health', (req, res) => res.status(200).json({ status: 'ok', timestamp: new Date() }));
+- Ensure it boots independently of heavy database connections so cold starts do not time out.
+
+4. Character Wizard Fixes (Multi-Step Grid Component):
+- Fix Step Progression: In the grid selection component (step 1/7), ensure that clicking a card (like 'Jade') immediately triggers the nextStep() or setStep(currentStep + 1) navigation state handler automatically rather than requiring an external button click.
+- Update Wizard Step Titles: Map the 7 wizard step labels to match these configuration names:
+  * Step 1: "Choose Identity"
+  * Step 2: "Select Gender & Preferences"
+  * Step 3: "Define Personality Traits"
+  * Step 4: "Customize Appearance"
+  * Step 5: "Set Voice & Tone"
+  * Step 6: "Write Core Backstory"
+  * Step 7: "Review & Confirm"
+
+5. Character Creation Form Fixes (Submission Form Component):
+- Verify that the custom creation form fields (Name, Age, Genre, Private/Public toggle, Bio, Initial Greeting, Avatar URL, Tags) correctly handle state binding via 'onChange' handlers.
+- Ensure the main submission button gathers the full state object, sanitizes or breaks string tags into comma-separated formats, and dispatches a valid POST request to the character persistence database endpoint.
+
+Please review the repository workspace, apply these unified logic patches, and confirm when the code changes are ready to deploy.

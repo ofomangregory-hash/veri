@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, Upload, X } from "lucide-react";
+import { Sparkles, Upload, X, Lock, Globe } from "lucide-react";
 
 const createSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -18,6 +18,7 @@ const createSchema = z.object({
   initialGreeting: z.string().optional(),
   genre: z.nativeEnum(CharacterInputGenre),
   tags: z.string().optional(),
+  visibility: z.enum(["public", "private"]).default("private"),
 });
 
 export function Create() {
@@ -37,6 +38,7 @@ export function Create() {
       initialGreeting: "",
       genre: "Modern",
       tags: "",
+      visibility: "private",
     }
   });
 
@@ -91,6 +93,7 @@ export function Create() {
         ...data,
         tags: tagsArray,
         avatarUrl,
+        visibility: data.visibility,
       }
     }, {
       onSuccess: (char) => {
@@ -255,6 +258,37 @@ export function Create() {
                   <Input placeholder="Tsundere, Hacker, Boss..." className="bg-card border-secondary/50 h-12" {...field} />
                 </FormControl>
                 <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Visibility Toggle */}
+          <FormField
+            control={form.control}
+            name="visibility"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="uppercase tracking-wider text-xs font-bold text-muted-foreground">Visibility</FormLabel>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button"
+                    onClick={() => field.onChange("private")}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-xl border font-bold text-sm transition-all ${
+                      field.value === "private"
+                        ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
+                        : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                    }`}>
+                    <Lock size={14} /> Private
+                  </button>
+                  <button type="button"
+                    onClick={() => field.onChange("public")}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-xl border font-bold text-sm transition-all ${
+                      field.value === "public"
+                        ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-300"
+                        : "border-border bg-card text-muted-foreground hover:border-cyan-400/30"
+                    }`}>
+                    <Globe size={14} /> Public
+                  </button>
+                </div>
               </FormItem>
             )}
           />

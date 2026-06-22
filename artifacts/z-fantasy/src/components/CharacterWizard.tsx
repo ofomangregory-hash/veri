@@ -170,8 +170,13 @@ export interface WizardData {
 type Step = "name" | "scene" | "behavior" | "personality" | "traits" | "mood" | "review";
 const STEPS: Step[] = ["name", "scene", "behavior", "personality", "traits", "mood", "review"];
 const STEP_LABELS: Record<Step, string> = {
-  name: "Name", scene: "Scene", behavior: "Behavior",
-  personality: "Personality", traits: "Traits", mood: "Mood", review: "Create",
+  name: "Choose Identity",
+  scene: "Select Gender & Preferences",
+  behavior: "Define Personality Traits",
+  personality: "Customize Appearance",
+  traits: "Set Voice & Tone",
+  mood: "Write Core Backstory",
+  review: "Review & Confirm",
 };
 
 const MAX_PERSONALITIES = 3;
@@ -368,11 +373,21 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
                   placeholder="e.g. Seraphina..."
                   className="w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/60"
                 />
+                {customName.length >= 2 && (
+                  <button onClick={goNext}
+                    className="w-full py-2.5 rounded-lg bg-primary/20 border border-primary/40 text-primary text-sm font-bold hover:bg-primary/30 transition-colors">
+                    Continue with "{customName}" →
+                  </button>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {filteredNames.map(({ name, type }) => (
-                  <button key={name} onClick={() => setData(d => ({ ...d, name, characterType: type }))}
+                  <button key={name} onClick={() => {
+                    setData(d => ({ ...d, name, characterType: type }));
+                    // Auto-advance immediately on preset name click
+                    setTimeout(goNext, 120);
+                  }}
                     className={`p-2.5 rounded-xl border text-left transition-all ${
                       data.name === name
                         ? "border-primary/60 bg-primary/15 box-glow-pink"

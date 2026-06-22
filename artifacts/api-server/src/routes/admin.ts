@@ -24,6 +24,7 @@ import { authMiddleware, adminOnly } from "../middlewares/auth";
 import { uploadBase64ToCloudinary, getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterAvatar } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
+import { listSupabaseCharacters, createSupabaseCharacter } from "../lib/supabaseCharacters";
 
 const router: IRouter = Router();
 
@@ -233,6 +234,33 @@ router.get("/admin/characters", async (req, res): Promise<void> => {
   const limit = 20;
   const offset = (page - 1) * limit;
 
+  // Admin sees ALL characters (no visibility or creator filter) — try Supabase first
+  const { items: supabaseItems, total: supabaseTotal } = await listSupabaseCharacters({ limit, offset });
+
+  if (supabaseItems.length > 0 || supabaseTotal > 0) {
+    res.json(AdminListCharactersResponse.parse({
+      items: supabaseItems.map(c => ({
+        characterId: c.characterId,
+        creatorId: c.creatorId,
+        name: c.name,
+        visibility: c.visibility,
+        systemPrompt: c.systemPrompt,
+        avatarUrl: c.avatarUrl ?? getGenreDefaultAvatar(c.genre ?? "Fantasy"),
+        teaserDescription: c.teaserDescription,
+        initialGreeting: c.initialGreeting,
+        tags: c.tags,
+        genre: c.genre ?? "Fantasy",
+        age: c.age,
+        triggerMetadataArray: Array.isArray(c.triggerMetadataArray) ? null : (c.triggerMetadataArray ?? null),
+      })),
+      total: supabaseTotal,
+      page,
+      limit,
+    }));
+    return;
+  }
+
+  // Fallback: Supabase unavailable or empty — read from PostgreSQL
   const [items, countResult] = await Promise.all([
     db.select().from(charactersTable).limit(limit).offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(charactersTable),
@@ -458,6 +486,20 @@ router.post("/admin/characters/create", async (req, res): Promise<void> => {
     age: age ?? null,
     imageSeed: seed,
   }).returning();
+
+  // Mirror to Supabase with the same ID so the webapp can see it
+  createSupabaseCharacter({
+    characterId: character.characterId,
+    creatorId: req.telegramUserId,
+    name: name.trim(),
+    visibility: safeVisibility as "public" | "private",
+    systemPrompt,
+    avatarUrl: finalAvatarUrl,
+    teaserDescription: bio ?? null,
+    initialGreeting: initialGreeting ?? null,
+    tags: Array.isArray(tags) ? tags : [],
+    imageSeed: seed,
+  }).catch(err => logger.warn({ err }, "admin create: Supabase mirror failed"));
 
   res.status(201).json(serializeCharacter(character));
 });
