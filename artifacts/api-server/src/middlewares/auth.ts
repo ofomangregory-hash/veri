@@ -49,7 +49,8 @@ function isDevPreviewRequest(req: Request): boolean {
   if (!isAllowedDomain) return false;
 
   const auth = req.headers.authorization ?? "";
-  const hasMockToken = auth === "" || auth === "Bearer mock_init_data_for_dev";
+  // Only the explicit mock token triggers dev bypass — empty auth is NOT granted
+  const hasMockToken = auth === "Bearer mock_init_data_for_dev";
 
   return hasMockToken;
 }
@@ -96,11 +97,14 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     req.telegramUserId = userId;
     req.telegramUsername = validated.user.username;
 
+    // Fail-closed admin check: both sides must be valid non-empty numbers
+    // that match. If userId is undefined/NaN or env var is unset, deny admin.
     const HARDCODED_ADMIN_ID = "8704633862";
     const userIdNum = Number(userId);
     const envAdminId = (process.env.ADMIN_TELEGRAM_ID ?? "").trim();
-    const isHardcoded = userIdNum === Number(HARDCODED_ADMIN_ID);
-    const isEnvAdmin = envAdminId !== "" && userIdNum === Number(envAdminId);
+    const validUserId = userId !== "" && !isNaN(userIdNum) && isFinite(userIdNum);
+    const isHardcoded = validUserId && String(userIdNum) === HARDCODED_ADMIN_ID;
+    const isEnvAdmin = validUserId && envAdminId !== "" && String(userIdNum) === String(Number(envAdminId));
     req.isAdmin = isHardcoded || isEnvAdmin;
 
     // Load staffPrivileges from DB (non-blocking, best-effort)

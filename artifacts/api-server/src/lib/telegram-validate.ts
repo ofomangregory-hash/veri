@@ -33,8 +33,13 @@ const MAX_AUTH_AGE_SECONDS = 86400;
  */
 export function validateTelegramInitData(initData: string): ValidatedInitData {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const isProd = process.env.NODE_ENV === "production";
 
+  // Mock token is NEVER allowed in production — fail closed immediately
   if (initData === "mock_init_data_for_dev") {
+    if (isProd) {
+      throw new Error("Telegram auth failed: mock token not accepted in production");
+    }
     return {
       user: { id: 666666, username: "dev_user", first_name: "Dev" },
       auth_date: Math.floor(Date.now() / 1000),
@@ -43,7 +48,7 @@ export function validateTelegramInitData(initData: string): ValidatedInitData {
   }
 
   if (!botToken) {
-    if (process.env.NODE_ENV === "production") {
+    if (isProd) {
       throw new Error(
         "Server misconfiguration: TELEGRAM_BOT_TOKEN not set. Cannot validate Telegram auth."
       );
@@ -118,6 +123,8 @@ export function validateTelegramInitData(initData: string): ValidatedInitData {
 }
 
 export function extractInitData(authHeader: string | undefined): string {
-  if (!authHeader) return "mock_init_data_for_dev";
+  // Fail-closed: missing or empty Authorization header is never silently
+  // promoted to a mock token. The validator will throw and return 401.
+  if (!authHeader || authHeader.trim() === "") return "";
   return authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 }
