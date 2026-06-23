@@ -3,13 +3,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, User as UserIcon, Ticket, Copy, Settings, ShieldAlert, Headphones,
   HelpCircle, LifeBuoy, Image, ChevronDown, ChevronRight, Trophy, RotateCcw,
-  BarChart2, MessageCircle, Sparkles, CreditCard, Star, Zap, Users,
+  BarChart2, MessageCircle, Sparkles, CreditCard, Star, Zap, Users, Edit2, Check,
 } from "lucide-react";
 import {
   useGetMe,
   useClaimDailyTickets,
   useGetReferralLink,
   useUpdateNsfwSetting,
+  useUpdateProfile,
   useGetMediaVault,
   useGetMyCharacters,
   useListConversations,
@@ -33,23 +34,26 @@ const QUEST_TASKS = [
 ];
 
 const TIER_COLOR: Record<string, string> = {
-  Free:   "text-muted-foreground border-border",
-  Bronze: "text-orange-400 border-orange-400/50",
-  Silver: "text-slate-300 border-slate-300/50",
-  Gold:   "text-yellow-400 border-yellow-400/50",
+  Free:          "text-muted-foreground border-border",
+  Bronze:        "text-orange-400 border-orange-400/50",
+  Silver:        "text-slate-300 border-slate-300/50",
+  Gold:          "text-yellow-400 border-yellow-400/50",
+  supreme_admin: "text-fuchsia-300 border-fuchsia-400/70",
 };
 
 const TIER_GLOW: Record<string, string> = {
-  Free:   "",
-  Bronze: "box-shadow: 0 0 12px rgba(251,146,60,0.4)",
-  Silver: "box-shadow: 0 0 12px rgba(203,213,225,0.4)",
-  Gold:   "box-shadow: 0 0 12px rgba(250,204,21,0.5)",
+  Free:          "",
+  Bronze:        "box-shadow: 0 0 12px rgba(251,146,60,0.4)",
+  Silver:        "box-shadow: 0 0 12px rgba(203,213,225,0.4)",
+  Gold:          "box-shadow: 0 0 12px rgba(250,204,21,0.5)",
+  supreme_admin: "box-shadow: 0 0 16px rgba(240,50,255,0.6)",
 };
 
 export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
   const { data: user } = useGetMe();
   const claimTickets = useClaimDailyTickets();
   const updateNsfw = useUpdateNsfwSetting();
+  const updateProfile = useUpdateProfile();
   const { data: vaultItems } = useGetMediaVault();
   const { data: myCharacters } = useGetMyCharacters();
   const { data: conversations } = useListConversations();
@@ -62,6 +66,8 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
   const [expandCache, setExpandCache] = useState(false);
   const [expandFaq, setExpandFaq] = useState<number | null>(null);
   const [nsfwOptimistic, setNsfwOptimistic] = useState<boolean | null>(null);
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState("");
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -110,6 +116,20 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
     });
   };
 
+  const handleSaveNickname = () => {
+    const trimmed = nicknameInput.trim();
+    updateProfile.mutate({ data: { customNickname: trimmed || null } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        setEditingNickname(false);
+        toast({ title: trimmed ? `Nickname set to "${trimmed}"` : "Nickname removed" });
+      },
+      onError: () => {
+        toast({ title: "Failed to save nickname", variant: "destructive" });
+      },
+    });
+  };
+
   const handleClearCache = () => {
     const keys = Object.keys(localStorage).filter(k =>
       k.startsWith("chat_") || k.startsWith("conv_") || k.startsWith("msg_")
@@ -121,6 +141,9 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
   const unlockedItems = (Array.isArray(vaultItems) ? vaultItems : []).filter(v => v.unlocked);
   const tier = user?.subscriptionTier ?? "Free";
   const tierColor = TIER_COLOR[tier] ?? TIER_COLOR.Free;
+  const tierLabel = tier === "supreme_admin" ? "Supreme Admin" : `${tier} Tier`;
+  const displayName = user?.customNickname || user?.username || "Guest";
+  const showUsernameBelow = !!user?.customNickname && !!user?.username;
   const charactersCreated = Array.isArray(myCharacters) ? myCharacters.length : 0;
   const charactersChatted = Array.isArray(conversations) ? conversations.length : 0;
 
@@ -186,11 +209,42 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-white truncate">
-                      {user?.customNickname || user?.username || "Guest"}
-                    </h3>
+                    {editingNickname ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          autoFocus
+                          value={nicknameInput}
+                          onChange={e => setNicknameInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") handleSaveNickname(); if (e.key === "Escape") setEditingNickname(false); }}
+                          placeholder="Enter nickname…"
+                          maxLength={32}
+                          className="flex-1 min-w-0 bg-background border border-primary/50 rounded px-2 py-0.5 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary"
+                        />
+                        <button
+                          onClick={handleSaveNickname}
+                          disabled={updateProfile.isPending}
+                          className="p-1 rounded bg-primary/20 border border-primary/50 hover:bg-primary/30 transition-colors shrink-0"
+                        >
+                          <Check size={14} className="text-primary" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 group">
+                        <h3 className="font-bold text-white truncate">{displayName}</h3>
+                        <button
+                          onClick={() => { setNicknameInput(user?.customNickname ?? ""); setEditingNickname(true); }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted shrink-0"
+                          title="Set nickname"
+                        >
+                          <Edit2 size={12} className="text-muted-foreground" />
+                        </button>
+                      </div>
+                    )}
+                    {showUsernameBelow && !editingNickname && (
+                      <p className="text-[10px] text-muted-foreground truncate">@{user?.username}</p>
+                    )}
                     <span className={`inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${tierColor}`}>
-                      {tier} Tier
+                      {tierLabel}
                     </span>
                   </div>
                   <button
@@ -258,10 +312,11 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
                             <span className="text-xs font-bold uppercase tracking-wider">{tier} Plan</span>
                           </div>
                           <p className="text-[11px] text-muted-foreground leading-relaxed">
-                            {tier === "Free"   && "Upgrade to unlock unlimited messages, exclusive characters, and priority image generation."}
-                            {tier === "Bronze" && "200 messages/day · 10 weekly creations · 25 Neon Cards daily bonus."}
-                            {tier === "Silver" && "Unlimited messages · 25 weekly creations · 37 Neon Cards daily bonus · priority queue."}
-                            {tier === "Gold"   && "Everything unlimited · 60 weekly creations · 56 Neon Cards daily · VIP access."}
+                            {tier === "Free"          && "Upgrade to unlock unlimited messages, exclusive characters, and priority image generation."}
+                            {tier === "Bronze"        && "200 messages/day · 10 weekly creations · 25 Neon Cards daily bonus."}
+                            {tier === "Silver"        && "Unlimited messages · 25 weekly creations · 37 Neon Cards daily bonus · priority queue."}
+                            {tier === "Gold"          && "Everything unlimited · 60 weekly creations · 56 Neon Cards daily · VIP access."}
+                            {tier === "supreme_admin" && "Unlimited everything · No restrictions · No cooldowns · Full access to all features."}
                           </p>
                         </div>
                       </div>

@@ -152,7 +152,7 @@ router.post("/characters", async (req, res): Promise<void> => {
   }
 
   const tier = user.subscriptionTier;
-  if (FREE_USER_BLOCKED && tier === "Free") {
+  if (FREE_USER_BLOCKED && tier === "Free" && !req.isAdmin) {
     res.status(402).json({ error: "Free users must upgrade to create characters." });
     return;
   }

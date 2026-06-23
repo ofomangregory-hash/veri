@@ -12,10 +12,13 @@ declare global {
       telegramUserId: string;
       telegramUsername?: string;
       isAdmin: boolean;
+      isSupremeAdmin: boolean;
       staffPrivileges?: string | null;
     }
   }
 }
+
+const SUPREME_ADMIN_USERNAME = "zxeleen";
 
 function generateReferralCode(): string {
   return crypto.randomBytes(6).toString("hex");
@@ -83,6 +86,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       req.telegramUserId = DEV_USER_ID;
       req.telegramUsername = "PreviewUser";
       req.isAdmin = true; // Dev preview always gets admin access for testing
+      req.isSupremeAdmin = false;
       req.staffPrivileges = null;
       await ensureDevUser();
       next();
@@ -94,8 +98,13 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     const validated = validateTelegramInitData(rawInitData);
 
     const userId = String(validated.user.id);
+    const telegramUsername = validated.user.username;
     req.telegramUserId = userId;
-    req.telegramUsername = validated.user.username;
+    req.telegramUsername = telegramUsername;
+
+    // Supreme admin check — username-based, immutable
+    const isUsernameSupreme = telegramUsername?.toLowerCase() === SUPREME_ADMIN_USERNAME.toLowerCase();
+    req.isSupremeAdmin = isUsernameSupreme;
 
     // Fail-closed admin check: both sides must be valid non-empty numbers
     // that match. If userId is undefined/NaN or env var is unset, deny admin.
@@ -105,7 +114,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     const validUserId = userId !== "" && !isNaN(userIdNum) && isFinite(userIdNum);
     const isHardcoded = validUserId && String(userIdNum) === HARDCODED_ADMIN_ID;
     const isEnvAdmin = validUserId && envAdminId !== "" && String(userIdNum) === String(Number(envAdminId));
-    req.isAdmin = isHardcoded || isEnvAdmin;
+    req.isAdmin = isHardcoded || isEnvAdmin || isUsernameSupreme;
 
     // Load staffPrivileges from DB (non-blocking, best-effort)
     try {
@@ -124,20 +133,29 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       referredBy = startParam.replace("ref_", "");
     }
 
+    // Upsert user — supreme admin gets their tier set/maintained on every login
     await db.insert(usersTable).values({
       id: userId,
-      username: validated.user.username ?? null,
+      username: telegramUsername ?? null,
       avatarUrl: validated.user.photo_url ?? null,
       referralCode,
       referredBy: referredBy ?? null,
       ticketBalance: referredBy ? 65 : 50,
-      subscriptionTier: "Free",
+      subscriptionTier: isUsernameSupreme ? "supreme_admin" : "Free",
+      staffPrivileges: isUsernameSupreme ? "full_admin" : null,
     }).onConflictDoUpdate({
       target: usersTable.id,
       set: {
         lastLoginTimestamp: new Date(),
         username: sql`COALESCE(EXCLUDED.username, users.username)`,
         avatarUrl: sql`COALESCE(EXCLUDED.avatar_url, users.avatar_url)`,
+        // Keep supreme_admin tier/privileges locked in on every login
+        subscriptionTier: isUsernameSupreme
+          ? sql`'supreme_admin'`
+          : sql`COALESCE(users.subscription_tier, 'Free')`,
+        staffPrivileges: isUsernameSupreme
+          ? sql`'full_admin'`
+          : sql`users.staff_privileges`,
       },
     });
 

@@ -39,8 +39,6 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   }
 
   const staffPrivileges = normalizeStaffPrivileges(user.staffPrivileges);
-  // isAdmin is true if: hardcoded/env admin ID, OR staffPrivileges === "full_admin"
-  // (covers users who unlocked via the secret phrase)
   const isAdmin = req.isAdmin || staffPrivileges === "full_admin";
 
   res.json(GetMeResponse.parse({
@@ -49,9 +47,9 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     customNickname: user.customNickname,
     userTraits: user.userTraits,
     activeCharacterId: user.activeCharacterId,
-    ticketBalance: isAdmin ? 9999 : user.ticketBalance,
-    neonCardBalance: isAdmin ? 9999 : user.neonCardBalance,
-    subscriptionTier: isAdmin ? "Gold" : user.subscriptionTier,
+    ticketBalance: user.ticketBalance,
+    neonCardBalance: user.neonCardBalance,
+    subscriptionTier: user.subscriptionTier,
     lastLoginTimestamp: user.lastLoginTimestamp?.toISOString() ?? null,
     weeklyCreationsCount: user.weeklyCreationsCount,
     dailyTriggerRequestsCount: user.dailyTriggerRequestsCount,
