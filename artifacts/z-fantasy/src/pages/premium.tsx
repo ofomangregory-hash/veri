@@ -336,35 +336,50 @@ export function Premium() {
           <h2 className="text-lg font-bold uppercase tracking-widest text-yellow-400" style={{ textShadow: "0 0 10px rgba(250,204,21,0.7)" }}>
             Ticket Shop
           </h2>
+          <span className="ml-auto px-2 py-0.5 rounded-full bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 text-[10px] font-black uppercase tracking-wider">
+            1 ⭐ = 3 🎟️
+          </span>
         </div>
         <p className="text-xs text-muted-foreground mb-4">
-          Tickets fuel AI messages. 2 Stars = 1 Ticket. Orders over 500 get +20 bonus per 100.
+          Tickets fuel AI messages. Rate: <span className="text-yellow-400 font-semibold">3 Tickets per 1 ⭐ Star</span>. Bulk orders get bonus tickets.
         </p>
 
-        {/* Fixed starter pack */}
-        <button
-          onClick={() => handleBuyTickets("starter")}
-          disabled={buyingTickets === "starter"}
-          className="w-full p-4 rounded-2xl bg-card border border-yellow-500/40 hover:shadow-[0_0_20px_rgba(250,204,21,0.25)] transition-all flex items-center justify-between mb-3 disabled:opacity-50"
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">🎟</span>
-            <div className="text-left">
-              <p className="text-sm font-black text-yellow-400 uppercase tracking-wide">Starter Pack</p>
-              <p className="text-xs text-muted-foreground">200 Tickets instantly</p>
-            </div>
-          </div>
-          <span className="text-sm font-bold text-white">100 ⭐</span>
-        </button>
+        {/* Packs */}
+        <div className="space-y-3 mb-3">
+          {[
+            { id: "starter", label: "Starter Pack", tickets: 300, stars: 100, bonus: null },
+            { id: "booster", label: "Booster Pack", tickets: 900, stars: 300, bonus: "+100 bonus" },
+            { id: "mega",    label: "Mega Pack",    tickets: 2100, stars: 700, bonus: "+300 bonus" },
+          ].map(pack => (
+            <button
+              key={pack.id}
+              onClick={() => handleBuyTickets(pack.id)}
+              disabled={buyingTickets === pack.id}
+              className="w-full p-4 rounded-2xl bg-card border border-yellow-500/40 hover:shadow-[0_0_20px_rgba(250,204,21,0.25)] transition-all flex items-center justify-between disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">🎟</span>
+                <div className="text-left">
+                  <p className="text-sm font-black text-yellow-400 uppercase tracking-wide">{pack.label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {pack.tickets.toLocaleString()} Tickets{pack.bonus ? <span className="text-yellow-300 ml-1">{pack.bonus}</span> : ""}
+                  </p>
+                </div>
+              </div>
+              <span className="text-sm font-bold text-white">{pack.stars} ⭐</span>
+            </button>
+          ))}
+        </div>
 
         {/* Custom ticket amount */}
         <div className="p-4 rounded-2xl bg-card border border-border">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Custom Amount (2 Stars : 1 Ticket)</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Custom Amount — 1 ⭐ = 3 Tickets</p>
           {(() => {
             const customTicketAmt = parseInt(customTickets, 10);
-            const customTicketStars = !isNaN(customTicketAmt) && customTicketAmt >= 10 ? Math.ceil(customTicketAmt / 2) : null;
-            const customTicketBonus = !isNaN(customTicketAmt) && customTicketAmt > 500
-              ? Math.floor((customTicketAmt - 500) / 100) * 20 : 0;
+            const customTicketStars = !isNaN(customTicketAmt) && customTicketAmt >= 10 ? Math.ceil(customTicketAmt / 3) : null;
+            const customTicketBonus = !isNaN(customTicketAmt) && customTicketAmt > 900
+              ? Math.floor((customTicketAmt - 900) / 300) * 60
+              : !isNaN(customTicketAmt) && customTicketAmt > 600 ? 30 : 0;
             return (
               <>
                 <div className="flex gap-2">
