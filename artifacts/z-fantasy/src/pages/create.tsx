@@ -1,46 +1,70 @@
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { useCreateCharacter, CharacterInputGenre } from "@workspace/api-client-react";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { CharacterInputGenre } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, Upload, X, Lock, Globe } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Sparkles, Upload, X, Lock, Globe, ChevronLeft, ChevronRight,
+  EyeOff, Eye, Check,
+} from "lucide-react";
+import { getGetMeQueryKey } from "@workspace/api-client-react";
 
-const createSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  age: z.string().optional(),
-  bio: z.string().optional(),
-  initialGreeting: z.string().optional(),
-  genre: z.nativeEnum(CharacterInputGenre),
-  tags: z.string().optional(),
-  visibility: z.enum(["public", "private"]).default("private"),
-});
+const PRESET_NAMES = ["Nexus-9", "Lyra", "Vex", "Aria", "Cipher", "Nyx", "Seraph", "Zara"];
+
+const GENRES = Object.values(CharacterInputGenre);
+
+const GENRE_ICONS: Record<string, string> = {
+  Fantasy: "🧙",
+  "Sci-Fi": "🚀",
+  "Dark Goth": "🖤",
+  Anime: "🌸",
+  Modern: "🏙️",
+  Horror: "👁️",
+  Romance: "💕",
+  Adventure: "⚔️",
+};
+
+const STEPS = [
+  { id: 1, title: "Entity Name",       subtitle: "Choose or type your companion's identity" },
+  { id: 2, title: "Visual Form",       subtitle: "Upload an avatar for your entity" },
+  { id: 3, title: "Origin Genre",      subtitle: "What world does your entity come from?" },
+  { id: 4, title: "Core Data",         subtitle: "Age & biographical directives" },
+  { id: 5, title: "First Contact",     subtitle: "Their opening transmission" },
+  { id: 6, title: "Signal Tags",       subtitle: "Classify your entity's attributes" },
+  { id: 7, title: "Content Rating",    subtitle: "Set the content boundaries" },
+  { id: 8, title: "Visibility",        subtitle: "Who can discover this entity?" },
+];
+
+function getToken() {
+  return (window as unknown as { Telegram?: { WebApp?: { initData?: string } } })
+    .Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
+}
 
 export function Create() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const createMutation = useCreateCharacter();
+  const queryClient = useQueryClient();
+
+  const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [name, setName] = useState("");
+  const [usingCustomName, setUsingCustomName] = useState(false);
+  const [customNameInput, setCustomNameInput] = useState("");
+
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const form = useForm<z.infer<typeof createSchema>>({
-    resolver: zodResolver(createSchema),
-    defaultValues: {
-      name: "",
-      age: "",
-      bio: "",
-      initialGreeting: "",
-      genre: "Modern",
-      tags: "",
-      visibility: "private",
-    }
-  });
+  const [genre, setGenre] = useState<string>(GENRES[0]);
+  const [age, setAge] = useState("");
+  const [bio, setBio] = useState("");
+  const [greeting, setGreeting] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
+  const [isNsfw, setIsNsfw] = useState(false);
+  const [visibility, setVisibility] = useState<"public" | "private">("private");
+
+  const resolvedName = usingCustomName ? customNameInput.trim() : name;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -50,8 +74,7 @@ export function Create() {
       return;
     }
     setAvatarFile(file);
-    const url = URL.createObjectURL(file);
-    setAvatarPreview(url);
+    setAvatarPreview(URL.createObjectURL(file));
   }
 
   function clearAvatar() {
@@ -61,247 +84,485 @@ export function Create() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  const onSubmit = async (data: z.infer<typeof createSchema>) => {
-    const tagsArray = data.tags ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+  function canAdvance(): boolean {
+    if (step === 1) return resolvedName.length > 0;
+    return true;
+  }
 
-    let avatarUrl: string | undefined;
+  function next() {
+    if (!canAdvance()) return;
+    if (step < STEPS.length) setStep(s => s + 1);
+  }
 
-    if (avatarFile) {
-      const formData = new FormData();
-      formData.append("file", avatarFile);
-      const token = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData || "mock_init_data_for_dev";
+  function prev() {
+    if (step > 1) setStep(s => s - 1);
+  }
 
-      try {
-        const res = await fetch("/api/media/upload", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
-        if (res.ok) {
-          const json = await res.json() as { url?: string };
-          avatarUrl = json.url;
-        } else {
-          toast({ title: "Image upload failed, continuing without avatar", variant: "destructive" });
-        }
-      } catch {
-        toast({ title: "Image upload failed, continuing without avatar", variant: "destructive" });
-      }
+  async function handleSubmit() {
+    if (!resolvedName) {
+      toast({ title: "Name is required", variant: "destructive" });
+      setStep(1);
+      return;
     }
 
-    createMutation.mutate({
-      data: {
-        ...data,
-        tags: tagsArray,
-        avatarUrl,
-        visibility: data.visibility,
-      }
-    }, {
-      onSuccess: (char) => {
-        toast({ title: "Character Created!" });
-        setLocation(`/chat/${char.characterId}`);
-      },
-      onError: (err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        toast({
-          title: "Creation Failed",
-          description: message || "Not enough Neon Cards or validation error.",
-          variant: "destructive"
+    setSubmitting(true);
+    try {
+      let avatarUrl: string | undefined;
+
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append("file", avatarFile);
+        const up = await fetch("/api/media/upload", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${getToken()}` },
+          body: formData,
         });
+        if (up.ok) {
+          const j = await up.json() as { url?: string };
+          avatarUrl = j.url;
+        }
       }
-    });
-  };
+
+      const tags = tagsInput
+        ? tagsInput.split(",").map(t => t.trim()).filter(Boolean)
+        : [];
+
+      const res = await fetch("/api/characters", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          name: resolvedName,
+          genre,
+          age: age || undefined,
+          bio: bio || undefined,
+          initialGreeting: greeting || undefined,
+          tags,
+          avatarUrl,
+          visibility,
+          isNsfw,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? "Creation failed");
+      }
+
+      const char = await res.json() as { characterId: string };
+      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      toast({ title: "✨ Entity Manifested!", description: `${resolvedName} is now live.` });
+      setLocation(`/chat/${char.characterId}`);
+    } catch (err) {
+      toast({
+        title: "Manifestation Failed",
+        description: err instanceof Error ? err.message : "Not enough Neon Cards or validation error.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const progressPct = (step / STEPS.length) * 100;
+  const currentStep = STEPS[step - 1];
 
   return (
-    <div className="p-4 pb-24">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold uppercase tracking-widest text-glow-pink">Manifest</h1>
-        <div className="px-3 py-1 rounded-full bg-cyan-400/10 border border-cyan-400/40 text-cyan-400 font-bold flex items-center gap-1 text-sm">
-          -25 🃏
+    <div className="flex flex-col h-[100dvh] bg-background">
+      {/* Header */}
+      <div className="shrink-0 px-4 pt-4 pb-2">
+        <div className="flex items-center justify-between mb-3">
+          <h1 className="text-xl font-bold uppercase tracking-widest text-glow-pink">Manifest</h1>
+          <div className="px-3 py-1 rounded-full bg-cyan-400/10 border border-cyan-400/40 text-cyan-400 font-bold flex items-center gap-1 text-sm">
+            -25 🃏
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="flex items-center gap-2 mb-1">
+          {STEPS.map(s => (
+            <div
+              key={s.id}
+              className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                s.id < step ? "bg-primary" : s.id === step ? "bg-primary/60" : "bg-border"
+              }`}
+            />
+          ))}
+        </div>
+        <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+          <span>Step {step} of {STEPS.length}</span>
+          <span>{Math.round(progressPct)}%</span>
         </div>
       </div>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-          {/* Avatar Upload */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-          <div
-            onClick={() => !avatarPreview && fileInputRef.current?.click()}
-            className={`w-full aspect-video rounded-xl border-2 border-dashed flex items-center justify-center flex-col gap-2 transition-colors relative overflow-hidden ${
-              avatarPreview
-                ? "border-primary/60 cursor-default"
-                : "border-border hover:border-primary cursor-pointer group"
-            }`}
-          >
-            {avatarPreview ? (
+      {/* Step content */}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="mb-6">
+          <h2 className="text-lg font-bold text-white">{currentStep.title}</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">{currentStep.subtitle}</p>
+        </div>
+
+        {/* ── Step 1: Name ── */}
+        {step === 1 && (
+          <div className="space-y-4">
+            {!usingCustomName ? (
               <>
-                <img src={avatarPreview} alt="Avatar preview" className="absolute inset-0 w-full h-full object-cover" />
+                <p className="text-xs text-muted-foreground">Select a preset or enter your own</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {PRESET_NAMES.map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setName(n)}
+                      className={`py-3 px-4 rounded-xl border font-bold text-sm transition-all ${
+                        name === n
+                          ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
+                          : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
                 <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); clearAvatar(); }}
-                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors z-10"
+                  onClick={() => { setUsingCustomName(true); setName(""); }}
+                  className="w-full py-3 rounded-xl border border-dashed border-secondary/50 text-secondary font-bold text-sm hover:border-secondary hover:bg-secondary/10 transition-all"
                 >
-                  <X size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                  className="absolute bottom-2 right-2 px-3 py-1 rounded-lg bg-black/60 text-white text-xs font-semibold hover:bg-black/80 transition-colors z-10 flex items-center gap-1"
-                >
-                  <Upload size={12} /> Change
+                  ✏️ Enter Custom Name
                 </button>
               </>
             ) : (
               <>
-                <Upload size={32} className="text-muted-foreground group-hover:text-primary transition-colors" />
-                <span className="text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors">
-                  Tap to upload avatar
-                </span>
-                <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <input
+                  autoFocus
+                  value={customNameInput}
+                  onChange={e => setCustomNameInput(e.target.value)}
+                  placeholder="Type your entity's name..."
+                  maxLength={48}
+                  className="w-full h-14 rounded-xl border border-primary/50 bg-card px-4 text-base font-bold text-white placeholder:text-muted-foreground outline-none focus:border-primary focus:shadow-[0_0_16px_rgba(255,0,240,0.2)] transition-all"
+                />
+                <button
+                  onClick={() => { setUsingCustomName(false); setCustomNameInput(""); }}
+                  className="text-xs text-muted-foreground hover:text-white transition-colors"
+                >
+                  ← Back to presets
+                </button>
               </>
             )}
           </div>
+        )}
 
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="uppercase tracking-wider text-xs font-bold text-muted-foreground">Entity Name</FormLabel>
-                <FormControl>
-                  <Input placeholder="e.g. Nexus-9" className="bg-card border-secondary/50 focus-visible:ring-primary h-12" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="genre"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="uppercase tracking-wider text-xs font-bold text-muted-foreground">Genre</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="bg-card border-secondary/50 h-12">
-                        <SelectValue placeholder="Select genre" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {Object.values(CharacterInputGenre).map(g => (
-                        <SelectItem key={g} value={g}>{g}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
+        {/* ── Step 2: Avatar ── */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
             />
-
-            <FormField
-              control={form.control}
-              name="age"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="uppercase tracking-wider text-xs font-bold text-muted-foreground">Apparent Age</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. 24" className="bg-card border-secondary/50 h-12" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+            <div
+              onClick={() => !avatarPreview && fileInputRef.current?.click()}
+              className={`w-full aspect-video rounded-2xl border-2 border-dashed flex items-center justify-center flex-col gap-3 transition-colors relative overflow-hidden ${
+                avatarPreview
+                  ? "border-primary/60 cursor-default"
+                  : "border-border hover:border-primary cursor-pointer group"
+              }`}
+            >
+              {avatarPreview ? (
+                <>
+                  <img src={avatarPreview} alt="Avatar" className="absolute inset-0 w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); clearAvatar(); }}
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 z-10"
+                  >
+                    <X size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                    className="absolute bottom-2 right-2 px-3 py-1 rounded-lg bg-black/60 text-white text-xs font-semibold hover:bg-black/80 z-10 flex items-center gap-1"
+                  >
+                    <Upload size={12} /> Change
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Upload size={36} className="text-muted-foreground group-hover:text-primary transition-colors" />
+                  <span className="text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors">
+                    Tap to upload avatar
+                  </span>
+                </>
               )}
+            </div>
+            <p className="text-center text-xs text-muted-foreground">
+              Skipping avatar will auto-generate one based on genre
+            </p>
+          </div>
+        )}
+
+        {/* ── Step 3: Genre ── */}
+        {step === 3 && (
+          <div className="grid grid-cols-2 gap-3">
+            {GENRES.map(g => (
+              <button
+                key={g}
+                onClick={() => setGenre(g)}
+                className={`py-4 px-4 rounded-xl border font-bold text-sm transition-all flex items-center gap-2 ${
+                  genre === g
+                    ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                }`}
+              >
+                <span className="text-xl">{GENRE_ICONS[g] ?? "✨"}</span>
+                {g}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── Step 4: Age + Bio ── */}
+        {step === 4 && (
+          <div className="space-y-5">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                Apparent Age
+              </label>
+              <input
+                value={age}
+                onChange={e => setAge(e.target.value)}
+                placeholder="e.g. 24, Ancient, Unknown"
+                className="w-full h-12 rounded-xl border border-border bg-card px-4 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                Core Directives (Bio)
+              </label>
+              <textarea
+                value={bio}
+                onChange={e => setBio(e.target.value)}
+                placeholder="Define their personality, history, and desires..."
+                rows={5}
+                className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 resize-none transition-all"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 5: Greeting ── */}
+        {step === 5 && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">What do they say the first time you meet?</p>
+            <textarea
+              value={greeting}
+              onChange={e => setGreeting(e.target.value)}
+              placeholder='"I\'ve been waiting for you... longer than you know."'
+              rows={6}
+              className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 resize-none transition-all"
             />
           </div>
+        )}
 
-          <FormField
-            control={form.control}
-            name="bio"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="uppercase tracking-wider text-xs font-bold text-muted-foreground">Core Directives (Bio)</FormLabel>
-                <FormControl>
-                  <Textarea placeholder="Define their personality, history, and desires..." className="bg-card border-secondary/50 resize-none h-24" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
+        {/* ── Step 6: Tags ── */}
+        {step === 6 && (
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">Add comma-separated tags to help others discover this entity</p>
+            <input
+              value={tagsInput}
+              onChange={e => setTagsInput(e.target.value)}
+              placeholder="Tsundere, Hacker, Boss, Stoic..."
+              className="w-full h-12 rounded-xl border border-border bg-card px-4 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-all"
+            />
+            {tagsInput && (
+              <div className="flex flex-wrap gap-2">
+                {tagsInput.split(",").map(t => t.trim()).filter(Boolean).map(tag => (
+                  <span key={tag} className="px-3 py-1 rounded-full bg-primary/15 border border-primary/40 text-primary text-xs font-semibold">
+                    {tag}
+                  </span>
+                ))}
+              </div>
             )}
-          />
+          </div>
+        )}
 
-          <FormField
-            control={form.control}
-            name="initialGreeting"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="uppercase tracking-wider text-xs font-bold text-muted-foreground">First Contact</FormLabel>
-                <FormControl>
-                  <Textarea placeholder="What do they say when you first meet?" className="bg-card border-secondary/50 resize-none h-20" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="tags"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="uppercase tracking-wider text-xs font-bold text-muted-foreground">Tags (comma separated)</FormLabel>
-                <FormControl>
-                  <Input placeholder="Tsundere, Hacker, Boss..." className="bg-card border-secondary/50 h-12" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Visibility Toggle */}
-          <FormField
-            control={form.control}
-            name="visibility"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="uppercase tracking-wider text-xs font-bold text-muted-foreground">Visibility</FormLabel>
-                <div className="grid grid-cols-2 gap-2">
-                  <button type="button"
-                    onClick={() => field.onChange("private")}
-                    className={`flex items-center justify-center gap-2 py-3 rounded-xl border font-bold text-sm transition-all ${
-                      field.value === "private"
-                        ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
-                        : "border-border bg-card text-muted-foreground hover:border-primary/30"
-                    }`}>
-                    <Lock size={14} /> Private
-                  </button>
-                  <button type="button"
-                    onClick={() => field.onChange("public")}
-                    className={`flex items-center justify-center gap-2 py-3 rounded-xl border font-bold text-sm transition-all ${
-                      field.value === "public"
-                        ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-300"
-                        : "border-border bg-card text-muted-foreground hover:border-cyan-400/30"
-                    }`}>
-                    <Globe size={14} /> Public
-                  </button>
+        {/* ── Step 7: NSFW Toggle ── */}
+        {step === 7 && (
+          <div className="space-y-6">
+            <div className={`p-6 rounded-2xl border-2 transition-all ${
+              isNsfw
+                ? "border-pink-500/60 bg-pink-500/10 shadow-[0_0_30px_rgba(236,72,153,0.2)]"
+                : "border-border bg-card"
+            }`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  {isNsfw ? (
+                    <EyeOff size={28} className="text-pink-400" />
+                  ) : (
+                    <Eye size={28} className="text-muted-foreground" />
+                  )}
+                  <div>
+                    <p className="font-bold text-white">{isNsfw ? "NSFW — 18+ Content" : "SFW — Safe Content"}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {isNsfw ? "Only visible to premium users" : "Visible to all users"}
+                    </p>
+                  </div>
                 </div>
-              </FormItem>
-            )}
-          />
+                <button
+                  onClick={() => setIsNsfw(v => !v)}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus-visible:outline-none ${
+                    isNsfw ? "bg-pink-500" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                      isNsfw ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {isNsfw
+                  ? "⚠️ Marking as NSFW restricts this character to premium subscribers only. Free users will not see or access this entity."
+                  : "This entity is suitable for all users. Toggle on if you want to restrict access to premium subscribers only."}
+              </p>
+            </div>
 
-          <button
-            type="submit"
-            disabled={createMutation.isPending}
-            className="w-full py-4 mt-4 rounded-xl bg-primary text-primary-foreground font-bold uppercase tracking-widest flex items-center justify-center gap-2 box-glow-pink hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50"
-          >
-            {createMutation.isPending ? "Manifesting..." : <><Sparkles size={20} /> Awaken</>}
-          </button>
-        </form>
-      </Form>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setIsNsfw(false)}
+                className={`py-4 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-2 ${
+                  !isNsfw
+                    ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-300"
+                    : "border-border bg-card text-muted-foreground hover:border-cyan-400/30"
+                }`}
+              >
+                <Eye size={20} />
+                SFW
+              </button>
+              <button
+                onClick={() => setIsNsfw(true)}
+                className={`py-4 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-2 ${
+                  isNsfw
+                    ? "border-pink-500/60 bg-pink-500/15 text-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.3)]"
+                    : "border-border bg-card text-muted-foreground hover:border-pink-500/30"
+                }`}
+              >
+                <EyeOff size={20} />
+                NSFW
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 8: Visibility ── */}
+        {step === 8 && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setVisibility("private")}
+                className={`py-8 px-4 rounded-2xl border-2 font-bold text-sm transition-all flex flex-col items-center gap-3 ${
+                  visibility === "private"
+                    ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                }`}
+              >
+                <Lock size={28} />
+                <span className="text-base">Private</span>
+                <span className="text-[10px] font-normal text-muted-foreground text-center">
+                  Only you can see and use this entity
+                </span>
+              </button>
+              <button
+                onClick={() => setVisibility("public")}
+                className={`py-8 px-4 rounded-2xl border-2 font-bold text-sm transition-all flex flex-col items-center gap-3 ${
+                  visibility === "public"
+                    ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+                    : "border-border bg-card text-muted-foreground hover:border-cyan-400/30"
+                }`}
+              >
+                <Globe size={28} />
+                <span className="text-base">Public</span>
+                <span className="text-[10px] font-normal text-muted-foreground text-center">
+                  Discoverable by all users on Explore
+                </span>
+              </button>
+            </div>
+
+            {/* Summary */}
+            <div className="p-4 rounded-xl bg-card border border-border space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Summary</p>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Name</span>
+                <span className="font-bold text-white">{resolvedName}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Genre</span>
+                <span className="font-semibold text-white">{genre}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Rating</span>
+                <span className={`font-semibold ${isNsfw ? "text-pink-400" : "text-cyan-300"}`}>
+                  {isNsfw ? "🔞 NSFW" : "✅ SFW"}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Visibility</span>
+                <span className="font-semibold text-white capitalize">{visibility}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Cost</span>
+                <span className="font-bold text-cyan-400">-25 🃏 Neon Cards</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <div className="shrink-0 px-4 pb-6 pt-3 border-t border-border bg-background">
+        <div className="flex gap-3">
+          {step > 1 && (
+            <button
+              onClick={prev}
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border text-muted-foreground hover:text-white hover:border-border/80 transition-all font-semibold"
+            >
+              <ChevronLeft size={18} />
+              Back
+            </button>
+          )}
+
+          {step < STEPS.length ? (
+            <button
+              onClick={next}
+              disabled={!canAdvance()}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-bold uppercase tracking-wider box-glow-pink hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Continue <ChevronRight size={18} />
+            </button>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-bold uppercase tracking-wider box-glow-pink hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50"
+            >
+              {submitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Manifesting...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={18} /> <Check size={16} /> Awaken
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

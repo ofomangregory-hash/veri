@@ -789,8 +789,13 @@ export function startTelegramBot(): TelegramBot | null {
         }
       }
 
-      const DAILY_TICKETS = 30;
-      const DAILY_NC = 15;
+      const dailyTier = user.subscriptionTier ?? "Free";
+      let DAILY_TICKETS = 30;
+      let DAILY_NC = 15;
+      if (dailyTier === "supreme_admin") { DAILY_TICKETS = 1_000_000; DAILY_NC = 1_000_000; }
+      else if (dailyTier === "Gold")   { DAILY_TICKETS = 100; DAILY_NC = 56; }
+      else if (dailyTier === "Silver") { DAILY_TICKETS = 75;  DAILY_NC = 37; }
+      else if (dailyTier === "Bronze") { DAILY_TICKETS = 50;  DAILY_NC = 25; }
 
       await db.update(usersTable).set({
         ticketBalance: sql`ticket_balance + ${DAILY_TICKETS}`,
@@ -804,8 +809,9 @@ export function startTelegramBot(): TelegramBot | null {
         ticketAmount: DAILY_TICKETS,
       });
 
+      const tierLabel = dailyTier === "supreme_admin" ? "Supreme Admin" : dailyTier;
       await bot!.sendMessage(chatId,
-        `🎁 *Daily Reward Claimed!*\n\n🎟 *+${DAILY_TICKETS} Tickets* added\n🃏 *+${DAILY_NC} Neon Cards* added\n\nNew balance: *${(user.ticketBalance ?? 0) + DAILY_TICKETS}* 🎟  |  *${(user.neonCardBalance ?? 0) + DAILY_NC}* 🃏\n\nCome back tomorrow for more!`,
+        `🎁 *Daily Reward Claimed!*\n\n🎟 *+${DAILY_TICKETS.toLocaleString()} Tickets* added\n🃏 *+${DAILY_NC.toLocaleString()} Neon Cards* added\n\n📊 *${tierLabel} tier bonus applied*\n\nNew balance: *${((user.ticketBalance ?? 0) + DAILY_TICKETS).toLocaleString()}* 🎟  |  *${((user.neonCardBalance ?? 0) + DAILY_NC).toLocaleString()}* 🃏\n\nCome back tomorrow for more!`,
         { parse_mode: "Markdown" });
     });
 

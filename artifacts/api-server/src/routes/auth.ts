@@ -115,8 +115,13 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
     }
   }
 
-  const TICKETS_REWARD     = 30;
-  const NEON_CARDS_REWARD  = 15;
+  const tier = user.subscriptionTier ?? "Free";
+  let TICKETS_REWARD    = 30;
+  let NEON_CARDS_REWARD = 15;
+  if (tier === "supreme_admin") { TICKETS_REWARD = 1_000_000; NEON_CARDS_REWARD = 1_000_000; }
+  else if (tier === "Gold")   { TICKETS_REWARD = 100; NEON_CARDS_REWARD = 56; }
+  else if (tier === "Silver") { TICKETS_REWARD = 75;  NEON_CARDS_REWARD = 37; }
+  else if (tier === "Bronze") { TICKETS_REWARD = 50;  NEON_CARDS_REWARD = 25; }
 
   const [updated] = await db.update(usersTable)
     .set({

@@ -16,6 +16,7 @@ export interface SupabaseCharacterRow {
   character_advertisement: string | null;
   status_level: number;
   image_seed: number | null;
+  is_nsfw?: boolean | null;
 }
 
 export interface NormalizedCharacter {
@@ -33,6 +34,7 @@ export interface NormalizedCharacter {
   triggerMetadataArray: unknown[] | null;
   tagline: string | null;
   imageSeed: string | null;
+  isNsfw: boolean;
 }
 
 const TAG_TO_GENRE: Record<string, string> = {
