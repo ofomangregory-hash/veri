@@ -140,10 +140,10 @@ export function Explore() {
             ))
           ) : (
             charactersData?.items.map(char => (
-              <button
+              <Link
                 key={char.characterId}
-                onClick={() => setSelectedChar(char)}
-                className="group relative aspect-[3/4] rounded-xl overflow-hidden bg-card border border-border hover:border-secondary transition-all hover:box-glow-purple flex flex-col justify-end text-left"
+                href={`/chat/${char.characterId}`}
+                className="group relative aspect-[3/4] rounded-xl overflow-hidden bg-card border border-border hover:border-secondary transition-all hover:box-glow-purple flex flex-col justify-end"
               >
                 <img 
                   src={char.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${char.name}`} 
@@ -155,7 +155,7 @@ export function Explore() {
                   <h3 className="font-bold text-white text-sm truncate">{char.name}</h3>
                   <div className="text-[10px] text-muted-foreground truncate">{char.genre}</div>
                 </div>
-              </button>
+              </Link>
             ))
           )}
         </div>

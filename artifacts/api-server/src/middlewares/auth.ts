@@ -26,8 +26,6 @@ function generateReferralCode(): string {
 
 const DEV_USER_ID = "666666";
 
-// These patterns identify the Replit WORKSPACE preview (not the deployed app).
-// .replit.app is the DEPLOYED production domain — never allow dev bypass there.
 const ALLOWED_DEV_HOST_PATTERNS = [
   "localhost",
   "127.0.0.1",
@@ -37,7 +35,6 @@ const ALLOWED_DEV_HOST_PATTERNS = [
 ];
 
 function isDevPreviewRequest(req: Request): boolean {
-  // Hard block: never grant dev bypass in production build
   if (process.env.NODE_ENV === "production") return false;
 
   const origin = req.headers.origin ?? "";
@@ -52,7 +49,6 @@ function isDevPreviewRequest(req: Request): boolean {
   if (!isAllowedDomain) return false;
 
   const auth = req.headers.authorization ?? "";
-  // Only the explicit mock token triggers dev bypass — empty auth is NOT granted
   const hasMockToken = auth === "Bearer mock_init_data_for_dev";
 
   return hasMockToken;
@@ -85,7 +81,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     if (isDevPreviewRequest(req)) {
       req.telegramUserId = DEV_USER_ID;
       req.telegramUsername = "PreviewUser";
-      req.isAdmin = true; // Dev preview always gets admin access for testing
+      req.isAdmin = true;
       req.isSupremeAdmin = false;
       req.staffPrivileges = null;
       await ensureDevUser();
@@ -102,12 +98,12 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     req.telegramUserId = userId;
     req.telegramUsername = telegramUsername;
 
-    // Supreme admin check — username-based, immutable
-    const isUsernameSupreme = telegramUsername?.toLowerCase() === SUPREME_ADMIN_USERNAME.toLowerCase();
+    // Determine privilege flags BEFORE touching the DB
+    const isUsernameSupreme =
+      !!telegramUsername &&
+      telegramUsername.toLowerCase() === SUPREME_ADMIN_USERNAME.toLowerCase();
     req.isSupremeAdmin = isUsernameSupreme;
 
-    // Fail-closed admin check: both sides must be valid non-empty numbers
-    // that match. If userId is undefined/NaN or env var is unset, deny admin.
     const HARDCODED_ADMIN_ID = "8704633862";
     const userIdNum = Number(userId);
     const envAdminId = (process.env.ADMIN_TELEGRAM_ID ?? "").trim();
@@ -116,16 +112,8 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     const isEnvAdmin = validUserId && envAdminId !== "" && String(userIdNum) === String(Number(envAdminId));
     req.isAdmin = isHardcoded || isEnvAdmin || isUsernameSupreme;
 
-    // Load staffPrivileges from DB (non-blocking, best-effort)
-    try {
-      const [existingUser] = await db.select({ staffPrivileges: usersTable.staffPrivileges })
-        .from(usersTable).where(eq(usersTable.id, userId));
-      req.staffPrivileges = existingUser?.staffPrivileges ?? null;
-      if (req.staffPrivileges === "full_admin") req.isAdmin = true;
-    } catch {
-      req.staffPrivileges = null;
-    }
-
+    // ── STEP 1: Core login upsert — must succeed for login to work ────────────
+    // Only update safe fields on conflict; NEVER block login on privilege logic.
     const referralCode = generateReferralCode();
     const startParam = validated.start_param;
     let referredBy: string | undefined;
@@ -133,7 +121,6 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       referredBy = startParam.replace("ref_", "");
     }
 
-    // Upsert user — supreme admin gets their tier set/maintained on every login
     await db.insert(usersTable).values({
       id: userId,
       username: telegramUsername ?? null,
@@ -141,31 +128,60 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       referralCode,
       referredBy: referredBy ?? null,
       ticketBalance: referredBy ? 65 : 50,
-      subscriptionTier: isUsernameSupreme ? "supreme_admin" : "Free",
-      staffPrivileges: isUsernameSupreme ? "full_admin" : null,
+      subscriptionTier: "Free",
     }).onConflictDoUpdate({
       target: usersTable.id,
       set: {
         lastLoginTimestamp: new Date(),
         username: sql`COALESCE(EXCLUDED.username, users.username)`,
         avatarUrl: sql`COALESCE(EXCLUDED.avatar_url, users.avatar_url)`,
-        // Keep supreme_admin tier/privileges locked in on every login
-        subscriptionTier: isUsernameSupreme
-          ? sql`'supreme_admin'`
-          : sql`COALESCE(users.subscription_tier, 'Free')`,
-        staffPrivileges: isUsernameSupreme
-          ? sql`'full_admin'`
-          : sql`users.staff_privileges`,
       },
     });
 
-    if (referredBy) {
-      const [check] = await db.select({ ticketBalance: usersTable.ticketBalance })
-        .from(usersTable).where(eq(usersTable.id, userId));
-      if (check && check.ticketBalance === 65) {
+    // ── STEP 2: Grant supreme admin tier — non-blocking, never fails login ────
+    if (isUsernameSupreme) {
+      try {
         await db.update(usersTable)
-          .set({ ticketBalance: sql`ticket_balance + 15` })
-          .where(eq(usersTable.referralCode, referredBy));
+          .set({
+            subscriptionTier: "supreme_admin",
+            staffPrivileges: "full_admin",
+          })
+          .where(eq(usersTable.id, userId));
+      } catch (err) {
+        logger.warn({ err }, "Failed to grant supreme admin privileges — login continues");
+      }
+    }
+
+    // ── STEP 3: Load staffPrivileges from DB (non-blocking, best-effort) ──────
+    if (!isUsernameSupreme) {
+      try {
+        const [existingUser] = await db
+          .select({ staffPrivileges: usersTable.staffPrivileges })
+          .from(usersTable)
+          .where(eq(usersTable.id, userId));
+        req.staffPrivileges = existingUser?.staffPrivileges ?? null;
+        if (req.staffPrivileges === "full_admin") req.isAdmin = true;
+      } catch {
+        req.staffPrivileges = null;
+      }
+    } else {
+      req.staffPrivileges = "full_admin";
+    }
+
+    // ── STEP 4: Handle referral bonus (non-blocking) ───────────────────────────
+    if (referredBy) {
+      try {
+        const [check] = await db
+          .select({ ticketBalance: usersTable.ticketBalance })
+          .from(usersTable)
+          .where(eq(usersTable.id, userId));
+        if (check && check.ticketBalance === 65) {
+          await db.update(usersTable)
+            .set({ ticketBalance: sql`ticket_balance + 15` })
+            .where(eq(usersTable.referralCode, referredBy));
+        }
+      } catch (err) {
+        logger.warn({ err }, "Referral bonus failed — login continues");
       }
     }
 

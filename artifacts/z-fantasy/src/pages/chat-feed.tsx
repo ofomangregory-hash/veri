@@ -100,37 +100,53 @@ export function ChatFeed() {
             ) : !Array.isArray(vaultItems) || vaultItems.length === 0 ? (
               <div className="col-span-2 text-center text-muted-foreground py-10">Vault is empty.</div>
             ) : (
-              vaultItems.map(item => (
-                <div key={item.id} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-border group">
-                  <img
-                    src={item.imageUrl}
-                    alt="Vault Media"
-                    className={`w-full h-full object-cover transition-all ${!item.unlocked ? 'blur-md grayscale brightness-50' : 'group-hover:scale-110'}`}
-                  />
-                  {!item.unlocked && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40">
-                      <div className="p-3 bg-card/80 backdrop-blur-md rounded-full mb-3 box-glow-pink">
-                        <Lock className="text-primary" size={24} />
+              vaultItems.map(item => {
+                const inner = (
+                  <>
+                    <img
+                      src={item.imageUrl}
+                      alt="Vault Media"
+                      className={`w-full h-full object-cover transition-all ${!item.unlocked ? 'blur-md grayscale brightness-50' : 'group-hover:scale-110'}`}
+                    />
+                    {!item.unlocked && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40">
+                        <div className="p-3 bg-card/80 backdrop-blur-md rounded-full mb-3 box-glow-pink">
+                          <Lock className="text-primary" size={24} />
+                        </div>
+                        <button
+                          onClick={e => { e.preventDefault(); e.stopPropagation(); handleUnlock(item.id); }}
+                          disabled={unlockMutation.isPending}
+                          className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-full uppercase tracking-wider box-glow-pink hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          Unlock (20 🎟️)
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleUnlock(item.id)}
-                        disabled={unlockMutation.isPending}
-                        className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-full uppercase tracking-wider box-glow-pink hover:bg-primary/90 disabled:opacity-50"
-                      >
-                        Unlock (20 🎟️)
-                      </button>
+                    )}
+                    {item.unlocked && (
+                      <div className="absolute top-2 right-2 p-1.5 bg-black/50 backdrop-blur-md rounded-full text-accent">
+                        <Unlock size={14} />
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/90 to-transparent">
+                      <span className="text-[10px] text-white/80 font-medium">{item.characterName}</span>
                     </div>
-                  )}
-                  {item.unlocked && (
-                    <div className="absolute top-2 right-2 p-1.5 bg-black/50 backdrop-blur-md rounded-full text-accent">
-                      <Unlock size={14} />
-                    </div>
-                  )}
-                  <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/90 to-transparent">
-                    <span className="text-[10px] text-white/80 font-medium">{item.characterName}</span>
+                  </>
+                );
+
+                return item.unlocked && item.characterId ? (
+                  <Link
+                    key={item.id}
+                    href={`/chat/${item.characterId}`}
+                    className="relative aspect-[3/4] rounded-xl overflow-hidden border border-border group"
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  <div key={item.id} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-border group">
+                    {inner}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
