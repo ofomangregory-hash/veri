@@ -81,5 +81,4 @@ channel = "stable-25_05"
 [userenv.shared]
 PORT = "5000"
 BASE_PATH = "/"
-APP_DOMAIN = "workspaceapi-server-production-f143.up.railway.app"
 DISABLE_TELEGRAM_BOT = "true"
