@@ -405,6 +405,53 @@ export function startTelegramBot(): TelegramBot | null {
       const startParam = match?.[1]?.trim();
       await syncUser(userId, msg.from?.username);
 
+      // ── char_ deep link: open a specific character ───────────────────────────
+      if (startParam?.startsWith("char_")) {
+        const characterId = startParam.replace("char_", "");
+        const [char] = await db.select().from(charactersTable)
+          .where(eq(charactersTable.characterId, characterId));
+
+        if (!char) {
+          await bot!.sendMessage(chatId, "❌ Character not found.");
+          return;
+        }
+
+        // Visibility check
+        if (char.visibility === "private") {
+          const isAdmin = isAdminUser(msg.from?.id ?? 0);
+          const isOwner = char.creatorId === userId;
+          if (!isAdmin && !isOwner) {
+            await bot!.sendMessage(chatId, "🔒 This character is private and cannot be accessed.");
+            return;
+          }
+        }
+
+        const caption = [
+          `💜 *${char.name}*`,
+          char.teaserDescription ? `_${char.teaserDescription}_` : "",
+          char.genre ? `\n🎭 ${char.genre}` : "",
+          char.initialGreeting ? `\n💬 _"${char.initialGreeting.slice(0, 100)}${char.initialGreeting.length > 100 ? "…" : ""}"_` : "",
+        ].filter(Boolean).join("\n");
+
+        const markup = {
+          inline_keyboard: [[
+            { text: "💬 Chat Now", web_app: { url: appUrl(`/chat/${char.characterId}`) } },
+          ]],
+        };
+
+        try {
+          if (char.avatarUrl) {
+            await bot!.sendPhoto(chatId, char.avatarUrl, { caption, parse_mode: "Markdown", reply_markup: markup });
+          } else {
+            await bot!.sendMessage(chatId, caption, { parse_mode: "Markdown", reply_markup: markup });
+          }
+        } catch {
+          await bot!.sendMessage(chatId, caption, { parse_mode: "Markdown", reply_markup: markup });
+        }
+        return;
+      }
+
+      // ── ref_ deep link: referral bonus ───────────────────────────────────────
       let referralBonus = "";
       if (startParam?.startsWith("ref_")) {
         const code = startParam.replace("ref_", "");

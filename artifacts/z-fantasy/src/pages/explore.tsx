@@ -247,10 +247,20 @@ export function Explore() {
               {/* CTA buttons */}
               <div className="flex gap-3 pt-1">
                 <button
-                  onClick={() => setSelectedChar(null)}
-                  className="flex-1 py-3 rounded-xl border border-border text-muted-foreground text-sm font-semibold hover:border-primary/40 transition-all"
+                  onClick={() => {
+                    const botUsername = "z_fantasy_bot";
+                    const link = `https://t.me/${botUsername}?start=char_${selectedChar.characterId}`;
+                    const tg = window.Telegram?.WebApp;
+                    if (tg?.openTelegramLink) {
+                      tg.openTelegramLink(link);
+                    } else {
+                      navigator.clipboard?.writeText(link).catch(() => {});
+                      toast({ title: "Link copied!", description: link });
+                    }
+                  }}
+                  className="flex-1 py-3 rounded-xl border border-accent/60 text-accent text-sm font-semibold hover:border-accent hover:bg-accent/10 active:scale-95 transition-all flex items-center justify-center gap-1"
                 >
-                  Back
+                  🔗 Share
                 </button>
                 <button
                   onClick={() => { setSelectedChar(null); setLocation(`/chat/${selectedChar.characterId}`); }}
