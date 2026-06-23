@@ -24,10 +24,12 @@ const pendingCreation = new Map<number, CreationState>(); // chatId → creation
 
 // ── Browse carousel session (userId → current index) ─────────────────────────
 const browseSession = new Map<number, number>();
+const pendingBrowseName = new Map<number, string>(); // chatId → characterId awaiting custom name input
+const browseCustomNames = new Map<number, Map<string, string>>(); // chatId → charId → custom display name
 
 // ── Create-companion checkbox wizard ──────────────────────────────────────────
 interface CWSession {
-  step: "scenes" | "behaviors" | "personalities" | "traits" | "review" | "awaitingName";
+  step: "choosingPreset" | "scenes" | "behaviors" | "personalities" | "traits" | "review" | "awaitingName";
   name: string;
   genre: string;
   scenes: number[];
@@ -180,6 +182,22 @@ let bot: TelegramBot | null = null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const HARDCODED_ADMIN_ID = "8704633862";
+
+/** Escape Markdown special chars so user-provided strings don't break formatting */
+function escMd(s: string): string {
+  return s.replace(/[_*[\]()~`>#+=|{}.!-]/g, "\\$&");
+}
+
+/** Supreme admin check — bypasses all restrictions */
+function isSupremeAdmin(idOrMsg: number | string | { from?: { id?: number } }): boolean {
+  let id: string;
+  if (typeof idOrMsg === "object" && "from" in idOrMsg) {
+    id = String(idOrMsg.from?.id ?? "");
+  } else {
+    id = String(idOrMsg);
+  }
+  return id === HARDCODED_ADMIN_ID || id === (process.env.ADMIN_TELEGRAM_ID ?? "");
+}
 
 function isAdmin(msg: Message): boolean {
   const id = msg.from?.id;
@@ -347,7 +365,6 @@ export function startTelegramBot(): TelegramBot | null {
       { command: "broadcast",          description: "Preview then send to all: /broadcast [message]" },
       { command: "previewbroadcast",   description: "Preview broadcast without sending: /previewbroadcast [msg]" },
       { command: "allcommands",        description: "Show full command reference list" },
-      { command: "listall",            description: "All characters with visibility" },
       { command: "configall",          description: "Inline character config menu" },
       { command: "configurecharacter", description: "Full config dashboard: /configurecharacter [name]" },
       { command: "createcharacter",    description: "Create: /createcharacter [name] | true/false | [backstory]" },
@@ -583,28 +600,41 @@ export function startTelegramBot(): TelegramBot | null {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     bot.onText(/\/browse/, async (msg) => {
       const chatId = msg.chat.id;
-      await syncUser(String(msg.from?.id), msg.from?.username);
+      const userId = String(msg.from?.id);
+      await syncUser(userId, msg.from?.username);
 
-      const characters = await db.select().from(charactersTable)
-        .where(eq(charactersTable.visibility, "public"));
+      const adminUser = isAdmin(msg);
+      const characters = adminUser
+        ? await db.select().from(charactersTable).orderBy(charactersTable.name)
+        : await db.select().from(charactersTable)
+            .where(eq(charactersTable.visibility, "public"))
+            .orderBy(charactersTable.name);
 
       if (!characters.length) {
-        await bot!.sendMessage(chatId, "No public companions available yet 💜");
+        await bot!.sendMessage(chatId, "No companions available yet 💜");
         return;
       }
 
       browseSession.set(chatId, 0);
       const char = characters[0]!;
-      const caption = `✨ *${char.name}* _(${char.genre})_\n${char.teaserDescription ?? ""}\n\n_Card 1 of ${characters.length}_`;
+      const customName = browseCustomNames.get(chatId)?.get(char.characterId);
+      const displayName = customName ?? char.name;
+      const visTag = adminUser && char.visibility === "private" ? " 🔒" : "";
+      const caption = `✨ *${escMd(displayName)}*${customName ? ` _(originally: ${escMd(char.name)})_` : ` _(${escMd(char.genre ?? "")})_`}${visTag}\n${char.teaserDescription ?? ""}\n\n_Card 1 of ${characters.length}_`;
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? "z_fantasy_bot";
       const markup: InlineKeyboardMarkup = {
         inline_keyboard: [
           [
-            { text: "◀ Previous", callback_data: "browse_prev" },
+            { text: "◀ Prev", callback_data: "browse_prev" },
             { text: "Next ▶", callback_data: "browse_next" },
           ],
           [
             { text: "💬 Chat Now", callback_data: `chat_${char.characterId}` },
             { text: "🌐 Open App", web_app: { url: appUrl(`/chat/${char.characterId}`) } },
+          ],
+          [
+            { text: "🔗 Share", url: `https://t.me/${botUsername}?start=char_${char.characterId}` },
+            { text: "✏️ Custom Name", callback_data: `browse_setname_${char.characterId}` },
           ],
         ],
       };
@@ -928,7 +958,7 @@ export function startTelegramBot(): TelegramBot | null {
         }
       }
 
-      createWizardSessions.set(chatId, { step: "awaitingName", name: "", genre: "Modern", scenes: [], behaviors: [], personalities: [], traits: [] });
+      createWizardSessions.set(chatId, { step: "choosingPreset", name: "", genre: "Modern", scenes: [], behaviors: [], personalities: [], traits: [] });
 
       const nameButtons = [
         ...chunk(CW_PRESET_NAMES.map((n, i) => ({ text: n.name, callback_data: `cw_name_${i}` })), 3),
@@ -1005,27 +1035,6 @@ export function startTelegramBot(): TelegramBot | null {
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  ADMIN: /listall — paginated character list
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    bot.onText(/\/listall$/, async (msg) => {
-      if (!isAdmin(msg)) return;
-      const characters = await db.select().from(charactersTable).orderBy(charactersTable.name);
-      if (!characters.length) {
-        await bot!.sendMessage(msg.chat.id, "No characters in the database yet.");
-        return;
-      }
-      const pages = chunk(characters, 5);
-      for (let i = 0; i < pages.length; i++) {
-        const lines = pages[i].map((c, n) =>
-          `${i * 5 + n + 1}. *${c.name}* [${c.visibility}]\n   _${c.teaserDescription?.slice(0, 60) ?? "No tagline"}_`
-        );
-        await bot!.sendMessage(msg.chat.id,
-          `📋 Characters (${i * 5 + 1}–${i * 5 + pages[i].length} of ${characters.length})\n\n${lines.join("\n\n")}`,
-          { parse_mode: "Markdown" });
-      }
-    });
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  ADMIN: /listusers — paginated user list
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     bot.onText(/\/listusers$/, async (msg) => {
@@ -1039,9 +1048,9 @@ export function startTelegramBot(): TelegramBot | null {
       const pages = chunk(users, 10);
       for (const page of pages) {
         const lines = page.map(u =>
-          `• \`${u.id}\` @${u.username ?? "—"} | ${u.tier} | 🎟 ${u.balance}`
+          `• ${u.id} | @${(u.username ?? "—").replace(/[_*[\]()~`>#+=|{}.!-]/g, "\\$&")} | ${u.tier} | 🎟 ${u.balance}`
         );
-        await bot!.sendMessage(msg.chat.id, lines.join("\n"), { parse_mode: "Markdown" });
+        await bot!.sendMessage(msg.chat.id, lines.join("\n"));
       }
     });
 
@@ -1211,7 +1220,6 @@ export function startTelegramBot(): TelegramBot | null {
         `/previewbroadcast [message] — Preview only (no send)`,
         ``,
         `*— CHARACTER MANAGEMENT —*`,
-        `/listall — All characters with visibility`,
         `/configall — Inline character config menu`,
         `/configurecharacter [name] — Full config dashboard`,
         `/createcharacter [name] | true/false | [backstory]`,
@@ -1810,7 +1818,6 @@ export function startTelegramBot(): TelegramBot | null {
         `/broadcast \\[message\\]`,
         ``,
         `🤖 *Characters*`,
-        `/listall — List all characters`,
         `/configall — Interactive config menu`,
         `/configurecharacter \\[name\\]`,
         `/createcharacter \\[name\\] | true/false | \\[backstory\\]`,
@@ -1945,8 +1952,14 @@ export function startTelegramBot(): TelegramBot | null {
 
       // ── Browse carousel navigation ─────────────────────────────────────────
       if (query.data === "browse_prev" || query.data === "browse_next") {
-        const characters = await db.select().from(charactersTable)
-          .where(eq(charactersTable.visibility, "public"));
+        const browseUserId = String(query.from.id);
+        const browseAdminId = process.env.ADMIN_TELEGRAM_ID;
+        const isBrowseAdmin = browseUserId === browseAdminId || browseUserId === HARDCODED_ADMIN_ID || adminSessions.has(query.from.id);
+        const characters = isBrowseAdmin
+          ? await db.select().from(charactersTable).orderBy(charactersTable.name)
+          : await db.select().from(charactersTable)
+              .where(eq(charactersTable.visibility, "public"))
+              .orderBy(charactersTable.name);
 
         if (!characters.length) {
           await bot!.answerCallbackQuery(query.id, { text: "No companions available" });
@@ -1963,16 +1976,24 @@ export function startTelegramBot(): TelegramBot | null {
         browseSession.set(chatId, next);
 
         const char = characters[next]!;
-        const caption = `✨ *${char.name}* _(${char.genre})_\n${char.teaserDescription ?? ""}\n\n_Card ${next + 1} of ${characters.length}_`;
+        const customName = browseCustomNames.get(chatId)?.get(char.characterId);
+        const displayName = customName ?? char.name;
+        const visTag = isBrowseAdmin && char.visibility === "private" ? " 🔒" : "";
+        const caption = `✨ *${escMd(displayName)}*${customName ? ` _(originally: ${escMd(char.name)})_` : ` _(${escMd(char.genre ?? "")})_`}${visTag}\n${char.teaserDescription ?? ""}\n\n_Card ${next + 1} of ${characters.length}_`;
+        const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? "z_fantasy_bot";
         const markup: InlineKeyboardMarkup = {
           inline_keyboard: [
             [
-              { text: "◀ Previous", callback_data: "browse_prev" },
+              { text: "◀ Prev", callback_data: "browse_prev" },
               { text: "Next ▶", callback_data: "browse_next" },
             ],
             [
               { text: "💬 Chat Now", callback_data: `chat_${char.characterId}` },
               { text: "🌐 Open App", web_app: { url: appUrl(`/chat/${char.characterId}`) } },
+            ],
+            [
+              { text: "🔗 Share", url: `https://t.me/${botUsername}?start=char_${char.characterId}` },
+              { text: "✏️ Custom Name", callback_data: `browse_setname_${char.characterId}` },
             ],
           ],
         };
@@ -1994,8 +2015,22 @@ export function startTelegramBot(): TelegramBot | null {
             });
           }
         } catch {
-          // If edit fails (e.g. content unchanged), silently ignore
+          // content unchanged or edit failed — silently ignore
         }
+        await bot!.answerCallbackQuery(query.id);
+        return;
+      }
+
+      // ── Browse: set custom display name ──────────────────────────────────────
+      if (query.data?.startsWith("browse_setname_")) {
+        const charId = query.data.replace("browse_setname_", "");
+        pendingBrowseName.set(chatId, charId);
+        const [char] = await db.select({ name: charactersTable.name })
+          .from(charactersTable).where(eq(charactersTable.characterId, charId));
+        await bot!.answerCallbackQuery(query.id);
+        await bot!.sendMessage(chatId,
+          `✏️ Type a custom display name for *${escMd(char?.name ?? "this character")}*:\n_(only visible to you in this browse session — type /cancel to abort)_`,
+          { parse_mode: "Markdown" });
         return;
       }
 
@@ -2477,19 +2512,24 @@ export function startTelegramBot(): TelegramBot | null {
 
           createWizardSessions.delete(chatId);
 
-          await bot!.editMessageText([
-            `🎉 *${newChar.name}* is born!`, ``,
+          const cwCreatedText = [
+            `🎉 *${escMd(newChar.name)}* is born!`, ``,
             `🔒 Visibility: Private`,
             `🃏 Cost: ${isCWAdmin ? "0 (admin)" : "25 Neon Cards"}`, ``,
             `Your companion is now active. Send a message to start chatting!`,
             `_Use the app to add a photo and make them public._`,
-          ].join("\n"), {
+          ].join("\n");
+          const cwCreatedMarkup = { inline_keyboard: [[
+            { text: "💬 Chat Now", callback_data: `chat_${newChar.characterId}` },
+            { text: "🌐 Open App", web_app: { url: appUrl("/create") } },
+          ]]};
+          const cwEditOk = await bot!.editMessageText(cwCreatedText, {
             chat_id: chatId, message_id: query.message?.message_id, parse_mode: "Markdown",
-            reply_markup: { inline_keyboard: [[
-              { text: "💬 Chat Now", callback_data: `chat_${newChar.characterId}` },
-              { text: "🌐 Open App", web_app: { url: appUrl("/create") } },
-            ]]},
-          });
+            reply_markup: cwCreatedMarkup,
+          }).catch(() => null);
+          if (!cwEditOk) {
+            await bot!.sendMessage(chatId, cwCreatedText, { parse_mode: "Markdown", reply_markup: cwCreatedMarkup });
+          }
           await bot!.answerCallbackQuery(query.id, { text: `🎉 ${newChar.name} created!` });
           return;
         }
@@ -2728,11 +2768,17 @@ export function startTelegramBot(): TelegramBot | null {
             : "",
         ].filter(Boolean).join("\n");
 
+        const botUsername2 = process.env.TELEGRAM_BOT_USERNAME ?? "z_fantasy_bot";
         const markup: InlineKeyboardMarkup = {
-          inline_keyboard: [[
-            { text: "💬 Chat Now", callback_data: `chat_${char.characterId}` },
-            { text: "🌐 Open App", web_app: { url: appUrl(`/chat/${char.characterId}`) } },
-          ]],
+          inline_keyboard: [
+            [
+              { text: "💬 Chat Now", callback_data: `chat_${char.characterId}` },
+              { text: "🌐 Open App", web_app: { url: appUrl(`/chat/${char.characterId}`) } },
+            ],
+            [
+              { text: "🔗 Share", url: `https://t.me/${botUsername2}?start=char_${char.characterId}` },
+            ],
+          ],
         };
 
         try {
@@ -3016,6 +3062,27 @@ export function startTelegramBot(): TelegramBot | null {
           pendingCreation.delete(chatId);
           await bot!.sendMessage(chatId, "❌ Character creation cancelled.");
         }
+        if (pendingBrowseName.has(chatId)) {
+          pendingBrowseName.delete(chatId);
+          await bot!.sendMessage(chatId, "❌ Custom name cancelled.");
+        }
+        return;
+      }
+
+      // ── Browse: awaiting custom display name input ────────────────────────────
+      if (pendingBrowseName.has(chatId)) {
+        const charId = pendingBrowseName.get(chatId)!;
+        pendingBrowseName.delete(chatId);
+        const customNameInput = text.trim().slice(0, 40);
+        if (!customNameInput) {
+          await bot!.sendMessage(chatId, "❌ Name cannot be empty. Use /browse to try again.");
+          return;
+        }
+        if (!browseCustomNames.has(chatId)) browseCustomNames.set(chatId, new Map());
+        browseCustomNames.get(chatId)!.set(charId, customNameInput);
+        await bot!.sendMessage(chatId,
+          `✅ Custom name set! This character will appear as *${escMd(customNameInput)}* in your browse session.\n\nUse /browse to continue.`,
+          { parse_mode: "Markdown" });
         return;
       }
 
@@ -3109,7 +3176,7 @@ export function startTelegramBot(): TelegramBot | null {
           await upsertConfig(`admin_session_${msg.from.id}`, { unlocked: true, unlockedAt: new Date().toISOString() });
         }
         await bot!.sendMessage(chatId,
-          "🔑 *Admin session unlocked.*\n\nYou now have access to all admin commands.\nType /listall to see the character database.",
+          "🔑 *Admin session unlocked.*\n\nYou now have access to all admin commands.\nType /stats to see the dashboard or /allcommands for the full reference.",
           { parse_mode: "Markdown" });
         return;
       }

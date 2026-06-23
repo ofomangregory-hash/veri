@@ -6,7 +6,9 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenDrawer }: HeaderProps) {
-  const { data: user } = useGetMe();
+  const { data: user } = useGetMe({
+    query: { staleTime: 0, refetchInterval: 20_000, refetchOnWindowFocus: true },
+  });
 
   return (
     <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-md border-b border-border h-16 flex items-center justify-between px-4">
