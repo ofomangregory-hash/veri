@@ -1,0 +1,29 @@
+Fix and synchronize my Telegram Bot and Mini App. Both are hosted on Railway with Supabase as the database. Apply all of the following:
+1. Telegram Login Fix
+Call window.Telegram.WebApp.ready() immediately when the app loads, before any user data is accessed.
+Extract user data from window.Telegram.WebApp.initDataUnsafe.user — only fall back to guest if this object is truly empty after initialization.
+For the admin panel (page 6), check the authenticated user's ID against hardcoded admin ID 8704633862 — only after the Telegram SDK has fully initialized.
+Ensure the Telegram WebApp SDK script (telegram-web-app.js) is loaded before any app logic runs.
+2. Admin Commands Not Reflecting Changes
+Admin commands (add tickets, remove premium, etc.) execute without errors but changes don't save. Fix all database writes so they actually commit to Supabase.
+Admin command handlers must use the Supabase service role key, not the anon key. The anon key is likely being blocked by Row Level Security (RLS).
+Check and fix RLS policies on all affected tables to allow server-side writes using the service role key.
+Ensure all Supabase calls in admin handlers use await and check the response for errors before returning a success message.
+Verify Railway environment variables SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and DATABASE_URL are correctly loaded at runtime — not hardcoded or missing.
+3. Full Bot & Mini App Synchronization
+Both the bot and Mini App must read and write to the same Supabase database. No separate data stores.
+Characters created via the bot must appear in the Mini App instantly, and vice versa.
+Balance must be identical and real-time on both sides — any update from either side reflects on both.
+All bot commands must work consistently whether triggered from the bot or inside the Mini App.
+When the bot fetches and sends a character, it must include that character's designated avatar image stored in Supabase.
+After any confirmed database write, the Mini App must reflect the change without a manual refresh.
+4. Character Link Sharing
+Add a share button to each character in the Mini App and via bot command that generates a unique deep link in this format: https://t.me/[BOTUSERNAME]?start=char_[CHARACTER_ID]
+When this link is opened, Telegram launches the bot and automatically opens a chat with that specific character.
+Store each character's visibility status in Supabase as either public or private.
+5. Character Link Authentication
+When a user follows a character link, before opening the chat, the bot must check the character's visibility status in Supabase.
+If the character is public — allow anyone to access it.
+If the character is private — only allow access to the character's creator (premium user or admin ID 8704633862). Any other user who tries to access a private character link must be blocked and shown this message: "This character is private and cannot be accessed."
+Never expose private character data to unauthorized users at any point in the flow.
+Do not change existing UI, break public-facing commands, or alter any unrelated functionality
