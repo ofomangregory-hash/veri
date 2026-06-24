@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCreateInvoice, InvoiceRequestTier, InvoiceRequestPeriod } from "@workspace/api-client-react";
 import { Star, Zap, Infinity, Shield, CheckCircle2, CreditCard, Ticket } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +33,12 @@ function getToken() {
   return (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData || "mock_init_data_for_dev";
 }
 
+const DEFAULT_TIER_CONFIGS: Record<string, { features: string[]; featured: boolean }> = {
+  Bronze: { features: ["UNLIMITED MESSAGES", "Includes 150 Neon Tickets to start", "4/6 Image Ratio Loop", "2x daily gift claim"], featured: false },
+  Silver: { features: ["UNLIMITED MESSAGES", "Includes 350 Neon Tickets to start", "Max 40 Daily Requests", "2x daily gift claim"], featured: false },
+  Gold:   { features: ["UNLIMITED MESSAGES", "Includes 600 Neon Tickets to start", "Balance limits set to 9999", "2x daily gift claim + AUTO CLAIM ⚡"], featured: true },
+};
+
 export function Premium() {
   const [period, setPeriod] = useState<Period>("monthly");
   const [paidTier, setPaidTier] = useState<string | null>(null);
@@ -42,8 +48,19 @@ export function Premium() {
   const [customTickets, setCustomTickets] = useState("");
   const [buyingPack, setBuyingPack] = useState<string | null>(null);
   const [buyingTickets, setBuyingTickets] = useState<string | null>(null);
+  const [tierConfigs, setTierConfigs] = useState<Record<string, { features: string[]; featured: boolean }>>(DEFAULT_TIER_CONFIGS);
   const createInvoice = useCreateInvoice();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const token = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData || "mock_init_data_for_dev";
+    fetch("/api/config/premium-tiers", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: Record<string, { features: string[]; featured: boolean }> | null) => {
+        if (data) setTierConfigs({ ...DEFAULT_TIER_CONFIGS, ...data });
+      })
+      .catch(() => {});
+  }, []);
 
   function openInvoiceSafe(link: string, onPaid?: () => void) {
     if (window.Telegram?.WebApp?.openInvoice) {
@@ -142,7 +159,8 @@ export function Premium() {
       border: "border-amber-500",
       glow: "hover:shadow-[0_0_25px_rgba(245,158,11,0.5)]",
       icon: Shield,
-      features: ["UNLIMITED MESSAGES", "Includes 150 Neon Tickets to start", "4/6 Image Ratio Loop", "2x daily gift claim"],
+      features: tierConfigs.Bronze?.features ?? DEFAULT_TIER_CONFIGS.Bronze.features,
+      featured: tierConfigs.Bronze?.featured ?? false,
     },
     {
       id: InvoiceRequestTier.Silver,
@@ -151,7 +169,8 @@ export function Premium() {
       border: "border-slate-300",
       glow: "hover:shadow-[0_0_25px_rgba(203,213,225,0.5)]",
       icon: Zap,
-      features: ["UNLIMITED MESSAGES", "Includes 350 Neon Tickets to start", "Max 40 Daily Requests", "2x daily gift claim"],
+      features: tierConfigs.Silver?.features ?? DEFAULT_TIER_CONFIGS.Silver.features,
+      featured: tierConfigs.Silver?.featured ?? false,
     },
     {
       id: InvoiceRequestTier.Gold,
@@ -160,7 +179,8 @@ export function Premium() {
       border: "border-yellow-400",
       glow: "hover:shadow-[0_0_25px_rgba(250,204,21,0.5)]",
       icon: Infinity,
-      features: ["UNLIMITED MESSAGES", "Includes 600 Neon Tickets to start", "Balance limits set to 9999", "2x daily gift claim + AUTO CLAIM ⚡"],
+      features: tierConfigs.Gold?.features ?? DEFAULT_TIER_CONFIGS.Gold.features,
+      featured: tierConfigs.Gold?.featured ?? true,
     },
   ];
 
@@ -215,6 +235,21 @@ export function Premium() {
       </div>
       <p className="text-center text-xs text-accent mb-6">{PERIOD_NOTE[period]}</p>
 
+      {/* Free tier benefits card */}
+      <div className="p-4 rounded-2xl bg-card border border-border mb-6 opacity-80">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Free</h2>
+          <span className="text-xs text-muted-foreground">Current plan</span>
+        </div>
+        <ul className="space-y-2">
+          {["Limited Messages (2 tickets each)", "1x daily gift claim", "Basic character access"].map((feat, i) => (
+            <li key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Star size={12} className="text-muted-foreground/60 shrink-0" /> {feat}
+            </li>
+          ))}
+        </ul>
+      </div>
+
       <div className="space-y-6 mb-10">
         {tiers.map(tier => {
           const Icon = tier.icon;
@@ -226,7 +261,12 @@ export function Premium() {
 
               <div className="relative z-10 flex justify-between items-start mb-6">
                 <div>
-                  <h2 className={`text-2xl font-bold uppercase tracking-wider ${tier.color} drop-shadow-[0_0_8px_currentColor]`}>{tier.name}</h2>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h2 className={`text-2xl font-bold uppercase tracking-wider ${tier.color} drop-shadow-[0_0_8px_currentColor]`}>{tier.name}</h2>
+                    {tier.featured && (
+                      <span className="text-[9px] font-bold uppercase tracking-widest border border-yellow-400/60 text-yellow-400 px-1.5 py-0.5 rounded">Featured</span>
+                    )}
+                  </div>
                   <div className="mt-1">
                     <span className="text-2xl font-bold text-white">{stars.toLocaleString()} ⭐</span>
                     <span className="text-sm text-muted-foreground font-normal ml-1">/ {PERIOD_LABELS[period].toLowerCase()}</span>

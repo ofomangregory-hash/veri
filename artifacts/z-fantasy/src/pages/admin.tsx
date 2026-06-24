@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { CharacterWizard } from "@/components/CharacterWizard";
 
-type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "broadcast";
+type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast";
 
 interface SysConfig { key: string; value: unknown; updatedAt: string }
 
@@ -74,7 +74,7 @@ export function Admin() {
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
-    ? ["stats", "users", "characters", "banners", "pricing", "broadcast"]
+    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast"]
     : ["stats", "users", "characters"];
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
@@ -219,6 +219,27 @@ export function Admin() {
     finally { setSeeding(false); }
   };
 
+  // ── Premium Tier Config State ─────────────────────────────────────────────
+  const DEFAULT_PREMIUM_CONFIGS: Record<string, { features: string[]; featured: boolean }> = {
+    Bronze: { features: ["UNLIMITED MESSAGES", "Includes 150 Neon Tickets to start", "4/6 Image Ratio Loop", "2x daily gift claim"], featured: false },
+    Silver: { features: ["UNLIMITED MESSAGES", "Includes 350 Neon Tickets to start", "Max 40 Daily Requests", "2x daily gift claim"], featured: false },
+    Gold:   { features: ["UNLIMITED MESSAGES", "Includes 600 Neon Tickets to start", "Balance limits set to 9999", "2x daily gift claim + AUTO CLAIM ⚡"], featured: true },
+  };
+  const [premiumConfigs, setPremiumConfigs] = useState<Record<string, { features: string[]; featured: boolean }>>(DEFAULT_PREMIUM_CONFIGS);
+  const [savingPremiumTier, setSavingPremiumTier] = useState<string | null>(null);
+  const [newFeatureInput, setNewFeatureInput] = useState<Record<string, string>>({});
+
+  const savePremiumTierConfig = async (tier: string) => {
+    const config = premiumConfigs[tier];
+    if (!config) return;
+    setSavingPremiumTier(tier);
+    try {
+      await adminApi("PUT", `/admin/system-config/premium_tier_${tier.toLowerCase()}`, { value: { features: config.features, featured: config.featured } });
+      toast({ title: `✅ ${tier} tier saved to Supabase` });
+    } catch (e) { toast({ title: "Save failed", description: String(e), variant: "destructive" }); }
+    finally { setSavingPremiumTier(null); }
+  };
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newChar, setNewChar] = useState({
@@ -246,6 +267,11 @@ export function Admin() {
         }
         if (row.key.startsWith("character_overlay_")) {
           setCharOverlayMap(p => ({ ...p, [row.key.replace("character_overlay_", "")]: String(v.text ?? "") }));
+        }
+        const tierKeyMap: Record<string, string> = { premium_tier_bronze: "Bronze", premium_tier_silver: "Silver", premium_tier_gold: "Gold" };
+        if (tierKeyMap[row.key] && Array.isArray(v.features)) {
+          const tierName = tierKeyMap[row.key]!;
+          setPremiumConfigs(p => ({ ...p, [tierName]: { features: v.features as string[], featured: !!(v.featured) } }));
         }
       }
     } catch { /* table may not have data yet */ }
@@ -348,6 +374,7 @@ export function Admin() {
     characters: "🤖 Characters",
     banners: "🖼 Banners",
     pricing: "💰 Pricing",
+    premium: "⭐ Premium",
     broadcast: "📢 Broadcast",
   };
 
@@ -785,6 +812,134 @@ export function Admin() {
             </table>
           </div>
           <p className="text-[10px] text-muted-foreground">Base: Bronze 100/300/3000 · Silver 200/600/6000 · Gold 350/1050/10500 ⭐</p>
+        </div>
+      )}
+
+      {/* ── Premium Card Management (god-mode only) ── */}
+      {activeTab === "premium" && isGodMode && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-400 text-xl">⭐</span>
+              <h2 className="font-bold uppercase tracking-wider text-yellow-400">Premium Tier Cards</h2>
+            </div>
+            <button onClick={loadConfigs} disabled={configsLoading}
+              className="flex items-center gap-2 text-xs text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-card transition-colors">
+              <RefreshCw size={14} className={configsLoading ? "animate-spin" : ""} /> Refresh
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">Edit the features shown on each premium tier card. All changes save to Supabase and reflect immediately on the Premium page.</p>
+
+          {/* Free tier — informational only */}
+          <div className="p-4 rounded-xl bg-card border border-border space-y-2 opacity-70">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Free Tier</span>
+              <span className="text-[9px] border border-border text-muted-foreground px-1.5 py-0.5 rounded uppercase">Not editable</span>
+            </div>
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              <li>• Limited Messages (2 tickets each)</li>
+              <li>• 1x daily gift claim</li>
+              <li>• Basic character access</li>
+            </ul>
+          </div>
+
+          {/* Bronze / Silver / Gold — editable */}
+          {(["Bronze", "Silver", "Gold"] as const).map(tier => {
+            const tierColorStyle = tier === "Gold" ? "border-yellow-400/50 text-yellow-400" : tier === "Silver" ? "border-slate-300/50 text-slate-300" : "border-amber-500/50 text-amber-500";
+            const config = premiumConfigs[tier] ?? { features: [], featured: false };
+            return (
+              <div key={tier} className={`p-4 rounded-xl bg-card border ${tierColorStyle.split(" ")[0]} space-y-3`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-bold uppercase tracking-wider ${tierColorStyle.split(" ")[1]}`}>{tier}</span>
+                    {config.featured && (
+                      <span className="text-[9px] font-bold uppercase tracking-widest border border-yellow-400/60 text-yellow-400 px-1.5 py-0.5 rounded">Featured</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setPremiumConfigs(p => ({ ...p, [tier]: { ...config, featured: !config.featured } }))}
+                    className={`text-xs px-2 py-1 rounded border transition-all ${config.featured ? "border-yellow-400/50 text-yellow-400 bg-yellow-400/10" : "border-border text-muted-foreground hover:border-yellow-400/30"}`}
+                  >
+                    {config.featured ? "★ Featured ON" : "☆ Featured OFF"}
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Benefits List</label>
+                  {config.features.map((feat, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        value={feat}
+                        onChange={e => setPremiumConfigs(p => ({
+                          ...p,
+                          [tier]: { ...config, features: config.features.map((f, fi) => fi === i ? e.target.value : f) }
+                        }))}
+                        className="bg-background border-border h-8 text-xs flex-1"
+                      />
+                      <button
+                        onClick={() => setPremiumConfigs(p => ({
+                          ...p,
+                          [tier]: { ...config, features: config.features.filter((_, fi) => fi !== i) }
+                        }))}
+                        className="p-1.5 text-destructive/70 hover:text-destructive hover:bg-destructive/10 rounded transition-colors shrink-0"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <div className="flex gap-2">
+                    <Input
+                      value={newFeatureInput[tier] ?? ""}
+                      onChange={e => setNewFeatureInput(p => ({ ...p, [tier]: e.target.value }))}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" && newFeatureInput[tier]?.trim()) {
+                          setPremiumConfigs(p => ({ ...p, [tier]: { ...config, features: [...config.features, newFeatureInput[tier]!.trim()] } }));
+                          setNewFeatureInput(p => ({ ...p, [tier]: "" }));
+                        }
+                      }}
+                      placeholder="Add new benefit..."
+                      className="bg-background border-border h-8 text-xs flex-1"
+                    />
+                    <button
+                      onClick={() => {
+                        if (!newFeatureInput[tier]?.trim()) return;
+                        setPremiumConfigs(p => ({ ...p, [tier]: { ...config, features: [...config.features, newFeatureInput[tier]!.trim()] } }));
+                        setNewFeatureInput(p => ({ ...p, [tier]: "" }));
+                      }}
+                      className="px-2.5 h-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-accent/50 shrink-0"
+                    >
+                      <Plus size={12} />
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => savePremiumTierConfig(tier)}
+                  disabled={savingPremiumTier === tier}
+                  className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-bold transition-all disabled:opacity-50 ${tierColorStyle} hover:opacity-80`}
+                >
+                  {savingPremiumTier === tier ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+                  {savingPremiumTier === tier ? "Saving…" : `Save ${tier} to Supabase`}
+                </button>
+              </div>
+            );
+          })}
+
+          {/* Supreme Admin — informational */}
+          <div className="p-4 rounded-xl bg-card border border-purple-500/40 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Supreme Admin</span>
+              <span className="text-[9px] border border-purple-500/40 text-purple-400 px-1.5 py-0.5 rounded uppercase">Auto-assigned</span>
+            </div>
+            <ul className="space-y-1 text-xs text-purple-300/80">
+              <li>• All Gold tier benefits</li>
+              <li>• 3x daily gift claim</li>
+              <li>• Auto claim enabled</li>
+              <li>• God-mode admin access</li>
+              <li>• 1,000,000 tickets per claim</li>
+            </ul>
+          </div>
         </div>
       )}
 

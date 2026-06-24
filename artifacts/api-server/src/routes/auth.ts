@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db, usersTable, transactionsTable } from "@workspace/db";
+import { db, usersTable, transactionsTable, systemConfigurationsTable } from "@workspace/db";
 import {
   GetMeResponse,
   UpdateProfileBody,
@@ -104,21 +104,41 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
   }
 
   const now = new Date();
-  const lastClaim = user.lastDailyClaim;
+  const tier = user.subscriptionTier ?? "Free";
+  const isSupremeAdmin = req.isSupremeAdmin || tier === "supreme_admin";
 
-  if (lastClaim) {
-    const hoursSinceClaim = (now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60);
-    if (hoursSinceClaim < 24) {
-      const nextClaimAt = new Date(lastClaim.getTime() + 24 * 60 * 60 * 1000);
-      res.status(400).json({ error: "Already claimed today", nextClaimAt: nextClaimAt.toISOString() });
-      return;
-    }
+  // Max claims per calendar day (UTC)
+  const maxClaimsPerDay = isSupremeAdmin ? 3 : (tier === "Gold" || tier === "Silver" || tier === "Bronze") ? 2 : 1;
+
+  // Count how many times this user has claimed today (UTC midnight reset)
+  const todayStart = new Date(now);
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const tomorrow = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const claimRows = await db.select({ count: sql<number>`count(*)` })
+    .from(transactionsTable)
+    .where(
+      sql`telegram_id = ${req.telegramUserId}
+        AND action_type IN ('daily_claim', 'auto_daily_claim')
+        AND timestamp >= ${todayStart}
+        AND timestamp < ${tomorrow}`
+    );
+
+  const claimsToday = Number(claimRows[0]?.count ?? 0);
+
+  if (claimsToday >= maxClaimsPerDay) {
+    res.status(400).json({
+      error: `Daily claim limit reached (${claimsToday}/${maxClaimsPerDay})`,
+      nextClaimAt: tomorrow.toISOString(),
+      claimsToday,
+      maxClaimsPerDay,
+    });
+    return;
   }
 
-  const tier = user.subscriptionTier ?? "Free";
   let TICKETS_REWARD    = 30;
   let NEON_CARDS_REWARD = 15;
-  if (tier === "supreme_admin") { TICKETS_REWARD = 1_000_000; NEON_CARDS_REWARD = 1_000_000; }
+  if (isSupremeAdmin)       { TICKETS_REWARD = 1_000_000; NEON_CARDS_REWARD = 1_000_000; }
   else if (tier === "Gold")   { TICKETS_REWARD = 100; NEON_CARDS_REWARD = 56; }
   else if (tier === "Silver") { TICKETS_REWARD = 75;  NEON_CARDS_REWARD = 37; }
   else if (tier === "Bronze") { TICKETS_REWARD = 50;  NEON_CARDS_REWARD = 25; }
@@ -138,12 +158,10 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
     ticketAmount: TICKETS_REWARD,
   });
 
-  const nextClaimAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-
   res.json(ClaimDailyTicketsResponse.parse({
     ticketsAdded: TICKETS_REWARD,
     newBalance: updated.ticketBalance,
-    nextClaimAt: nextClaimAt.toISOString(),
+    nextClaimAt: tomorrow.toISOString(),
     neonCardsAdded: NEON_CARDS_REWARD,
     newNeonCardBalance: updated.neonCardBalance,
   }));
@@ -212,6 +230,36 @@ router.get("/transactions", async (req, res): Promise<void> => {
     ticketAmount: t.ticketAmount,
     timestamp: t.timestamp.toISOString(),
   })));
+});
+
+// GET /config/premium-tiers — public (user auth only) — returns tier card data from Supabase with defaults
+const DEFAULT_PREMIUM_TIER_FEATURES: Record<string, { features: string[]; featured: boolean }> = {
+  Bronze: { features: ["UNLIMITED MESSAGES", "Includes 150 Neon Tickets to start", "4/6 Image Ratio Loop", "2x daily gift claim"], featured: false },
+  Silver: { features: ["UNLIMITED MESSAGES", "Includes 350 Neon Tickets to start", "Max 40 Daily Requests", "2x daily gift claim"], featured: false },
+  Gold:   { features: ["UNLIMITED MESSAGES", "Includes 600 Neon Tickets to start", "Balance limits set to 9999", "2x daily gift claim + AUTO CLAIM ⚡"], featured: true },
+};
+
+router.get("/config/premium-tiers", async (_req, res): Promise<void> => {
+  const rows = await db.select().from(systemConfigurationsTable);
+  const result: Record<string, { features: string[]; featured: boolean }> = { ...DEFAULT_PREMIUM_TIER_FEATURES };
+
+  for (const row of rows) {
+    const tierMap: Record<string, string> = {
+      premium_tier_bronze: "Bronze",
+      premium_tier_silver: "Silver",
+      premium_tier_gold:   "Gold",
+    };
+    const tierName = tierMap[row.key];
+    if (tierName) {
+      const v = row.value as Record<string, unknown>;
+      result[tierName] = {
+        features: Array.isArray(v.features) ? (v.features as string[]) : DEFAULT_PREMIUM_TIER_FEATURES[tierName]!.features,
+        featured: typeof v.featured === "boolean" ? v.featured : DEFAULT_PREMIUM_TIER_FEATURES[tierName]!.featured,
+      };
+    }
+  }
+
+  res.json(result);
 });
 
 export default router;
