@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe } from "@workspace/api-client-react";
 import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign, UserCircle, Ticket, CreditCard as CardIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -861,191 +861,29 @@ export function Admin() {
 
       {/* ── Pricing (god-mode only) ── */}
       {activeTab === "pricing" && isGodMode && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <DollarSign className="text-yellow-400" size={20} />
-            <h2 className="font-bold uppercase tracking-wider text-yellow-400">Pricing Overrides</h2>
-          </div>
-          <p className="text-xs text-muted-foreground">Override base Telegram Stars pricing per tier.</p>
-          <div className="rounded-xl border border-border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50">
-                  <th className="text-left p-3 text-xs text-muted-foreground font-semibold uppercase">Tier</th>
-                  {PERIODS.map(p => (
-                    <th key={p} className="text-center p-3 text-xs text-muted-foreground font-semibold uppercase">{p}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {TIERS.map(tier => (
-                  <tr key={tier} className="border-t border-border">
-                    <td className="p-3 font-bold">{tier}</td>
-                    {PERIODS.map(period => {
-                      const key = `${tier.toLowerCase()}_${period}`;
-                      return (
-                        <td key={period} className="p-2">
-                          <div className="flex flex-col gap-1">
-                            <Input value={priceOverrides[key] ?? ""}
-                              onChange={e => setPriceOverrides(p => ({ ...p, [key]: e.target.value }))}
-                              placeholder={String(BASE_PRICES[tier]?.[period] ?? 0)}
-                              className="bg-background border-border h-8 text-xs text-center" />
-                            <button onClick={() => savePriceOverride(tier, period)}
-                              className="text-[10px] text-accent hover:text-accent/80">
-                              Save
-                            </button>
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[10px] text-muted-foreground">Base: Bronze 100/300/3000 · Silver 200/600/6000 · Gold 350/1050/10500 ⭐</p>
-
-        {/* ── Economy Prices ── */}
-        <div className="mt-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Ticket className="text-accent" size={16} />
-            <h3 className="font-bold text-sm uppercase tracking-wider text-accent">Economy Prices</h3>
-            <span className="text-[10px] text-muted-foreground ml-1">Saved to Supabase · hot-reloaded by API (5 min cache)</span>
-          </div>
-
-          <div className="space-y-3">
-            {/* Message & Selfie costs */}
-            <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Per-Action Costs</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Message cost (🎫 tickets)</label>
-                  <div className="flex gap-1.5">
-                    <Input value={ecoMsgCost} onChange={e => setEcoMsgCost(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
-                    <button onClick={() => saveEcoConfig("eco_msg_cost", { tickets: Number(ecoMsgCost) })} disabled={savingEco === "eco_msg_cost"}
-                      className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
-                      {savingEco === "eco_msg_cost" ? "…" : <Save size={12} />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Selfie cost (🃏 Neon Cards)</label>
-                  <div className="flex gap-1.5">
-                    <Input value={ecoSelfieCost} onChange={e => setEcoSelfieCost(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
-                    <button onClick={() => saveEcoConfig("eco_selfie_cost", { nc: Number(ecoSelfieCost) })} disabled={savingEco === "eco_selfie_cost"}
-                      className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
-                      {savingEco === "eco_selfie_cost" ? "…" : <Save size={12} />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Character creation (🃏 NC)</label>
-                  <div className="flex gap-1.5">
-                    <Input value={ecoCreationCost} onChange={e => setEcoCreationCost(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
-                    <button onClick={() => saveEcoConfig("eco_creation_cost", { nc: Number(ecoCreationCost) })} disabled={savingEco === "eco_creation_cost"}
-                      className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
-                      {savingEco === "eco_creation_cost" ? "…" : <Save size={12} />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Gift costs */}
-            <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">In-Chat Gift Costs (🃏 Neon Cards)</p>
-              <div className="grid grid-cols-3 gap-3">
-                {([
-                  { label: "🍹 Cyber Cocktail (Small)", state: ecoGiftSmall, set: setEcoGiftSmall, key: "eco_gift_small" },
-                  { label: "💎 Neon Bracelet (Medium)", state: ecoGiftMedium, set: setEcoGiftMedium, key: "eco_gift_medium" },
-                  { label: "🔑 Secret Key (Large)", state: ecoGiftLarge, set: setEcoGiftLarge, key: "eco_gift_large" },
-                ] as const).map(({ label, state, set, key }) => (
-                  <div key={key}>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">{label}</label>
-                    <div className="flex gap-1.5">
-                      <Input value={state} onChange={e => set(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
-                      <button onClick={() => saveEcoConfig(key, { nc: Number(state) })} disabled={savingEco === key}
-                        className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
-                        {savingEco === key ? "…" : <Save size={12} />}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[10px] text-muted-foreground">Gold tier gets 50% off gift prices automatically.</p>
-            </div>
-
-            {/* Shop exchange rates */}
-            <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Shop Exchange Rates</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">⭐ Stars per 1 Neon Card</label>
-                  <div className="flex gap-1.5">
-                    <Input value={ecoNcStarDivisor} onChange={e => setEcoNcStarDivisor(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
-                    <button onClick={() => saveEcoConfig("eco_nc_star_divisor", { divisor: Number(ecoNcStarDivisor) })} disabled={savingEco === "eco_nc_star_divisor"}
-                      className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
-                      {savingEco === "eco_nc_star_divisor" ? "…" : <Save size={12} />}
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Currently: {ecoNcStarDivisor}⭐ = 1🃏</p>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">🎫 Tickets per 1 Star</label>
-                  <div className="flex gap-1.5">
-                    <Input value={ecoTicketsPerStar} onChange={e => setEcoTicketsPerStar(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
-                    <button onClick={() => saveEcoConfig("eco_tickets_per_star", { tickets: Number(ecoTicketsPerStar) })} disabled={savingEco === "eco_tickets_per_star"}
-                      className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
-                      {savingEco === "eco_tickets_per_star" ? "…" : <Save size={12} />}
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Currently: 1⭐ = {ecoTicketsPerStar}🎫</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Daily gift claim rewards */}
-            <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Daily Gift Claim Rewards (by Tier)</p>
-              <div className="rounded-lg border border-border overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted/50">
-                      <th className="text-left p-2 text-muted-foreground font-semibold">Tier</th>
-                      <th className="text-center p-2 text-muted-foreground font-semibold">🎫 Tickets</th>
-                      <th className="text-center p-2 text-muted-foreground font-semibold">🃏 NC</th>
-                      <th className="text-center p-2 text-muted-foreground font-semibold">Save</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {([
-                      { tier: "Free",   ecoKey: "eco_daily_free",   tState: ecoDailyFreeTickets,   tSet: setEcoDailyFreeTickets,   nState: ecoDailyFreeNc,   nSet: setEcoDailyFreeNc },
-                      { tier: "Bronze", ecoKey: "eco_daily_bronze", tState: ecoDailyBronzeTickets, tSet: setEcoDailyBronzeTickets, nState: ecoDailyBronzeNc, nSet: setEcoDailyBronzeNc },
-                      { tier: "Silver", ecoKey: "eco_daily_silver", tState: ecoDailySilverTickets, tSet: setEcoDailySilverTickets, nState: ecoDailySilverNc, nSet: setEcoDailySilverNc },
-                      { tier: "Gold",   ecoKey: "eco_daily_gold",   tState: ecoDailyGoldTickets,   tSet: setEcoDailyGoldTickets,   nState: ecoDailyGoldNc,   nSet: setEcoDailyGoldNc },
-                    ] as const).map(({ tier, ecoKey, tState, tSet, nState, nSet }) => (
-                      <tr key={tier} className="border-t border-border">
-                        <td className="p-2 font-bold">{tier}</td>
-                        <td className="p-1.5">
-                          <Input value={tState} onChange={e => tSet(e.target.value)} className="bg-background border-border h-7 text-[11px] text-center" />
-                        </td>
-                        <td className="p-1.5">
-                          <Input value={nState} onChange={e => nSet(e.target.value)} className="bg-background border-border h-7 text-[11px] text-center" />
-                        </td>
-                        <td className="p-1.5 text-center">
-                          <button onClick={() => saveEcoConfig(ecoKey, { tickets: Number(tState), nc: Number(nState) })} disabled={savingEco === ecoKey}
-                            className="px-2 h-7 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20">
-                            {savingEco === ecoKey ? "…" : <Save size={11} />}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PricingTab
+          priceOverrides={priceOverrides}
+          setPriceOverrides={setPriceOverrides}
+          savePriceOverride={savePriceOverride}
+          ecoMsgCost={ecoMsgCost} setEcoMsgCost={setEcoMsgCost}
+          ecoSelfieCost={ecoSelfieCost} setEcoSelfieCost={setEcoSelfieCost}
+          ecoGiftSmall={ecoGiftSmall} setEcoGiftSmall={setEcoGiftSmall}
+          ecoGiftMedium={ecoGiftMedium} setEcoGiftMedium={setEcoGiftMedium}
+          ecoGiftLarge={ecoGiftLarge} setEcoGiftLarge={setEcoGiftLarge}
+          ecoCreationCost={ecoCreationCost} setEcoCreationCost={setEcoCreationCost}
+          ecoNcStarDivisor={ecoNcStarDivisor} setEcoNcStarDivisor={setEcoNcStarDivisor}
+          ecoTicketsPerStar={ecoTicketsPerStar} setEcoTicketsPerStar={setEcoTicketsPerStar}
+          ecoDailyFreeTickets={ecoDailyFreeTickets} setEcoDailyFreeTickets={setEcoDailyFreeTickets}
+          ecoDailyFreeNc={ecoDailyFreeNc} setEcoDailyFreeNc={setEcoDailyFreeNc}
+          ecoDailyBronzeTickets={ecoDailyBronzeTickets} setEcoDailyBronzeTickets={setEcoDailyBronzeTickets}
+          ecoDailyBronzeNc={ecoDailyBronzeNc} setEcoDailyBronzeNc={setEcoDailyBronzeNc}
+          ecoDailySilverTickets={ecoDailySilverTickets} setEcoDailySilverTickets={setEcoDailySilverTickets}
+          ecoDailySilverNc={ecoDailySilverNc} setEcoDailySilverNc={setEcoDailySilverNc}
+          ecoDailyGoldTickets={ecoDailyGoldTickets} setEcoDailyGoldTickets={setEcoDailyGoldTickets}
+          ecoDailyGoldNc={ecoDailyGoldNc} setEcoDailyGoldNc={setEcoDailyGoldNc}
+          savingEco={savingEco}
+          saveEcoConfig={saveEcoConfig}
+        />
       )}
 
       {/* ── Premium Card Management (god-mode only) ── */}
@@ -1077,87 +915,18 @@ export function Admin() {
           </div>
 
           {/* Bronze / Silver / Gold — editable */}
-          {(["Bronze", "Silver", "Gold"] as const).map(tier => {
-            const tierColorStyle = tier === "Gold" ? "border-yellow-400/50 text-yellow-400" : tier === "Silver" ? "border-slate-300/50 text-slate-300" : "border-amber-500/50 text-amber-500";
-            const config = premiumConfigs[tier] ?? { features: [], featured: false };
-            return (
-              <div key={tier} className={`p-4 rounded-xl bg-card border ${tierColorStyle.split(" ")[0]} space-y-3`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-sm font-bold uppercase tracking-wider ${tierColorStyle.split(" ")[1]}`}>{tier}</span>
-                    {config.featured && (
-                      <span className="text-[9px] font-bold uppercase tracking-widest border border-yellow-400/60 text-yellow-400 px-1.5 py-0.5 rounded">Featured</span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setPremiumConfigs(p => ({ ...p, [tier]: { ...config, featured: !config.featured } }))}
-                    className={`text-xs px-2 py-1 rounded border transition-all ${config.featured ? "border-yellow-400/50 text-yellow-400 bg-yellow-400/10" : "border-border text-muted-foreground hover:border-yellow-400/30"}`}
-                  >
-                    {config.featured ? "★ Featured ON" : "☆ Featured OFF"}
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Benefits List</label>
-                  {config.features.map((feat, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <Input
-                        value={feat}
-                        onChange={e => setPremiumConfigs(p => ({
-                          ...p,
-                          [tier]: { ...config, features: config.features.map((f, fi) => fi === i ? e.target.value : f) }
-                        }))}
-                        className="bg-background border-border h-8 text-xs flex-1"
-                      />
-                      <button
-                        onClick={() => setPremiumConfigs(p => ({
-                          ...p,
-                          [tier]: { ...config, features: config.features.filter((_, fi) => fi !== i) }
-                        }))}
-                        className="p-1.5 text-destructive/70 hover:text-destructive hover:bg-destructive/10 rounded transition-colors shrink-0"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
-
-                  <div className="flex gap-2">
-                    <Input
-                      value={newFeatureInput[tier] ?? ""}
-                      onChange={e => setNewFeatureInput(p => ({ ...p, [tier]: e.target.value }))}
-                      onKeyDown={e => {
-                        if (e.key === "Enter" && newFeatureInput[tier]?.trim()) {
-                          setPremiumConfigs(p => ({ ...p, [tier]: { ...config, features: [...config.features, newFeatureInput[tier]!.trim()] } }));
-                          setNewFeatureInput(p => ({ ...p, [tier]: "" }));
-                        }
-                      }}
-                      placeholder="Add new benefit..."
-                      className="bg-background border-border h-8 text-xs flex-1"
-                    />
-                    <button
-                      onClick={() => {
-                        if (!newFeatureInput[tier]?.trim()) return;
-                        setPremiumConfigs(p => ({ ...p, [tier]: { ...config, features: [...config.features, newFeatureInput[tier]!.trim()] } }));
-                        setNewFeatureInput(p => ({ ...p, [tier]: "" }));
-                      }}
-                      className="px-2.5 h-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-accent/50 shrink-0"
-                    >
-                      <Plus size={12} />
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => savePremiumTierConfig(tier)}
-                  disabled={savingPremiumTier === tier}
-                  className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-bold transition-all disabled:opacity-50 ${tierColorStyle} hover:opacity-80`}
-                >
-                  {savingPremiumTier === tier ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
-                  {savingPremiumTier === tier ? "Saving…" : `Save ${tier} to Supabase`}
-                </button>
-              </div>
-            );
-          })}
+          {(["Bronze", "Silver", "Gold"] as const).map(tier => (
+            <PremiumTierCard
+              key={tier}
+              tier={tier}
+              premiumConfigs={premiumConfigs}
+              setPremiumConfigs={setPremiumConfigs}
+              newFeatureInput={newFeatureInput}
+              setNewFeatureInput={setNewFeatureInput}
+              savePremiumTierConfig={savePremiumTierConfig}
+              savingPremiumTier={savingPremiumTier}
+            />
+          ))}
 
           {/* Supreme Admin — informational */}
           <div className="p-4 rounded-xl bg-card border border-purple-500/40 space-y-2">
@@ -1365,24 +1134,9 @@ export function Admin() {
                       <div className="flex-1 h-px bg-border" />
                     </div>
                     <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {drawerTxns.map(txn => {
-                        const isCredit = txn.ticketAmount >= 0;
-                        const label = txn.actionType.replace(/_/g, " ").replace(/^subscription /, "Sub: ");
-                        return (
-                          <div key={txn.transactionId}
-                            className="flex items-center justify-between px-3 py-2 rounded-lg bg-card border border-border text-xs">
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium truncate capitalize">{label}</div>
-                              <div className="text-muted-foreground text-[10px]">
-                                {new Date(txn.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                              </div>
-                            </div>
-                            <div className={`font-bold shrink-0 ml-2 ${isCredit ? "text-green-400" : "text-red-400"}`}>
-                              {isCredit ? "+" : ""}{txn.ticketAmount} 🎟
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {drawerTxns.map(txn => (
+                        <TxnRow key={txn.transactionId} txn={txn} />
+                      ))}
                     </div>
                   </div>
                 )}
@@ -1522,12 +1276,348 @@ export function Admin() {
   );
 }
 
-// Missing import — add Star icon
 function Star({ size, className }: { size: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
     </svg>
+  );
+}
+
+function PricingCell({ tier, period, priceOverrides, setPriceOverrides, savePriceOverride }: {
+  tier: string;
+  period: string;
+  priceOverrides: Record<string, string>;
+  setPriceOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  savePriceOverride: (tier: string, period: string) => void;
+}) {
+  const key = `${tier.toLowerCase()}_${period}`;
+  const BASE_PRICES_LOCAL: Record<string, Record<string, number>> = {
+    Bronze: { weekly: 100, monthly: 300, yearly: 3000 },
+    Silver: { weekly: 200, monthly: 600, yearly: 6000 },
+    Gold: { weekly: 350, monthly: 1050, yearly: 10500 },
+  };
+  return (
+    <td key={period} className="p-2">
+      <div className="flex flex-col gap-1">
+        <Input
+          value={priceOverrides[key] ?? ""}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPriceOverrides(p => ({ ...p, [key]: e.target.value }))}
+          placeholder={String(BASE_PRICES_LOCAL[tier]?.[period] ?? 0)}
+          className="bg-background border-border h-8 text-xs text-center"
+        />
+        <button onClick={() => savePriceOverride(tier, period)} className="text-[10px] text-accent hover:text-accent/80">
+          Save
+        </button>
+      </div>
+    </td>
+  );
+}
+
+interface PremiumConfig { features: string[]; featured: boolean }
+
+function PremiumTierCard({ tier, premiumConfigs, setPremiumConfigs, newFeatureInput, setNewFeatureInput, savePremiumTierConfig, savingPremiumTier }: {
+  tier: "Bronze" | "Silver" | "Gold";
+  premiumConfigs: Record<string, PremiumConfig>;
+  setPremiumConfigs: React.Dispatch<React.SetStateAction<Record<string, PremiumConfig>>>;
+  newFeatureInput: Record<string, string>;
+  setNewFeatureInput: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  savePremiumTierConfig: (tier: string) => void;
+  savingPremiumTier: string | null;
+}) {
+  const tierColorStyle = tier === "Gold" ? "border-yellow-400/50 text-yellow-400" : tier === "Silver" ? "border-slate-300/50 text-slate-300" : "border-amber-500/50 text-amber-500";
+  const config = premiumConfigs[tier] ?? { features: [], featured: false };
+  return (
+    <div className={`p-4 rounded-xl bg-card border ${tierColorStyle.split(" ")[0]} space-y-3`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-bold uppercase tracking-wider ${tierColorStyle.split(" ")[1]}`}>{tier}</span>
+          {config.featured && (
+            <span className="text-[9px] font-bold uppercase tracking-widest border border-yellow-400/60 text-yellow-400 px-1.5 py-0.5 rounded">Featured</span>
+          )}
+        </div>
+        <button
+          onClick={() => setPremiumConfigs(p => ({ ...p, [tier]: { ...config, featured: !config.featured } }))}
+          className={`text-xs px-2 py-1 rounded border transition-all ${config.featured ? "border-yellow-400/50 text-yellow-400 bg-yellow-400/10" : "border-border text-muted-foreground hover:border-yellow-400/30"}`}
+        >
+          {config.featured ? "★ Featured ON" : "☆ Featured OFF"}
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Benefits List</label>
+        {config.features.map((feat, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <Input
+              value={feat}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPremiumConfigs(p => ({
+                ...p,
+                [tier]: { ...config, features: config.features.map((f, fi) => fi === i ? e.target.value : f) }
+              }))}
+              className="bg-background border-border h-8 text-xs flex-1"
+            />
+            <button
+              onClick={() => setPremiumConfigs(p => ({
+                ...p,
+                [tier]: { ...config, features: config.features.filter((_, fi) => fi !== i) }
+              }))}
+              className="p-1.5 text-destructive/70 hover:text-destructive hover:bg-destructive/10 rounded transition-colors shrink-0"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ))}
+
+        <div className="flex gap-2">
+          <Input
+            value={newFeatureInput[tier] ?? ""}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewFeatureInput(p => ({ ...p, [tier]: e.target.value }))}
+            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+              if (e.key === "Enter" && newFeatureInput[tier]?.trim()) {
+                setPremiumConfigs(p => ({ ...p, [tier]: { ...config, features: [...config.features, newFeatureInput[tier]!.trim()] } }));
+                setNewFeatureInput(p => ({ ...p, [tier]: "" }));
+              }
+            }}
+            placeholder="Add new benefit..."
+            className="bg-background border-border h-8 text-xs flex-1"
+          />
+          <button
+            onClick={() => {
+              if (!newFeatureInput[tier]?.trim()) return;
+              setPremiumConfigs(p => ({ ...p, [tier]: { ...config, features: [...config.features, newFeatureInput[tier]!.trim()] } }));
+              setNewFeatureInput(p => ({ ...p, [tier]: "" }));
+            }}
+            className="px-2.5 h-8 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-accent/50 shrink-0"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
+      </div>
+
+      <button
+        onClick={() => savePremiumTierConfig(tier)}
+        disabled={savingPremiumTier === tier}
+        className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-bold transition-all disabled:opacity-50 ${tierColorStyle} hover:opacity-80`}
+      >
+        {savingPremiumTier === tier ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+        {savingPremiumTier === tier ? "Saving…" : `Save ${tier} to Supabase`}
+      </button>
+    </div>
+  );
+}
+
+interface PricingTabProps {
+  priceOverrides: Record<string, string>;
+  setPriceOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  savePriceOverride: (tier: string, period: string) => void;
+  ecoMsgCost: string; setEcoMsgCost: (v: string) => void;
+  ecoSelfieCost: string; setEcoSelfieCost: (v: string) => void;
+  ecoGiftSmall: string; setEcoGiftSmall: (v: string) => void;
+  ecoGiftMedium: string; setEcoGiftMedium: (v: string) => void;
+  ecoGiftLarge: string; setEcoGiftLarge: (v: string) => void;
+  ecoCreationCost: string; setEcoCreationCost: (v: string) => void;
+  ecoNcStarDivisor: string; setEcoNcStarDivisor: (v: string) => void;
+  ecoTicketsPerStar: string; setEcoTicketsPerStar: (v: string) => void;
+  ecoDailyFreeTickets: string; setEcoDailyFreeTickets: (v: string) => void;
+  ecoDailyFreeNc: string; setEcoDailyFreeNc: (v: string) => void;
+  ecoDailyBronzeTickets: string; setEcoDailyBronzeTickets: (v: string) => void;
+  ecoDailyBronzeNc: string; setEcoDailyBronzeNc: (v: string) => void;
+  ecoDailySilverTickets: string; setEcoDailySilverTickets: (v: string) => void;
+  ecoDailySilverNc: string; setEcoDailySilverNc: (v: string) => void;
+  ecoDailyGoldTickets: string; setEcoDailyGoldTickets: (v: string) => void;
+  ecoDailyGoldNc: string; setEcoDailyGoldNc: (v: string) => void;
+  savingEco: string | null;
+  saveEcoConfig: (key: string, value: Record<string, number>) => void;
+}
+
+function PricingTab({
+  priceOverrides, setPriceOverrides, savePriceOverride,
+  ecoMsgCost, setEcoMsgCost, ecoSelfieCost, setEcoSelfieCost,
+  ecoGiftSmall, setEcoGiftSmall, ecoGiftMedium, setEcoGiftMedium, ecoGiftLarge, setEcoGiftLarge,
+  ecoCreationCost, setEcoCreationCost, ecoNcStarDivisor, setEcoNcStarDivisor,
+  ecoTicketsPerStar, setEcoTicketsPerStar,
+  ecoDailyFreeTickets, setEcoDailyFreeTickets, ecoDailyFreeNc, setEcoDailyFreeNc,
+  ecoDailyBronzeTickets, setEcoDailyBronzeTickets, ecoDailyBronzeNc, setEcoDailyBronzeNc,
+  ecoDailySilverTickets, setEcoDailySilverTickets, ecoDailySilverNc, setEcoDailySilverNc,
+  ecoDailyGoldTickets, setEcoDailyGoldTickets, ecoDailyGoldNc, setEcoDailyGoldNc,
+  savingEco, saveEcoConfig,
+}: PricingTabProps) {
+  const ecoFields: { label: string; state: string; set: (v: string) => void; key: string; valKey: string }[] = [
+    { label: "🍹 Cyber Cocktail (Small)", state: ecoGiftSmall, set: setEcoGiftSmall, key: "eco_gift_small", valKey: "nc" },
+    { label: "💎 Neon Bracelet (Medium)", state: ecoGiftMedium, set: setEcoGiftMedium, key: "eco_gift_medium", valKey: "nc" },
+    { label: "🔑 Secret Key (Large)", state: ecoGiftLarge, set: setEcoGiftLarge, key: "eco_gift_large", valKey: "nc" },
+  ];
+  const dailyRows: { tier: string; ecoKey: string; tState: string; tSet: (v: string) => void; nState: string; nSet: (v: string) => void }[] = [
+    { tier: "Free",   ecoKey: "eco_daily_free",   tState: ecoDailyFreeTickets,   tSet: setEcoDailyFreeTickets,   nState: ecoDailyFreeNc,   nSet: setEcoDailyFreeNc },
+    { tier: "Bronze", ecoKey: "eco_daily_bronze", tState: ecoDailyBronzeTickets, tSet: setEcoDailyBronzeTickets, nState: ecoDailyBronzeNc, nSet: setEcoDailyBronzeNc },
+    { tier: "Silver", ecoKey: "eco_daily_silver", tState: ecoDailySilverTickets, tSet: setEcoDailySilverTickets, nState: ecoDailySilverNc, nSet: setEcoDailySilverNc },
+    { tier: "Gold",   ecoKey: "eco_daily_gold",   tState: ecoDailyGoldTickets,   tSet: setEcoDailyGoldTickets,   nState: ecoDailyGoldNc,   nSet: setEcoDailyGoldNc },
+  ];
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <DollarSign className="text-yellow-400" size={20} />
+        <h2 className="font-bold uppercase tracking-wider text-yellow-400">Pricing Overrides</h2>
+      </div>
+      <p className="text-xs text-muted-foreground">Override base Telegram Stars pricing per tier.</p>
+      <div className="rounded-xl border border-border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-muted/50">
+              <th className="text-left p-3 text-xs text-muted-foreground font-semibold uppercase">Tier</th>
+              {PERIODS.map(p => (
+                <th key={p} className="text-center p-3 text-xs text-muted-foreground font-semibold uppercase">{p}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {TIERS.map(tier => (
+              <tr key={tier} className="border-t border-border">
+                <td className="p-3 font-bold">{tier}</td>
+                {PERIODS.map(period => (
+                  <PricingCell key={period} tier={tier} period={period} priceOverrides={priceOverrides} setPriceOverrides={setPriceOverrides} savePriceOverride={savePriceOverride} />
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-muted-foreground">Base: Bronze 100/300/3000 · Silver 200/600/6000 · Gold 350/1050/10500 ⭐</p>
+
+      <div className="mt-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Ticket className="text-accent" size={16} />
+          <h3 className="font-bold text-sm uppercase tracking-wider text-accent">Economy Prices</h3>
+          <span className="text-[10px] text-muted-foreground ml-1">Saved to Supabase · hot-reloaded by API (5 min cache)</span>
+        </div>
+        <div className="space-y-3">
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Per-Action Costs</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Message cost (🎫 tickets)</label>
+                <div className="flex gap-1.5">
+                  <Input value={ecoMsgCost} onChange={e => setEcoMsgCost(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                  <button onClick={() => saveEcoConfig("eco_msg_cost", { tickets: Number(ecoMsgCost) })} disabled={savingEco === "eco_msg_cost"} className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                    {savingEco === "eco_msg_cost" ? "…" : <Save size={12} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Selfie cost (🃏 Neon Cards)</label>
+                <div className="flex gap-1.5">
+                  <Input value={ecoSelfieCost} onChange={e => setEcoSelfieCost(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                  <button onClick={() => saveEcoConfig("eco_selfie_cost", { nc: Number(ecoSelfieCost) })} disabled={savingEco === "eco_selfie_cost"} className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                    {savingEco === "eco_selfie_cost" ? "…" : <Save size={12} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Character creation (🃏 NC)</label>
+                <div className="flex gap-1.5">
+                  <Input value={ecoCreationCost} onChange={e => setEcoCreationCost(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                  <button onClick={() => saveEcoConfig("eco_creation_cost", { nc: Number(ecoCreationCost) })} disabled={savingEco === "eco_creation_cost"} className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                    {savingEco === "eco_creation_cost" ? "…" : <Save size={12} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">In-Chat Gift Costs (🃏 Neon Cards)</p>
+            <div className="grid grid-cols-3 gap-3">
+              {ecoFields.map(({ label, state, set, key }) => (
+                <div key={key}>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">{label}</label>
+                  <div className="flex gap-1.5">
+                    <Input value={state} onChange={e => set(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                    <button onClick={() => saveEcoConfig(key, { nc: Number(state) })} disabled={savingEco === key} className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                      {savingEco === key ? "…" : <Save size={12} />}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground">Gold tier gets 50% off gift prices automatically.</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Shop Exchange Rates</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">⭐ Stars per 1 Neon Card</label>
+                <div className="flex gap-1.5">
+                  <Input value={ecoNcStarDivisor} onChange={e => setEcoNcStarDivisor(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                  <button onClick={() => saveEcoConfig("eco_nc_star_divisor", { divisor: Number(ecoNcStarDivisor) })} disabled={savingEco === "eco_nc_star_divisor"} className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                    {savingEco === "eco_nc_star_divisor" ? "…" : <Save size={12} />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">Currently: {ecoNcStarDivisor}⭐ = 1🃏</p>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">🎫 Tickets per 1 Star</label>
+                <div className="flex gap-1.5">
+                  <Input value={ecoTicketsPerStar} onChange={e => setEcoTicketsPerStar(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                  <button onClick={() => saveEcoConfig("eco_tickets_per_star", { tickets: Number(ecoTicketsPerStar) })} disabled={savingEco === "eco_tickets_per_star"} className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                    {savingEco === "eco_tickets_per_star" ? "…" : <Save size={12} />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">Currently: 1⭐ = {ecoTicketsPerStar}🎫</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Daily Gift Claim Rewards (by Tier)</p>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left p-2 text-muted-foreground font-semibold">Tier</th>
+                    <th className="text-center p-2 text-muted-foreground font-semibold">🎫 Tickets</th>
+                    <th className="text-center p-2 text-muted-foreground font-semibold">🃏 NC</th>
+                    <th className="text-center p-2 text-muted-foreground font-semibold">Save</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dailyRows.map(({ tier, ecoKey, tState, tSet, nState, nSet }) => (
+                    <tr key={tier} className="border-t border-border">
+                      <td className="p-2 font-bold">{tier}</td>
+                      <td className="p-1.5"><Input value={tState} onChange={e => tSet(e.target.value)} className="bg-background border-border h-7 text-[11px] text-center" /></td>
+                      <td className="p-1.5"><Input value={nState} onChange={e => nSet(e.target.value)} className="bg-background border-border h-7 text-[11px] text-center" /></td>
+                      <td className="p-1.5 text-center">
+                        <button onClick={() => saveEcoConfig(ecoKey, { tickets: Number(tState), nc: Number(nState) })} disabled={savingEco === ecoKey} className="px-2 h-7 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20">
+                          {savingEco === ecoKey ? "…" : <Save size={11} />}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TxnRow({ txn }: { txn: { transactionId: string; ticketAmount: number; actionType: string; timestamp: string } }) {
+  const isCredit = txn.ticketAmount >= 0;
+  const label = txn.actionType.replace(/_/g, " ").replace(/^subscription /, "Sub: ");
+  return (
+    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-card border border-border text-xs">
+      <div className="flex-1 min-w-0">
+        <div className="font-medium truncate capitalize">{label}</div>
+        <div className="text-muted-foreground text-[10px]">
+          {new Date(txn.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+        </div>
+      </div>
+      <div className={`font-bold shrink-0 ml-2 ${isCredit ? "text-green-400" : "text-red-400"}`}>
+        {isCredit ? "+" : ""}{txn.ticketAmount} 🎟
+      </div>
+    </div>
   );
 }
