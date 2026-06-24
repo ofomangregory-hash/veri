@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe } from "@workspace/api-client-react";
-import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign, UserCircle, Ticket, CreditCard as CardIcon } from "lucide-react";
+import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign, UserCircle, Ticket, CreditCard as CardIcon, Ban, TrendingUp, Filter, Calendar } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { CharacterWizard } from "@/components/CharacterWizard";
 
-type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast";
+type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "blb";
 
 interface SysConfig { key: string; value: unknown; updatedAt: string }
 
@@ -75,7 +75,7 @@ export function Admin() {
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
-    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast"]
+    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "earnings", "blb"]
     : ["stats", "users", "characters"];
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
@@ -121,6 +121,35 @@ export function Admin() {
   const [showWizard, setShowWizard] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<{ seeded: number; skipped: number; total: number } | null>(null);
+
+  // ── Earnings state ─────────────────────────────────────────────────────────
+  const [earningsData, setEarningsData] = useState<{
+    items: Array<{ transactionId: string; telegramId: string; username: string | null; actionType: string; ticketAmount: number; starAmount: number | null; neonCardAmount: number | null; timestamp: string }>;
+    total: number; page: number;
+    totals: { allTime: { stars: number; txCount: number }; today: { stars: number; txCount: number }; month: { stars: number; txCount: number } };
+    dailySummary: Array<{ day: string; actionType: string; totalTickets: number; totalStars: number; count: number }>;
+  } | null>(null);
+  const [earningsLoading, setEarningsLoading] = useState(false);
+  const [earningsFilter, setEarningsFilter] = useState({ userId: "", type: "", dateFrom: "", dateTo: "" });
+
+  // ── BLB state ──────────────────────────────────────────────────────────────
+  type BLBUser = { id: string; username: string | null; subscriptionTier: string; ticketBalance: number; status: string; restrictions: Record<string, unknown> | null };
+  const [blbUsers, setBlbUsers] = useState<BLBUser[]>([]);
+  const [blbLoading, setBlbLoading] = useState(false);
+  const [blbSearch, setBlbSearch] = useState("");
+  const [blbExpandedId, setBlbExpandedId] = useState<string | null>(null);
+  const [blbBlockHours, setBlbBlockHours] = useState<Record<string, string>>({});
+  const [blbBlockReason, setBlbBlockReason] = useState<Record<string, string>>({});
+  const [blbFeatureToggles, setBlbFeatureToggles] = useState<Record<string, Record<string, boolean>>>({});
+  const [blbLimits, setBlbLimits] = useState<Record<string, { maxMessages: string; maxCreations: string; maxPurchases: string }>>({});
+
+  const BLB_FEATURES = ["chat", "character_creation", "shop", "gifts", "daily_claim", "invite_earn", "media_inventory", "quest_hub", "premium_upgrade"] as const;
+  type BLBFeature = typeof BLB_FEATURES[number];
+  const BLB_FEATURE_LABELS: Record<BLBFeature, string> = {
+    chat: "💬 Chat", character_creation: "🤖 Character Creation", shop: "🛒 Shop",
+    gifts: "🎁 Gifts", daily_claim: "📅 Daily Claim", invite_earn: "📨 Invite & Earn",
+    media_inventory: "📷 Media Inventory", quest_hub: "🏆 Quest Hub", premium_upgrade: "⭐ Premium Upgrade",
+  };
 
   // ── User Drawer State ─────────────────────────────────────────────────────
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -394,6 +423,56 @@ export function Admin() {
     finally { setCreating(false); }
   };
 
+  const fetchEarnings = useCallback(async () => {
+    setEarningsLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: "50" });
+      if (earningsFilter.userId) params.set("userId", earningsFilter.userId);
+      if (earningsFilter.type) params.set("type", earningsFilter.type);
+      if (earningsFilter.dateFrom) params.set("dateFrom", earningsFilter.dateFrom);
+      if (earningsFilter.dateTo) params.set("dateTo", earningsFilter.dateTo);
+      const data = await adminApi(`GET`, `/admin/earnings?${params}`);
+      setEarningsData(data as typeof earningsData);
+    } catch (e) { toast({ title: "Earnings load failed", description: String(e), variant: "destructive" }); }
+    finally { setEarningsLoading(false); }
+  }, [earningsFilter]);
+
+  useEffect(() => {
+    if (activeTab === "earnings") fetchEarnings();
+  }, [activeTab]);
+
+  const fetchBlbUsers = useCallback(async (search = "") => {
+    setBlbLoading(true);
+    try {
+      const params = search ? `?search=${encodeURIComponent(search)}` : "";
+      const data = await adminApi<BLBUser[]>("GET", `/admin/blb${params}`);
+      setBlbUsers(data);
+      const togglesInit: Record<string, Record<string, boolean>> = {};
+      const limitsInit: Record<string, { maxMessages: string; maxCreations: string; maxPurchases: string }> = {};
+      for (const u of data) {
+        const r = u.restrictions;
+        togglesInit[u.id] = Object.fromEntries(BLB_FEATURES.map(f => [f, !!(r?.restrictions as Record<string, boolean> | undefined)?.[f]]));
+        const lims = r?.limits as Record<string, number> | undefined;
+        limitsInit[u.id] = { maxMessages: String(lims?.max_messages ?? ""), maxCreations: String(lims?.max_creations ?? ""), maxPurchases: String(lims?.max_purchases ?? "") };
+      }
+      setBlbFeatureToggles(togglesInit);
+      setBlbLimits(limitsInit);
+    } catch (e) { toast({ title: "BLB load failed", description: String(e), variant: "destructive" }); }
+    finally { setBlbLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "blb") fetchBlbUsers(blbSearch);
+  }, [activeTab]);
+
+  const blbAction = async (userId: string, action: string, body?: unknown) => {
+    try {
+      await adminApi("POST", `/admin/blb/${userId}/${action}`, body);
+      toast({ title: `✅ ${action} applied` });
+      fetchBlbUsers(blbSearch);
+    } catch (e) { toast({ title: `${action} failed`, description: String(e), variant: "destructive" }); }
+  };
+
   const sendBroadcast = async () => {
     if (!broadcastMsg.trim()) return;
     setBroadcasting(true);
@@ -423,6 +502,8 @@ export function Admin() {
     pricing: "💰 Pricing",
     premium: "⭐ Premium",
     broadcast: "📢 Broadcast",
+    earnings: "💵 Earnings",
+    blb: "🚫 B.L.B",
   };
 
   const filteredUsers = (usersData?.items ?? []).filter(u => {
@@ -498,6 +579,24 @@ export function Admin() {
               </div>
             )}
           </div>
+
+          {/* Extra stat boxes — Earnings + BLB */}
+          {isGodMode && (
+            <div className="grid grid-cols-2 gap-4">
+              <button onClick={() => setActiveTab("earnings")}
+                className="p-4 rounded-xl bg-card border border-border hover:border-green-500/60 transition-all text-left w-full cursor-pointer active:scale-95">
+                <TrendingUp className="text-green-400 mb-2" size={20} />
+                <div className="text-lg font-bold text-green-400">💵 Earnings</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Transaction Log →</div>
+              </button>
+              <button onClick={() => setActiveTab("blb")}
+                className="p-4 rounded-xl bg-card border border-border hover:border-red-500/60 transition-all text-left w-full cursor-pointer active:scale-95">
+                <Ban className="text-red-400 mb-2" size={20} />
+                <div className="text-lg font-bold text-red-400">🚫 B.L.B</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Ban · Block · Limit →</div>
+              </button>
+            </div>
+          )}
 
           <section>
             <div className="flex items-center justify-between mb-3">

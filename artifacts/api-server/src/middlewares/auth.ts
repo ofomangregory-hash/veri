@@ -4,6 +4,7 @@ import { usersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { validateTelegramInitData, extractInitData } from "../lib/telegram-validate";
 import { logger } from "../lib/logger";
+import { supabase } from "../lib/supabase";
 import crypto from "crypto";
 
 declare global {
@@ -19,6 +20,10 @@ declare global {
 }
 
 const SUPREME_ADMIN_USERNAME = "zxeleen";
+const SUPREME_ADMIN_ID = "8704633862";
+
+// Cache users already granted supreme_admin so we skip re-running every request
+const promotedSupremeAdmins = new Set<string>();
 
 function generateReferralCode(): string {
   return crypto.randomBytes(6).toString("hex");
@@ -102,15 +107,15 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     const isUsernameSupreme =
       !!telegramUsername &&
       telegramUsername.toLowerCase() === SUPREME_ADMIN_USERNAME.toLowerCase();
-    req.isSupremeAdmin = isUsernameSupreme;
+    const isIdSupreme = userId === SUPREME_ADMIN_ID;
+    req.isSupremeAdmin = isUsernameSupreme || isIdSupreme;
 
-    const HARDCODED_ADMIN_ID = "8704633862";
     const userIdNum = Number(userId);
     const envAdminId = (process.env.ADMIN_TELEGRAM_ID ?? "").trim();
     const validUserId = userId !== "" && !isNaN(userIdNum) && isFinite(userIdNum);
-    const isHardcoded = validUserId && String(userIdNum) === HARDCODED_ADMIN_ID;
+    const isHardcoded = validUserId && String(userIdNum) === SUPREME_ADMIN_ID;
     const isEnvAdmin = validUserId && envAdminId !== "" && String(userIdNum) === String(Number(envAdminId));
-    req.isAdmin = isHardcoded || isEnvAdmin || isUsernameSupreme;
+    req.isAdmin = isHardcoded || isEnvAdmin || isUsernameSupreme || isIdSupreme;
 
     // ── STEP 1: Core login upsert — must succeed for login to work ────────────
     // Only update safe fields on conflict; NEVER block login on privilege logic.
@@ -139,16 +144,38 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     });
 
     // ── STEP 2: Grant supreme admin tier — non-blocking, never fails login ────
-    if (isUsernameSupreme) {
+    // Only runs once per server process per user (cached in promotedSupremeAdmins)
+    if ((isUsernameSupreme || isIdSupreme) && !promotedSupremeAdmins.has(userId)) {
+      // Update local Postgres
       try {
         await db.update(usersTable)
-          .set({
-            subscriptionTier: "supreme_admin",
-            staffPrivileges: "full_admin",
-          })
+          .set({ subscriptionTier: "supreme_admin", staffPrivileges: "full_admin" })
           .where(eq(usersTable.id, userId));
+        promotedSupremeAdmins.add(userId);
       } catch (err) {
-        logger.warn({ err }, "Failed to grant supreme admin privileges — login continues");
+        logger.warn({ err }, "Failed to grant supreme admin privileges in local DB — login continues");
+      }
+
+      // Update Supabase directly (uses telegram_id column, staff_privileges as boolean)
+      if (supabase) {
+        try {
+          const { error: supErr } = await supabase
+            .from("users")
+            .update({ subscription_tier: "supreme_admin", staff_privileges: true })
+            .eq("telegram_id", userId);
+          if (supErr) {
+            logger.warn({
+              code: supErr.code,
+              message: supErr.message,
+              details: supErr.details,
+              hint: supErr.hint,
+            }, "Failed to grant supreme admin privileges in Supabase — login continues");
+          } else {
+            promotedSupremeAdmins.add(userId);
+          }
+        } catch (err) {
+          logger.warn({ err }, "Supabase unreachable when granting supreme admin — login continues");
+        }
       }
     }
 

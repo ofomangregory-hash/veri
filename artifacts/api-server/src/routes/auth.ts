@@ -74,6 +74,7 @@ router.patch("/auth/profile", async (req, res): Promise<void> => {
     .set({
       customNickname: parsed.data.customNickname ?? undefined,
       userTraits: parsed.data.userTraits ?? undefined,
+      ...(parsed.data.avatarId !== undefined ? { avatarId: parsed.data.avatarId } : {}),
     })
     .where(eq(usersTable.id, req.telegramUserId))
     .returning();

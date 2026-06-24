@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, sql, or, inArray } from "drizzle-orm";
+import { eq, ilike, sql, or, inArray, desc, gte, lte, and } from "drizzle-orm";
 import crypto from "crypto";
 import { db, usersTable, charactersTable, conversationsTable, transactionsTable, systemConfigurationsTable } from "@workspace/db";
 import { upsertSupabasePrice, getAllPrices, invalidatePricesCache, seedPricesIfEmpty } from "../lib/supabasePrices";
@@ -27,6 +27,7 @@ import { getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterAvatar } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import { listSupabaseCharacters, createSupabaseCharacter, updateSupabaseCharacter, getSupabaseCharacterById } from "../lib/supabaseCharacters";
+import { supabase } from "../lib/supabase";
 
 const router: IRouter = Router();
 
@@ -648,6 +649,209 @@ router.post("/admin/seed", authMiddleware, adminOnly, async (req, res): Promise<
 
   logger.info({ seeded, skipped }, "Seed completed");
   res.json({ seeded, skipped, total: defaultCharacters.length });
+});
+
+// ─── Earnings ─────────────────────────────────────────────────────────────────
+
+router.get("/admin/earnings", async (req, res): Promise<void> => {
+  const { page: pageStr = "1", limit: limitStr = "50", userId, type, dateFrom, dateTo } = req.query as Record<string, string>;
+  const page = Math.max(1, parseInt(pageStr, 10) || 1);
+  const limit = Math.min(100, parseInt(limitStr, 10) || 50);
+  const offset = (page - 1) * limit;
+
+  const conditions = [];
+  if (userId) conditions.push(eq(transactionsTable.telegramId, userId));
+  if (type) conditions.push(eq(transactionsTable.actionType, type));
+  if (dateFrom) {
+    try { conditions.push(gte(transactionsTable.timestamp, new Date(dateFrom))); } catch {}
+  }
+  if (dateTo) {
+    try {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      conditions.push(lte(transactionsTable.timestamp, to));
+    } catch {}
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [txns, countResult] = await Promise.all([
+    db.select().from(transactionsTable)
+      .where(whereClause)
+      .orderBy(desc(transactionsTable.timestamp))
+      .limit(limit).offset(offset),
+    db.select({ count: sql<number>`count(*)` }).from(transactionsTable).where(whereClause),
+  ]);
+
+  const telegramIds = [...new Set(txns.map(t => t.telegramId))];
+  const users = telegramIds.length > 0
+    ? await db.select({ id: usersTable.id, username: usersTable.username })
+        .from(usersTable).where(inArray(usersTable.id, telegramIds))
+    : [];
+  const userMap = Object.fromEntries(users.map(u => [u.id, u.username]));
+
+  // Daily summary: last 30 days
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const dailySummary = await db.select({
+    day: sql<string>`DATE(timestamp AT TIME ZONE 'UTC')`,
+    actionType: transactionsTable.actionType,
+    totalTickets: sql<number>`SUM(ticket_amount)`,
+    totalStars: sql<number>`SUM(COALESCE(star_amount, 0))`,
+    count: sql<number>`COUNT(*)`,
+  }).from(transactionsTable)
+    .where(gte(transactionsTable.timestamp, thirtyDaysAgo))
+    .groupBy(sql`DATE(timestamp AT TIME ZONE 'UTC')`, transactionsTable.actionType)
+    .orderBy(sql`DATE(timestamp AT TIME ZONE 'UTC') DESC`);
+
+  // Running totals
+  const totals = await db.select({
+    totalStars: sql<number>`SUM(COALESCE(star_amount, 0))`,
+    totalTickets: sql<number>`SUM(ticket_amount)`,
+    count: sql<number>`COUNT(*)`,
+  }).from(transactionsTable);
+
+  const todayStart = new Date(); todayStart.setUTCHours(0,0,0,0);
+  const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0,0,0,0);
+
+  const [todayTotals, monthTotals] = await Promise.all([
+    db.select({ stars: sql<number>`SUM(COALESCE(star_amount,0))`, count: sql<number>`COUNT(*)` })
+      .from(transactionsTable).where(gte(transactionsTable.timestamp, todayStart)),
+    db.select({ stars: sql<number>`SUM(COALESCE(star_amount,0))`, count: sql<number>`COUNT(*)` })
+      .from(transactionsTable).where(gte(transactionsTable.timestamp, monthStart)),
+  ]);
+
+  res.json({
+    items: txns.map(t => ({
+      ...t,
+      username: userMap[t.telegramId] ?? null,
+      timestamp: t.timestamp.toISOString(),
+    })),
+    total: Number(countResult[0]?.count ?? 0),
+    page,
+    limit,
+    dailySummary,
+    totals: {
+      allTime: { stars: Number(totals[0]?.totalStars ?? 0), txCount: Number(totals[0]?.count ?? 0) },
+      today: { stars: Number(todayTotals[0]?.stars ?? 0), txCount: Number(todayTotals[0]?.count ?? 0) },
+      month: { stars: Number(monthTotals[0]?.stars ?? 0), txCount: Number(monthTotals[0]?.count ?? 0) },
+    },
+  });
+});
+
+// ─── B.L.B (Ban / Block / Limit) ──────────────────────────────────────────────
+
+const BLB_TABLE = "user_restrictions";
+
+router.get("/admin/blb", async (req, res): Promise<void> => {
+  const { search } = req.query as { search?: string };
+
+  // Get users from local DB
+  let usersQuery = db.select({
+    id: usersTable.id, username: usersTable.username,
+    subscriptionTier: usersTable.subscriptionTier,
+    ticketBalance: usersTable.ticketBalance,
+  }).from(usersTable);
+
+  if (search?.trim()) {
+    const q = `%${search.trim()}%`;
+    usersQuery = usersQuery.where(or(ilike(usersTable.username, q), ilike(usersTable.id, q))) as typeof usersQuery;
+  }
+
+  const localUsers = await (usersQuery as ReturnType<typeof usersQuery.limit>).limit(50);
+
+  // Get restrictions from Supabase
+  let restrictionsMap: Record<string, Record<string, unknown>> = {};
+  if (supabase) {
+    try {
+      const ids = localUsers.map(u => u.id);
+      if (ids.length > 0) {
+        const { data } = await supabase.from(BLB_TABLE).select("*").in("telegram_id", ids);
+        if (data) {
+          restrictionsMap = Object.fromEntries((data as Array<{ telegram_id: string } & Record<string, unknown>>).map(r => [r.telegram_id, r]));
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, "BLB: Supabase fetch failed");
+    }
+  }
+
+  res.json(localUsers.map(u => ({
+    ...u,
+    restrictions: restrictionsMap[u.id] ?? null,
+    status: restrictionsMap[u.id]?.is_banned ? "banned"
+      : restrictionsMap[u.id]?.is_blocked && restrictionsMap[u.id]?.block_expires_at && new Date(restrictionsMap[u.id].block_expires_at as string) > new Date() ? "blocked"
+      : restrictionsMap[u.id]?.restrictions ? "restricted"
+      : "active",
+  })));
+});
+
+router.post("/admin/blb/:userId/ban", async (req, res): Promise<void> => {
+  const { userId } = req.params;
+  const { reason = "" } = req.body as { reason?: string };
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const { error } = await supabase.from(BLB_TABLE).upsert({
+    telegram_id: userId, is_banned: true, ban_reason: reason,
+    is_blocked: false, block_expires_at: null, updated_at: new Date().toISOString(),
+  }, { onConflict: "telegram_id" });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true, userId, action: "banned" });
+});
+
+router.post("/admin/blb/:userId/unban", async (req, res): Promise<void> => {
+  const { userId } = req.params;
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const { error } = await supabase.from(BLB_TABLE).upsert({
+    telegram_id: userId, is_banned: false, ban_reason: null, updated_at: new Date().toISOString(),
+  }, { onConflict: "telegram_id" });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true, userId, action: "unbanned" });
+});
+
+router.post("/admin/blb/:userId/block", async (req, res): Promise<void> => {
+  const { userId } = req.params;
+  const { hours = 24, reason = "" } = req.body as { hours?: number; reason?: string };
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const expiresAt = new Date(Date.now() + Number(hours) * 3600_000).toISOString();
+  const { error } = await supabase.from(BLB_TABLE).upsert({
+    telegram_id: userId, is_blocked: true, block_expires_at: expiresAt,
+    block_reason: reason, updated_at: new Date().toISOString(),
+  }, { onConflict: "telegram_id" });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true, userId, action: "blocked", expiresAt });
+});
+
+router.post("/admin/blb/:userId/unblock", async (req, res): Promise<void> => {
+  const { userId } = req.params;
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const { error } = await supabase.from(BLB_TABLE).upsert({
+    telegram_id: userId, is_blocked: false, block_expires_at: null, block_reason: null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "telegram_id" });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true, userId, action: "unblocked" });
+});
+
+router.post("/admin/blb/:userId/restrict", async (req, res): Promise<void> => {
+  const { userId } = req.params;
+  const { restrictions } = req.body as { restrictions: Record<string, boolean> };
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const { error } = await supabase.from(BLB_TABLE).upsert({
+    telegram_id: userId, restrictions, updated_at: new Date().toISOString(),
+  }, { onConflict: "telegram_id" });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true, userId, restrictions });
+});
+
+router.post("/admin/blb/:userId/limit", async (req, res): Promise<void> => {
+  const { userId } = req.params;
+  const { limits } = req.body as { limits: Record<string, number> };
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const { error } = await supabase.from(BLB_TABLE).upsert({
+    telegram_id: userId, limits, updated_at: new Date().toISOString(),
+  }, { onConflict: "telegram_id" });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true, userId, limits });
 });
 
 export default router;

@@ -7,6 +7,8 @@ export const transactionsTable = pgTable("transaction_logs", {
   telegramId: text("telegram_id").notNull(),
   actionType: text("action_type").notNull(),
   ticketAmount: integer("ticket_amount").notNull(),
+  neonCardAmount: integer("neon_card_amount"),
+  starAmount: integer("star_amount"),
   timestamp: timestamp("timestamp", { withTimezone: true }).notNull().defaultNow(),
 });
 

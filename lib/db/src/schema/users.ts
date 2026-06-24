@@ -22,6 +22,7 @@ export const usersTable = pgTable("users", {
   dailyMessageCount: integer("daily_message_count").notNull().default(0),
   lastDailyClaim: timestamp("last_daily_claim", { withTimezone: true }),
   staffPrivileges: text("staff_privileges"),
+  avatarId: text("avatar_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
