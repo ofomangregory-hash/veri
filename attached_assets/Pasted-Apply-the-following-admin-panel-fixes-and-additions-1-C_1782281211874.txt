@@ -1,0 +1,75 @@
+Apply the following admin panel fixes and additions:
+1. Character List Arrow (Admin > Characters)
+
+Replace the current arrow icon on each character row with a > chevron style button.
+Clicking it opens a full configurable detail page for that character showing all stored fields.
+Supreme admin (username = 'zxeleen', ID 8704633862) can edit every detail on this page including name, bio, traits, personality, prompt, avatar, NSFW status, and visibility.
+All edits must save to Supabase immediately and persist permanently until changed again.
+
+2. Stats Boxes Routing (Admin > Stats)
+
+Every stat box (Total Users, Characters, Active Chats, Revenue) must be clickable.
+Total Users → routes to Users tab
+Characters → routes to Characters tab
+Active Chats → routes to Chats section
+Revenue → routes to a Revenue or Pricing section
+Recent Users list items must also be clickable and open that user's full detail/edit page.
+
+3. Banner Type Selector (Admin > Banners)
+
+Add a selector/button before the banner form that asks: Normal Banner or Ad Banner?
+Based on the selection, the form saves to the correct banner type and displays in the correct grid/box on the home screen.
+Normal banners display in the standard CMS banner grid.
+Ad banners display with the "Sponsored" label and CTA button.
+All banner changes must save to Supabase and persist permanently until changed again.
+
+4. Editable Pricing Section (Admin Panel)
+
+Add a dedicated Pricing section in the admin panel.
+All prices must be editable from here including:
+
+Premium subscription tiers (all levels)
+In-chat gift prices
+Ticket prices
+Neon Card prices
+Any other purchasable feature or action cost
+
+
+All pricing changes must save to Supabase immediately and reflect across the entire app and bot permanently until changed again.
+The app and bot must always read prices from Supabase — no hardcoded prices anywhere in the code.
+
+5. Gift Claims & Auto Claim
+
+Free users can claim gifts once daily.
+Premium users can claim gifts 2x daily.
+Supreme admin (username = 'zxeleen') can claim gifts 3x daily.
+Enable auto claim for supreme admin and Gold tier premium users — gifts are automatically claimed daily without manual action.
+All claim counts and last claim timestamps must be tracked and saved in Supabase.
+
+6. Premium Card Benefits Update
+
+Add the new gift claim benefits to the existing benefits list displayed on all premium tier cards:
+
+Free → 1x daily gift claim
+Premium → 2x daily gift claim
+Gold Premium → 2x daily gift claim + auto claim
+Supreme Admin → 3x daily gift claim + auto claim
+
+
+Display these alongside all existing benefits already shown on the cards.
+
+7. Premium Section in Admin Panel
+
+Add a dedicated Premium section to the admin panel that allows supreme admin to:
+
+Edit the text displayed on each premium tier card
+Edit the price of each premium tier
+Edit the structure and layout of the cards (benefits list, featured badge, card color/style)
+Add or remove benefits from any tier card
+
+
+All changes must save to Supabase immediately and reflect on the premium page without a full app reload.
+The premium page must always pull card content and prices from Supabase — no hardcoded premium card data anywhere in the code.
+
+Do not break any existing functionality or UI.
+
