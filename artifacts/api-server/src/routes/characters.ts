@@ -66,12 +66,17 @@ router.get("/characters", async (req, res): Promise<void> => {
   const { page = 1, limit = 20, search, tags, genre } = parsed.data;
   const offset = ((page ?? 1) - 1) * (limit ?? 20);
 
+  const [user] = await db.select({ subscriptionTier: usersTable.subscriptionTier })
+    .from(usersTable).where(eq(usersTable.id, req.telegramUserId));
+  const isFreeUser = !req.isAdmin && (!user || user.subscriptionTier === "Free");
+
   const { items, total } = await listSupabaseCharacters({
     visibility: "public",
     search: search ?? undefined,
     tags: tags ?? undefined,
     limit: limit ?? 20,
     offset,
+    excludeNsfw: isFreeUser,
   });
 
   const filtered = genre
@@ -157,7 +162,13 @@ router.post("/characters", async (req, res): Promise<void> => {
     return;
   }
 
-  const visibility = req.isAdmin ? "public" : "private";
+  const requestedVisibility = (req.body as Record<string, unknown>)?.visibility;
+  const visibility: "public" | "private" = req.isAdmin
+    ? (requestedVisibility === "private" ? "private" : "public")
+    : (requestedVisibility === "public" ? "public" : "private");
+  const isNsfw = typeof (req.body as Record<string, unknown>)?.isNsfw === "boolean"
+    ? (req.body as Record<string, unknown>).isNsfw as boolean
+    : false;
   const imageSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
   const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
 
@@ -187,6 +198,7 @@ router.post("/characters", async (req, res): Promise<void> => {
     tags: parsed.data.tags ?? [],
     tagline: null,
     imageSeed,
+    isNsfw,
   });
 
   if (!character) {

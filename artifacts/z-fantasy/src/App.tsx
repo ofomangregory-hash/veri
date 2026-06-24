@@ -13,6 +13,7 @@ import { ChatFeed } from "@/pages/chat-feed";
 import { ChatDetail } from "@/pages/chat-detail";
 import { Premium } from "@/pages/premium";
 import { Admin } from "@/pages/admin";
+import { CharacterBio } from "@/pages/CharacterBio";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +82,7 @@ function Router() {
         <Route path="/chat" component={ChatFeed} />
         <Route path="/chat/:id" component={ChatDetail} />
         <Route path="/premium" component={Premium} />
+        <Route path="/character/:id" component={CharacterBio} />
         <Route path="/admin" component={Admin} />
         <Route component={NotFound} />
       </Switch>

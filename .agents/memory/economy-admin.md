@@ -7,9 +7,10 @@ description: Gift costs, daily claim amounts, admin ID hardcoding, ticket pricin
 - Hardcoded admin ID: `8704633862` — added to both `auth.ts` middleware and `telegram-bot.ts`
 - Must appear in all `isAdminUser` checks alongside `process.env.ADMIN_TELEGRAM_ID`
 
-## Daily Claim
-- Flat 30 tickets + 15 neon cards for all users (no premium distinction)
-- Same in both API route (`routes/auth.ts`) and bot `/daily` handler
+## Daily Claim (Tier-Based)
+- Free=30T+15NC, Bronze=50T+25NC, Silver=75T+37NC, Gold=100T+56NC, supreme_admin=1M+1M
+- Same tier logic in both API route (`routes/auth.ts`) and bot `/daily` handler
+- HamburgerDrawer shows the correct amount before claiming using the same tier table
 
 ## Gift Economy (Neon Cards, not Tickets)
 - Gifts deduct `neonCardBalance`, not `ticketBalance`

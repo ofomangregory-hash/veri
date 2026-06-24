@@ -58,7 +58,11 @@ function deriveGenre(tags: string[]): string | null {
   return null;
 }
 
+const NSFW_TAG = "#NSFW";
+
 export function serializeSupabaseCharacter(row: SupabaseCharacterRow): NormalizedCharacter {
+  const tags = row.tags ?? [];
+  const isNsfw = row.is_nsfw === true || tags.includes(NSFW_TAG);
   return {
     characterId: row.character_id,
     creatorId: row.creator_id,
@@ -68,12 +72,13 @@ export function serializeSupabaseCharacter(row: SupabaseCharacterRow): Normalize
     avatarUrl: row.avatar_url ?? null,
     teaserDescription: row.teaser_description ?? null,
     initialGreeting: row.initial_greeting ?? null,
-    tags: row.tags ?? [],
-    genre: deriveGenre(row.tags ?? []),
+    tags,
+    genre: deriveGenre(tags),
     age: null,
     triggerMetadataArray: row.trigger_metadata_array ?? null,
     tagline: row.tagline ?? null,
     imageSeed: row.image_seed != null ? String(row.image_seed) : null,
+    isNsfw,
   };
 }
 
@@ -84,6 +89,7 @@ export async function listSupabaseCharacters(opts: {
   creatorId?: string;
   limit?: number;
   offset?: number;
+  excludeNsfw?: boolean;
 }): Promise<{ items: NormalizedCharacter[]; total: number }> {
   if (!supabase) {
     logger.warn("listSupabaseCharacters: Supabase client unavailable");
@@ -116,10 +122,12 @@ export async function listSupabaseCharacters(opts: {
     return { items: [], total: 0 };
   }
 
-  return {
-    items: ((data ?? []) as SupabaseCharacterRow[]).map(serializeSupabaseCharacter),
-    total: count ?? 0,
-  };
+  let items = ((data ?? []) as SupabaseCharacterRow[]).map(serializeSupabaseCharacter);
+  if (opts.excludeNsfw) {
+    items = items.filter(c => !c.isNsfw);
+  }
+
+  return { items, total: count ?? 0 };
 }
 
 export async function getSupabaseCharacterById(characterId: string): Promise<NormalizedCharacter | null> {
@@ -153,8 +161,12 @@ export async function createSupabaseCharacter(values: {
   tags?: string[];
   tagline?: string | null;
   imageSeed?: string | null;
+  isNsfw?: boolean;
 }): Promise<NormalizedCharacter | null> {
   if (!supabase) return null;
+
+  const tags = [...(values.tags ?? [])];
+  if (values.isNsfw && !tags.includes(NSFW_TAG)) tags.push(NSFW_TAG);
 
   const payload: Record<string, unknown> = {
     creator_id: values.creatorId,
@@ -164,7 +176,7 @@ export async function createSupabaseCharacter(values: {
     avatar_url: values.avatarUrl ?? null,
     teaser_description: values.teaserDescription ?? null,
     initial_greeting: values.initialGreeting ?? null,
-    tags: values.tags ?? [],
+    tags,
     tagline: values.tagline ?? null,
     image_seed: values.imageSeed ? parseInt(values.imageSeed) : null,
     trigger_metadata_array: [],
@@ -197,6 +209,7 @@ export async function updateSupabaseCharacter(
     avatarUrl?: string | null;
     systemPrompt?: string;
     tagline?: string | null;
+    isNsfw?: boolean;
   }
 ): Promise<NormalizedCharacter | null> {
   if (!supabase) return null;
@@ -206,10 +219,19 @@ export async function updateSupabaseCharacter(
   if (values.teaserDescription !== undefined) payload.teaser_description = values.teaserDescription;
   if (values.initialGreeting !== undefined) payload.initial_greeting = values.initialGreeting;
   if (values.visibility != null) payload.visibility = values.visibility;
-  if (values.tags != null) payload.tags = values.tags;
   if (values.avatarUrl !== undefined) payload.avatar_url = values.avatarUrl;
   if (values.systemPrompt != null) payload.system_prompt = values.systemPrompt;
   if (values.tagline !== undefined) payload.tagline = values.tagline;
+
+  // Manage #NSFW tag
+  if (values.isNsfw !== undefined) {
+    let tags = (values.tags ?? []) as string[];
+    if (values.isNsfw && !tags.includes(NSFW_TAG)) tags = [...tags, NSFW_TAG];
+    if (!values.isNsfw) tags = tags.filter(t => t !== NSFW_TAG);
+    payload.tags = tags;
+  } else if (values.tags != null) {
+    payload.tags = values.tags;
+  }
 
   const { data, error } = await supabase
     .from("characters")

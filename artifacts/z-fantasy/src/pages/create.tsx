@@ -360,7 +360,7 @@ export function Create() {
             <textarea
               value={greeting}
               onChange={e => setGreeting(e.target.value)}
-              placeholder='"I\'ve been waiting for you... longer than you know."'
+              placeholder={`"I've been waiting for you... longer than you know."`}
               rows={6}
               className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 resize-none transition-all"
             />

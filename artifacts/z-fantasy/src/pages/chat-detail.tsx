@@ -70,9 +70,10 @@ export function ChatDetail() {
         <Link href="/chat" className="p-2 -ml-2 text-muted-foreground hover:text-white">
           <ChevronLeft size={24} />
         </Link>
-        <div className="w-10 h-10 rounded-full overflow-hidden border border-secondary box-glow-purple shrink-0">
+        <Link href={conv?.character?.characterId ? `/character/${conv.character.characterId}` : "#"}
+          className="w-10 h-10 rounded-full overflow-hidden border border-secondary box-glow-purple shrink-0 cursor-pointer hover:opacity-80 transition-opacity">
           <img src={conv?.character?.avatarUrl || ""} alt="Avatar" className="w-full h-full object-cover" />
-        </div>
+        </Link>
         <div className="flex-1 min-w-0">
           <h2 className="font-bold text-white truncate">{conv?.character?.name}</h2>
           <div className="text-xs text-primary flex items-center gap-1 font-medium">

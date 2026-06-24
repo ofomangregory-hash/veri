@@ -334,7 +334,9 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
                 >
                   <Ticket className="text-accent" />
                   <span className="flex-1 font-medium">Claim Daily Tickets</span>
-                  <span className="text-xs text-muted-foreground">+10</span>
+                  <span className="text-xs text-muted-foreground">
+                    {tier === "Gold" ? "+100 🎟️ +56 🃏" : tier === "Silver" ? "+75 🎟️ +37 🃏" : tier === "Bronze" ? "+50 🎟️ +25 🃏" : "+30 🎟️ +15 🃏"}
+                  </span>
                 </button>
                 <button
                   onClick={handleCopyReferral}

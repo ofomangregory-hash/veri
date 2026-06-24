@@ -111,6 +111,19 @@ export function Admin() {
   const [savingUser, setSavingUser] = useState(false);
   const [userSearch, setUserSearch] = useState("");
 
+  // ── Character Edit Drawer State ───────────────────────────────────────────
+  const [charDrawerOpen, setCharDrawerOpen] = useState(false);
+  const [charDrawerCharId, setCharDrawerCharId] = useState<string | null>(null);
+  const [charDrawerName, setCharDrawerName] = useState("");
+  const [charDrawerBio, setCharDrawerBio] = useState("");
+  const [charDrawerGreeting, setCharDrawerGreeting] = useState("");
+  const [charDrawerAvatar, setCharDrawerAvatar] = useState("");
+  const [charDrawerPrompt, setCharDrawerPrompt] = useState("");
+  const [charDrawerTags, setCharDrawerTags] = useState("");
+  const [charDrawerVisibility, setCharDrawerVisibility] = useState<"public" | "private">("private");
+  const [charDrawerNsfw, setCharDrawerNsfw] = useState(false);
+  const [savingChar, setSavingChar] = useState(false);
+
   const openUserDrawer = async (userId: string) => {
     setDrawerOpen(true);
     setDrawerLoading(true);
@@ -155,6 +168,43 @@ export function Admin() {
       toast({ title: "Save failed", description: String(e), variant: "destructive" });
     } finally {
       setSavingUser(false);
+    }
+  };
+
+  const openCharDrawer = (char: NonNullable<typeof charsData>["items"][0]) => {
+    setCharDrawerCharId(char.characterId);
+    setCharDrawerName(char.name);
+    setCharDrawerBio(char.teaserDescription ?? "");
+    setCharDrawerGreeting(char.initialGreeting ?? "");
+    setCharDrawerAvatar(char.avatarUrl ?? "");
+    setCharDrawerPrompt("");
+    setCharDrawerTags((char.tags ?? []).filter(t => t !== "#NSFW").join(", "));
+    setCharDrawerVisibility((char.visibility as "public" | "private") ?? "private");
+    setCharDrawerNsfw((char.tags ?? []).includes("#NSFW"));
+    setCharDrawerOpen(true);
+  };
+
+  const saveCharChanges = async () => {
+    if (!charDrawerCharId) return;
+    setSavingChar(true);
+    try {
+      const tags = charDrawerTags.split(",").map(t => t.trim()).filter(Boolean);
+      await adminApi("PATCH", `/admin/characters/${charDrawerCharId}`, {
+        name: charDrawerName.trim() || undefined,
+        bio: charDrawerBio || undefined,
+        initialGreeting: charDrawerGreeting || undefined,
+        avatarUrl: charDrawerAvatar || undefined,
+        systemPrompt: charDrawerPrompt || undefined,
+        visibility: charDrawerVisibility,
+        tags,
+        isNsfw: charDrawerNsfw,
+      });
+      toast({ title: `✅ Character updated` });
+      setCharDrawerOpen(false);
+    } catch (e) {
+      toast({ title: "Save failed", description: String(e), variant: "destructive" });
+    } finally {
+      setSavingChar(false);
     }
   };
 
@@ -345,26 +395,34 @@ export function Admin() {
       {activeTab === "stats" && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-card border border-border box-glow-blue">
+            <button onClick={() => setActiveTab("users")} className="p-4 rounded-xl bg-card border border-border box-glow-blue hover:border-accent/60 transition-all text-left w-full cursor-pointer active:scale-95">
               <Users className="text-accent mb-2" size={20} />
               <div className="text-2xl font-bold">{stats?.totalUsers ?? 0}</div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Total Users</div>
-            </div>
-            <div className="p-4 rounded-xl bg-card border border-border box-glow-pink">
+              <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Total Users →</div>
+            </button>
+            <button onClick={() => setActiveTab("characters")} className="p-4 rounded-xl bg-card border border-border box-glow-pink hover:border-primary/60 transition-all text-left w-full cursor-pointer active:scale-95">
               <Bot className="text-primary mb-2" size={20} />
               <div className="text-2xl font-bold">{stats?.totalCharacters ?? 0}</div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Characters</div>
-            </div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Characters →</div>
+            </button>
             <div className="p-4 rounded-xl bg-card border border-border box-glow-purple">
               <Activity className="text-secondary mb-2" size={20} />
               <div className="text-2xl font-bold">{stats?.activeConversations ?? 0}</div>
               <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Active Chats</div>
             </div>
-            <div className="p-4 rounded-xl bg-card border border-border">
-              <CreditCard className="text-green-400 mb-2" size={20} />
-              <div className="text-2xl font-bold">{stats?.totalRevenue ?? 0}</div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Revenue ⭐</div>
-            </div>
+            {isGodMode ? (
+              <button onClick={() => setActiveTab("pricing")} className="p-4 rounded-xl bg-card border border-border hover:border-green-400/60 transition-all text-left w-full cursor-pointer active:scale-95">
+                <CreditCard className="text-green-400 mb-2" size={20} />
+                <div className="text-2xl font-bold">{stats?.totalRevenue ?? 0}</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Revenue ⭐ →</div>
+              </button>
+            ) : (
+              <div className="p-4 rounded-xl bg-card border border-border">
+                <CreditCard className="text-green-400 mb-2" size={20} />
+                <div className="text-2xl font-bold">{stats?.totalRevenue ?? 0}</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Revenue ⭐</div>
+              </div>
+            )}
           </div>
 
           <section>
@@ -568,6 +626,13 @@ export function Admin() {
                     className="p-1.5 text-muted-foreground hover:text-foreground ml-1">
                     {expandedCharId === char.characterId ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   </button>
+                  {isGodMode && (
+                    <button onClick={() => openCharDrawer(char)}
+                      className="p-1.5 text-accent hover:text-accent/80 ml-0.5 rounded hover:bg-accent/10 transition-colors"
+                      title="Full Edit">
+                      <Wand2 size={14} />
+                    </button>
+                  )}
                 </div>
                 {expandedCharId === char.characterId && (
                   <div className="border-t border-border p-3 bg-background space-y-2">
@@ -951,6 +1016,110 @@ export function Admin() {
               </button>
             </div>
           )}
+        </div>
+      </>
+    )}
+
+    {/* ── Character Edit Drawer ─────────────────────────────────────────────── */}
+    {charDrawerOpen && (
+      <>
+        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={() => setCharDrawerOpen(false)} />
+        <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-background border-l border-border shadow-2xl flex flex-col overflow-hidden"
+          style={{ animation: "slideInRight 0.25s ease-out" }}>
+
+          <div className="flex items-center gap-3 p-4 border-b border-border shrink-0">
+            <div className="w-10 h-10 rounded-full overflow-hidden border border-border shrink-0">
+              <img src={charDrawerAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${charDrawerName}`}
+                alt={charDrawerName} className="w-full h-full object-cover" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-sm truncate">{charDrawerName || "Character"}</div>
+              <div className="text-xs text-muted-foreground">{charDrawerNsfw ? "🔞 NSFW" : "Safe"} · {charDrawerVisibility}</div>
+            </div>
+            <button onClick={() => setCharDrawerOpen(false)}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Name</label>
+              <Input value={charDrawerName} onChange={e => setCharDrawerName(e.target.value)}
+                className="bg-card border-border h-10 text-sm" placeholder="Character name" />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Bio / Description</label>
+              <textarea value={charDrawerBio} onChange={e => setCharDrawerBio(e.target.value)}
+                rows={3} placeholder="A rebel hacker from Neo-Tokyo..."
+                className="w-full rounded-md border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-primary/60" />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Initial Greeting</label>
+              <Input value={charDrawerGreeting} onChange={e => setCharDrawerGreeting(e.target.value)}
+                className="bg-card border-border h-10 text-sm" placeholder="Hey, I've been waiting for you..." />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Avatar URL</label>
+              <Input value={charDrawerAvatar} onChange={e => setCharDrawerAvatar(e.target.value)}
+                className="bg-card border-border h-10 text-sm" placeholder="https://..." />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Tags (comma-separated)</label>
+              <Input value={charDrawerTags} onChange={e => setCharDrawerTags(e.target.value)}
+                className="bg-card border-border h-10 text-sm" placeholder="Hacker, Tsundere, Anime" />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">System Prompt Override</label>
+              <textarea value={charDrawerPrompt} onChange={e => setCharDrawerPrompt(e.target.value)}
+                rows={3} placeholder="Leave blank to keep existing prompt..."
+                className="w-full rounded-md border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-primary/60" />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Visibility</label>
+              <div className="flex h-10 rounded-md border border-border overflow-hidden">
+                {(["private", "public"] as const).map(v => (
+                  <button key={v} onClick={() => setCharDrawerVisibility(v)}
+                    className={`flex-1 text-xs font-bold uppercase tracking-wider transition-all ${
+                      charDrawerVisibility === v
+                        ? v === "public" ? "bg-green-500/20 text-green-400" : "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}>
+                    {v === "public" ? "🌐 Public" : "🔒 Private"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-lg bg-card border border-border">
+              <div>
+                <div className="text-xs font-semibold text-foreground">NSFW Content</div>
+                <div className="text-[10px] text-muted-foreground">Adds #NSFW tag, hides from Free users</div>
+              </div>
+              <button onClick={() => setCharDrawerNsfw(v => !v)}
+                className={`w-10 h-6 rounded-full transition-all relative ${charDrawerNsfw ? "bg-pink-500" : "bg-muted"}`}>
+                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${charDrawerNsfw ? "left-5" : "left-1"}`} />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 border-t border-border shrink-0 space-y-2">
+            <button onClick={saveCharChanges} disabled={savingChar}
+              className="w-full py-3 rounded-xl bg-accent text-background font-bold text-sm box-glow-blue disabled:opacity-50 flex items-center justify-center gap-2 transition-all">
+              {savingChar ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+              {savingChar ? "Saving…" : "Save Changes"}
+            </button>
+            <button onClick={() => setCharDrawerOpen(false)}
+              className="w-full py-2.5 rounded-xl border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border/80 transition-all">
+              Cancel
+            </button>
+          </div>
         </div>
       </>
     )}

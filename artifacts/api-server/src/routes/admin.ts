@@ -25,7 +25,7 @@ import { authMiddleware, adminOnly } from "../middlewares/auth";
 import { getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterAvatar } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
-import { listSupabaseCharacters, createSupabaseCharacter } from "../lib/supabaseCharacters";
+import { listSupabaseCharacters, createSupabaseCharacter, updateSupabaseCharacter, getSupabaseCharacterById } from "../lib/supabaseCharacters";
 
 const router: IRouter = Router();
 
@@ -367,6 +367,40 @@ router.patch("/admin/characters/:characterId/overlay", async (req, res): Promise
     });
 
   res.json({ key, value });
+});
+
+// Full edit a character via Supabase
+router.patch("/admin/characters/:characterId", async (req, res): Promise<void> => {
+  const { characterId } = req.params;
+  const { name, bio, initialGreeting, avatarUrl, visibility, isNsfw, tags, systemPrompt } = req.body as {
+    name?: string; bio?: string; initialGreeting?: string; avatarUrl?: string;
+    visibility?: "public" | "private"; isNsfw?: boolean; tags?: string[]; systemPrompt?: string;
+  };
+
+  let finalTags: string[] | undefined;
+  if (tags !== undefined) {
+    finalTags = Array.isArray(tags) ? tags : [];
+  } else if (typeof isNsfw === "boolean") {
+    const current = await getSupabaseCharacterById(characterId);
+    finalTags = current?.tags ?? [];
+  }
+
+  const updated = await updateSupabaseCharacter(characterId, {
+    name: name || undefined,
+    teaserDescription: bio !== undefined ? (bio || null) : undefined,
+    initialGreeting: initialGreeting !== undefined ? (initialGreeting || null) : undefined,
+    avatarUrl: avatarUrl !== undefined ? (avatarUrl || null) : undefined,
+    visibility: (visibility === "public" || visibility === "private") ? visibility : undefined,
+    tags: finalTags,
+    systemPrompt: systemPrompt || undefined,
+    isNsfw: typeof isNsfw === "boolean" ? isNsfw : undefined,
+  });
+
+  if (!updated) {
+    res.status(500).json({ error: "Failed to update character" });
+    return;
+  }
+  res.json(updated);
 });
 
 router.post("/admin/broadcast", async (req, res): Promise<void> => {
