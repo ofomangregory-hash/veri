@@ -1,0 +1,106 @@
+Character Creation Wizard Fix
+
+The character creation wizard is still broken after the previous fix attempt.
+Identify the root cause completely — check every step of the wizard flow, form submission, and Supabase write.
+Fix it so the wizard completes from start to finish without errors and saves the character to Supabase correctly.
+Add a Custom Name button in the name section of the wizard so users can enter a fully custom character name.
+Add two new dedicated steps to the wizard:
+
+Step 7 — NSFW Toggle — a switch to mark the character as NSFW or SFW.
+Step 8 — Visibility Switch — a switch to confirm if the character is Public or Private.
+
+
+These must appear as separate steps, not combined on one screen.
+Save NSFW status and visibility to Supabase alongside the character record.
+
+2. Nickname & Clickable Elements
+
+Pull custom_nickname from Supabase for the logged in user.
+Display it as the main name in the profile header and throughout the app.
+Show the Telegram username underneath in smaller text.
+If custom_nickname is empty or null, fall back to the Telegram username.
+In the side panel (profile section), add a clearly visible Set Nickname input field with a confirm/save button.
+When saved, update the custom_nickname column in Supabase immediately and reflect the change throughout the app without a full refresh.
+Every box, card, and grid item in the app must be fully clickable and route to its appropriate page or tab:
+
+Character cards → open that character's chat or detail page
+Premium/subscription boxes → route to Premium tab
+Feature boxes on home page → route to their respective tabs
+Any other grid or card → route to the most logical destination
+
+
+
+3. Character Bio, Share Link & Personal Page
+
+Each character must have a visible share link/button in both the Mini App and bot.
+Share link format: https://t.me/[BOTUSERNAME]?start=char_[CHARACTER_ID]
+When a character card is clicked, show a bio page displaying:
+
+Character name and avatar
+System/prompt message
+Traits and personalities
+Share link
+All other stored character details
+
+
+When a user taps a character's avatar inside a chat, open that character's personal page — not the general browse page.
+The personal page displays full character details and all media received from that character.
+Media that has not been unlocked/unblurred must remain blurred — only unlocked media displays clearly.
+
+4. Access Control, NSFW Rules & Admin Controls
+
+Before the bot pulls characters for a user, verify their subscription status from Supabase:
+
+Free users → public non-NSFW characters only
+Premium users → their own private characters + all public characters + all admin private characters + all NSFW characters
+Supreme admin (username = 'zxeleen') → all characters with no restrictions
+
+
+All NSFW characters are only accessible to premium users and supreme admin. Free users cannot see or access NSFW content under any circumstance — keep it blurred/hidden even if they reach the page.
+Add admin controls in both the bot and Mini App admin panel to:
+
+Toggle any character's NSFW status on or off
+Toggle any character's visibility between Public and Private
+Only supreme admin (username = 'zxeleen') can access these controls
+
+
+
+5. Daily Login Rewards
+
+Update the daily login reward system for all user tiers as follows:
+
+Free users: 30 Tickets + 15 Neon Cards per daily login
+Premium users (all levels): Base of 30 Tickets + 15 Neon Cards with a steady increase per premium tier level on top of the base
+Supreme Admin (username = 'zxeleen'): 1,000,000 Tickets + 1,000,000 Neon Cards per daily login
+
+
+Update this in both the bot and the Mini App frontend so the reward is consistent across both.
+The reward must write to both ticket_balance and neon_card_balance columns in Supabase when claimed.
+Display the daily reward breakdown clearly in the Mini App so users know what they will receive before claiming.
+
+6. Dual Currency System
+
+The app now uses two currencies: Tickets and Neon Cards.
+Go through every feature, function, command, and UI element that currently uses only Tickets and determine which should now use Neon Cards instead.
+Exception: Messages — anything related to sending, receiving, or counting messages stays on Tickets. Do not change message-related ticket logic.
+Change to Neon Cards:
+
+Character creation cost
+Character unlocking
+Media unlocking
+Premium feature access fees
+Any purchase, unlock, or creation action that is not message-related
+
+
+Stays as Tickets:
+
+Sending and receiving messages in character chats
+Daily message limits and message count tracking
+Any trigger or action directly tied to messaging
+
+
+Update all UI labels, bot messages, and admin panel displays to correctly show Tickets and Neon Cards separately.
+Both balances are already stored in Supabase as ticket_balance and neon_card_balance — ensure all code reads and writes to the correct column for each currency.
+Do not merge or confuse the two balances anywhere in the code.
+
+Do not break any existing functionality or 
