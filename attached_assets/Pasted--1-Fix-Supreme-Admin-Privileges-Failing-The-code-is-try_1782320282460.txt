@@ -1,0 +1,38 @@
+
+
+1. Fix Supreme Admin Privileges Failing
+
+The code is trying to set staff_privileges = 'full_admin' but the Supabase column is a boolean. Change all code that sets staff_privileges to use true or false only — never a string value.
+Supreme admin check should be: username = 'zxeleen' → set subscription_tier = 'supreme_admin' and staff_privileges = true.
+Fix this in every file that touches staff_privileges — the login handler, admin routes, and any middleware.
+
+2. Fix Character Creation Insert Failing
+
+createSupabaseCharacter: insert failed — the character is not saving to Supabase.
+Find the insert function in supabaseCharacters.ts and log the full error to identify exactly which field is causing the insert to fail.
+Check that all required fields in the characters table are being provided — no null values in non-nullable columns.
+Fix the insert so characters save successfully regardless of whether avatar generation (Perchance) succeeds or fails — use a genre default avatar as fallback without failing the entire insert.
+
+3. Fix Character Creation Wizard in Admin Panel
+
+Integrate all 8 steps of the character creation wizard into the admin panel Create Character flow.
+Step 7 (NSFW toggle) must only be visible to supreme admin (username = 'zxeleen'). Hide it entirely for all other users.
+Step 8 (Visibility — Public or Private) is visible to all users.
+Add Next and Previous buttons to navigate between all steps.
+Add Custom Name input in the name step.
+
+4. Fix OpenRouter API Failures
+
+All OpenRouter models are failing with HTTP errors causing chat to break.
+Verify the OPENROUTER_API_KEY environment variable is correctly set in Railway.
+Add proper error handling so if all OpenRouter models fail, the bot returns a friendly message to the user instead of a silent fallback.
+Check the model list configured in the code — remove any deprecated or unavailable models and replace with currently available ones.
+
+5. Fix /searchuser and Other Admin Bot Commands
+
+Admin commands including /searchuser are failing.
+Apply the same fix from issue 1 — any command that tries to write staff_privileges as a string must use boolean true/false instead.
+Check all admin command handlers for similar type mismatches between code values and Supabase column types.
+Escape all user-inserted data in bot messages to prevent the Telegram 400 formatting error.
+
+Do not break any existing functionality or 
