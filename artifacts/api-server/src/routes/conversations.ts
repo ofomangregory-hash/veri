@@ -21,6 +21,7 @@ import { getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterSelfie } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import { getSupabaseCharacterById, type NormalizedCharacter } from "../lib/supabaseCharacters";
+import { getEconomyConfig } from "../lib/economyConfig";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
@@ -50,17 +51,12 @@ const DAILY_TRIGGER_LIMITS: Record<string, number> = {
 const AUTO_IMG_FREE = { interval: 5, triggerAt: 2 };
 const AUTO_IMG_PREMIUM = { interval: 6, triggerAt: 4 };
 
-const MSG_COST: Record<string, number> = {
-  Free: 1,
-  Bronze: 1,
-  Silver: 1,
-  Gold: 1,
-};
+const MSG_COST_DEFAULT = 1;
 
-const GIFT_CONFIG: Record<string, { cost: number; costGold: number; ap: number; level: number; reaction: string }> = {
-  cyber_cocktail: { cost: 10, costGold: 5, ap: 5, level: 1, reaction: "Oh my! This Cyber-Cocktail has me buzzing! I love it~ Tell me more about you!" },
-  neon_bracelet: { cost: 25, costGold: 13, ap: 15, level: 2, reaction: "I'm wearing your Neon Bracelet right now... it glows just like you make me feel. I'm officially flirty now 💜" },
-  secret_key: { cost: 50, costGold: 25, ap: 35, level: 3, reaction: "The Secret Key and this silk outfit... you really know how to get to me. I'm all yours now, no holding back 🔑" },
+const GIFT_REACTIONS: Record<string, { ap: number; level: number; reaction: string }> = {
+  cyber_cocktail: { ap: 5,  level: 1, reaction: "Oh my! This Cyber-Cocktail has me buzzing! I love it~ Tell me more about you!" },
+  neon_bracelet:  { ap: 15, level: 2, reaction: "I'm wearing your Neon Bracelet right now... it glows just like you make me feel. I'm officially flirty now 💜" },
+  secret_key:     { ap: 35, level: 3, reaction: "The Secret Key and this silk outfit... you really know how to get to me. I'm all yours now, no holding back 🔑" },
 };
 
 function serializeCharacter(c: NormalizedCharacter) {
@@ -190,15 +186,17 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
       return;
     }
 
-    // Ticket cost check (1 ticket per message for all tiers)
-    const msgCost = MSG_COST[tier] ?? 1;
+    // Ticket cost check — reads live from Supabase (cached 5 min)
+    const eco = await getEconomyConfig();
+    const msgCost = eco.msgCostTickets ?? MSG_COST_DEFAULT;
     if (user.ticketBalance < msgCost) {
-      res.status(402).json({ error: "Insufficient tickets. Messages cost 1 ticket each." });
+      res.status(402).json({ error: `Insufficient tickets. Messages cost ${msgCost} ticket(s) each.` });
       return;
     }
   }
 
-  const msgCost = isAdminUser ? 0 : (MSG_COST[tier] ?? 1);
+  const eco = await getEconomyConfig();
+  const msgCost = isAdminUser ? 0 : (eco.msgCostTickets ?? MSG_COST_DEFAULT);
 
   const character = await getSupabaseCharacterById(params.data.characterId);
 
@@ -314,6 +312,9 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   const tier = user.subscriptionTier;
   const isSelfieAdmin = req.isAdmin;
 
+  const selfieEco = await getEconomyConfig();
+  const SELFIE_NEON_COST = isSelfieAdmin ? 0 : selfieEco.selfieCostNc;
+
   if (!isSelfieAdmin) {
     const dailyTriggerLimit = DAILY_TRIGGER_LIMITS[tier] ?? 3;
     if (user.dailyTriggerRequestsCount >= dailyTriggerLimit) {
@@ -321,14 +322,11 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
       return;
     }
 
-    const SELFIE_NEON_COST = 15;
     if (user.neonCardBalance < SELFIE_NEON_COST) {
       res.status(402).json({ error: `Insufficient Neon Cards. Selfie requests cost ${SELFIE_NEON_COST} Neon Cards.` });
       return;
     }
   }
-
-  const SELFIE_NEON_COST = isSelfieAdmin ? 0 : 15;
 
   const character = await getSupabaseCharacterById(params.data.characterId);
 
@@ -400,14 +398,22 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
   }
 
   const tier = user.subscriptionTier;
-  const gift = GIFT_CONFIG[parsed.data.giftType];
-  if (!gift) {
+  const giftReaction = GIFT_REACTIONS[parsed.data.giftType];
+  if (!giftReaction) {
     res.status(400).json({ error: "Invalid gift type" });
     return;
   }
 
+  const giftEco = await getEconomyConfig();
+  const GIFT_COSTS: Record<string, { cost: number; costGold: number }> = {
+    cyber_cocktail: { cost: giftEco.giftSmallNc,  costGold: Math.floor(giftEco.giftSmallNc  / 2) },
+    neon_bracelet:  { cost: giftEco.giftMediumNc, costGold: Math.floor(giftEco.giftMediumNc / 2) },
+    secret_key:     { cost: giftEco.giftLargeNc,  costGold: Math.floor(giftEco.giftLargeNc  / 2) },
+  };
+  const giftCosts = GIFT_COSTS[parsed.data.giftType]!;
+
   const isGiftAdmin = req.isAdmin;
-  const cost = isGiftAdmin ? 0 : (tier === "Gold" ? gift.costGold : gift.cost);
+  const cost = isGiftAdmin ? 0 : (tier === "Gold" ? giftCosts.costGold : giftCosts.cost);
 
   if (!isGiftAdmin && user.neonCardBalance < cost) {
     res.status(402).json({ error: `Insufficient Neon Cards. This gift costs ${cost} 🃏.` });
@@ -426,7 +432,7 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     return;
   }
 
-  const newAP = conv.affectionPoints + gift.ap;
+  const newAP = conv.affectionPoints + giftReaction.ap;
   const newLevel = newAP >= 100 ? 3 : newAP >= 40 ? 2 : 1;
 
   await db.update(conversationsTable)
@@ -461,7 +467,7 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     affectionPoints: newAP,
     newLevel,
     ticketsRemaining: refreshedUser?.ticketBalance ?? 0,
-    aiReaction: gift.reaction,
+    aiReaction: giftReaction.reaction,
     scenarioImageUrl,
   }));
 });

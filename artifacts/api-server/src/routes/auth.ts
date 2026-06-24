@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, usersTable, transactionsTable, systemConfigurationsTable } from "@workspace/db";
+import { getEconomyConfig } from "../lib/economyConfig";
 import {
   GetMeResponse,
   UpdateProfileBody,
@@ -136,12 +137,13 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
     return;
   }
 
-  let TICKETS_REWARD    = 30;
-  let NEON_CARDS_REWARD = 15;
+  const eco = await getEconomyConfig();
+  let TICKETS_REWARD    = eco.dailyClaimFreeTickets;
+  let NEON_CARDS_REWARD = eco.dailyClaimFreeNc;
   if (isSupremeAdmin)       { TICKETS_REWARD = 1_000_000; NEON_CARDS_REWARD = 1_000_000; }
-  else if (tier === "Gold")   { TICKETS_REWARD = 100; NEON_CARDS_REWARD = 56; }
-  else if (tier === "Silver") { TICKETS_REWARD = 75;  NEON_CARDS_REWARD = 37; }
-  else if (tier === "Bronze") { TICKETS_REWARD = 50;  NEON_CARDS_REWARD = 25; }
+  else if (tier === "Gold")   { TICKETS_REWARD = eco.dailyClaimGoldTickets;   NEON_CARDS_REWARD = eco.dailyClaimGoldNc; }
+  else if (tier === "Silver") { TICKETS_REWARD = eco.dailyClaimSilverTickets; NEON_CARDS_REWARD = eco.dailyClaimSilverNc; }
+  else if (tier === "Bronze") { TICKETS_REWARD = eco.dailyClaimBronzeTickets; NEON_CARDS_REWARD = eco.dailyClaimBronzeNc; }
 
   const [updated] = await db.update(usersTable)
     .set({

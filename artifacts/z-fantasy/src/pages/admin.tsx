@@ -91,6 +91,28 @@ export function Admin() {
   const [bannerAdCtaUrl, setBannerAdCtaUrl] = useState("");
   const [priceOverrides, setPriceOverrides] = useState<Record<string, string>>({});
   const [charOverlayMap, setCharOverlayMap] = useState<Record<string, string>>({});
+
+  // ── Economy price state (all editable from Supabase) ─────────────────────
+  const [ecoMsgCost, setEcoMsgCost] = useState("1");
+  const [ecoSelfieCost, setEcoSelfieCost] = useState("15");
+  const [ecoGiftSmall, setEcoGiftSmall] = useState("10");
+  const [ecoGiftMedium, setEcoGiftMedium] = useState("25");
+  const [ecoGiftLarge, setEcoGiftLarge] = useState("50");
+  const [ecoCreationCost, setEcoCreationCost] = useState("25");
+  const [ecoNcStarDivisor, setEcoNcStarDivisor] = useState("2");
+  const [ecoTicketsPerStar, setEcoTicketsPerStar] = useState("3");
+  const [ecoDailyFreeTickets, setEcoDailyFreeTickets] = useState("30");
+  const [ecoDailyFreeNc, setEcoDailyFreeNc] = useState("15");
+  const [ecoDailyBronzeTickets, setEcoDailyBronzeTickets] = useState("50");
+  const [ecoDailyBronzeNc, setEcoDailyBronzeNc] = useState("25");
+  const [ecoDailySilverTickets, setEcoDailySilverTickets] = useState("75");
+  const [ecoDailySilverNc, setEcoDailySilverNc] = useState("37");
+  const [ecoDailyGoldTickets, setEcoDailyGoldTickets] = useState("100");
+  const [ecoDailyGoldNc, setEcoDailyGoldNc] = useState("56");
+  const [savingEco, setSavingEco] = useState<string | null>(null);
+
+  // ── Banner type selector state ──────────────────────────────────────────
+  const [bannerPickerOpen, setBannerPickerOpen] = useState(false);
   const [expandedCharId, setExpandedCharId] = useState<string | null>(null);
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
@@ -268,6 +290,19 @@ export function Admin() {
         if (row.key.startsWith("character_overlay_")) {
           setCharOverlayMap(p => ({ ...p, [row.key.replace("character_overlay_", "")]: String(v.text ?? "") }));
         }
+        const n = (k: string) => (typeof v[k] === "number" ? String(v[k]) : null);
+        if (row.key === "eco_msg_cost"        && n("tickets"))    setEcoMsgCost(n("tickets")!);
+        if (row.key === "eco_selfie_cost"     && n("nc"))         setEcoSelfieCost(n("nc")!);
+        if (row.key === "eco_gift_small"      && n("nc"))         setEcoGiftSmall(n("nc")!);
+        if (row.key === "eco_gift_medium"     && n("nc"))         setEcoGiftMedium(n("nc")!);
+        if (row.key === "eco_gift_large"      && n("nc"))         setEcoGiftLarge(n("nc")!);
+        if (row.key === "eco_creation_cost"   && n("nc"))         setEcoCreationCost(n("nc")!);
+        if (row.key === "eco_nc_star_divisor" && n("divisor"))    setEcoNcStarDivisor(n("divisor")!);
+        if (row.key === "eco_tickets_per_star"&& n("tickets"))    setEcoTicketsPerStar(n("tickets")!);
+        if (row.key === "eco_daily_free")   { if (n("tickets")) setEcoDailyFreeTickets(n("tickets")!);   if (n("nc")) setEcoDailyFreeNc(n("nc")!); }
+        if (row.key === "eco_daily_bronze") { if (n("tickets")) setEcoDailyBronzeTickets(n("tickets")!); if (n("nc")) setEcoDailyBronzeNc(n("nc")!); }
+        if (row.key === "eco_daily_silver") { if (n("tickets")) setEcoDailySilverTickets(n("tickets")!); if (n("nc")) setEcoDailySilverNc(n("nc")!); }
+        if (row.key === "eco_daily_gold")   { if (n("tickets")) setEcoDailyGoldTickets(n("tickets")!);   if (n("nc")) setEcoDailyGoldNc(n("nc")!); }
         const tierKeyMap: Record<string, string> = { premium_tier_bronze: "Bronze", premium_tier_silver: "Silver", premium_tier_gold: "Gold" };
         if (tierKeyMap[row.key] && Array.isArray(v.features)) {
           const tierName = tierKeyMap[row.key]!;
@@ -298,6 +333,15 @@ export function Admin() {
       });
       toast({ title: enabled ? "Ad Banner enabled & saved!" : "Ad Banner disabled." });
     } catch (e) { toast({ title: "Save failed", description: String(e), variant: "destructive" }); }
+  };
+
+  const saveEcoConfig = async (key: string, value: Record<string, number>) => {
+    setSavingEco(key);
+    try {
+      await adminApi("PUT", `/admin/system-config/${key}`, { value });
+      toast({ title: `✅ ${key} saved` });
+    } catch (e) { toast({ title: "Save failed", description: String(e), variant: "destructive" }); }
+    finally { setSavingEco(null); }
   };
 
   const savePriceOverride = async (tier: string, period: string) => {
@@ -687,14 +731,62 @@ export function Admin() {
       {/* ── Banners (god-mode only) ── */}
       {activeTab === "banners" && isGodMode && (
         <div className="space-y-6">
-          <div className="flex justify-end">
-            <button onClick={loadConfigs} disabled={configsLoading}
-              className="flex items-center gap-2 text-xs text-accent border border-accent/50 px-3 py-1.5 rounded-lg hover:bg-accent/10">
-              <RefreshCw size={14} className={configsLoading ? "animate-spin" : ""} /> Refresh
-            </button>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Image className="text-accent" size={16} />
+              <h2 className="font-bold text-sm uppercase tracking-wider text-foreground">Banners</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setBannerPickerOpen(v => !v)}
+                className="flex items-center gap-2 text-xs font-bold text-primary border border-primary/50 px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
+                <Plus size={14} /> Add Custom Banner
+              </button>
+              <button onClick={loadConfigs} disabled={configsLoading}
+                className="flex items-center gap-2 text-xs text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-card transition-colors">
+                <RefreshCw size={14} className={configsLoading ? "animate-spin" : ""} /> Refresh
+              </button>
+            </div>
           </div>
+
+          {/* Banner type picker */}
+          {bannerPickerOpen && (
+            <div className="p-4 rounded-xl bg-card border border-primary/30 space-y-3 box-glow-blue">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-widest text-primary">Select Banner Type</p>
+                <button onClick={() => setBannerPickerOpen(false)} className="text-muted-foreground hover:text-foreground">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => {
+                    setBannerPickerOpen(false);
+                    setTimeout(() => document.getElementById("banner-normal-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                  }}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl border border-accent/50 bg-accent/5 hover:bg-accent/10 transition-colors text-left">
+                  <Image size={24} className="text-accent" />
+                  <div>
+                    <p className="text-sm font-bold text-accent">Normal Banner</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Hero image + text on home screen</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    setBannerPickerOpen(false);
+                    setTimeout(() => document.getElementById("banner-ad-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                  }}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl border border-yellow-500/50 bg-yellow-500/5 hover:bg-yellow-500/10 transition-colors text-left">
+                  <span className="text-2xl">📢</span>
+                  <div>
+                    <p className="text-sm font-bold text-yellow-400">Ad Banner</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Sponsored banner with CTA button</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
           {([1, 2] as const).map(n => (
-            <div key={n} className="p-4 rounded-xl bg-card border border-border space-y-3">
+            <div key={n} id={n === 1 ? "banner-normal-section" : undefined} className="p-4 rounded-xl bg-card border border-border space-y-3">
               <div className="flex items-center gap-2 mb-1">
                 <Image className="text-accent" size={16} />
                 <h3 className="text-sm font-semibold">Banner {n}</h3>
@@ -721,7 +813,7 @@ export function Admin() {
           ))}
 
           {/* Ad Banner */}
-          <div className="p-4 rounded-xl bg-card border border-yellow-500/30 space-y-3">
+          <div id="banner-ad-section" className="p-4 rounded-xl bg-card border border-yellow-500/30 space-y-3">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[9px] font-bold uppercase tracking-widest text-yellow-400 border border-yellow-500/40 px-1.5 py-0.5 rounded">Sponsored</span>
               <h3 className="text-sm font-semibold text-yellow-400">Ad Banner</h3>
@@ -812,6 +904,147 @@ export function Admin() {
             </table>
           </div>
           <p className="text-[10px] text-muted-foreground">Base: Bronze 100/300/3000 · Silver 200/600/6000 · Gold 350/1050/10500 ⭐</p>
+
+        {/* ── Economy Prices ── */}
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Ticket className="text-accent" size={16} />
+            <h3 className="font-bold text-sm uppercase tracking-wider text-accent">Economy Prices</h3>
+            <span className="text-[10px] text-muted-foreground ml-1">Saved to Supabase · hot-reloaded by API (5 min cache)</span>
+          </div>
+
+          <div className="space-y-3">
+            {/* Message & Selfie costs */}
+            <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Per-Action Costs</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Message cost (🎫 tickets)</label>
+                  <div className="flex gap-1.5">
+                    <Input value={ecoMsgCost} onChange={e => setEcoMsgCost(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                    <button onClick={() => saveEcoConfig("eco_msg_cost", { tickets: Number(ecoMsgCost) })} disabled={savingEco === "eco_msg_cost"}
+                      className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                      {savingEco === "eco_msg_cost" ? "…" : <Save size={12} />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Selfie cost (🃏 Neon Cards)</label>
+                  <div className="flex gap-1.5">
+                    <Input value={ecoSelfieCost} onChange={e => setEcoSelfieCost(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                    <button onClick={() => saveEcoConfig("eco_selfie_cost", { nc: Number(ecoSelfieCost) })} disabled={savingEco === "eco_selfie_cost"}
+                      className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                      {savingEco === "eco_selfie_cost" ? "…" : <Save size={12} />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Character creation (🃏 NC)</label>
+                  <div className="flex gap-1.5">
+                    <Input value={ecoCreationCost} onChange={e => setEcoCreationCost(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                    <button onClick={() => saveEcoConfig("eco_creation_cost", { nc: Number(ecoCreationCost) })} disabled={savingEco === "eco_creation_cost"}
+                      className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                      {savingEco === "eco_creation_cost" ? "…" : <Save size={12} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Gift costs */}
+            <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">In-Chat Gift Costs (🃏 Neon Cards)</p>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  { label: "🍹 Cyber Cocktail (Small)", state: ecoGiftSmall, set: setEcoGiftSmall, key: "eco_gift_small" },
+                  { label: "💎 Neon Bracelet (Medium)", state: ecoGiftMedium, set: setEcoGiftMedium, key: "eco_gift_medium" },
+                  { label: "🔑 Secret Key (Large)", state: ecoGiftLarge, set: setEcoGiftLarge, key: "eco_gift_large" },
+                ] as const).map(({ label, state, set, key }) => (
+                  <div key={key}>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">{label}</label>
+                    <div className="flex gap-1.5">
+                      <Input value={state} onChange={e => set(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                      <button onClick={() => saveEcoConfig(key, { nc: Number(state) })} disabled={savingEco === key}
+                        className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                        {savingEco === key ? "…" : <Save size={12} />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground">Gold tier gets 50% off gift prices automatically.</p>
+            </div>
+
+            {/* Shop exchange rates */}
+            <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Shop Exchange Rates</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">⭐ Stars per 1 Neon Card</label>
+                  <div className="flex gap-1.5">
+                    <Input value={ecoNcStarDivisor} onChange={e => setEcoNcStarDivisor(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                    <button onClick={() => saveEcoConfig("eco_nc_star_divisor", { divisor: Number(ecoNcStarDivisor) })} disabled={savingEco === "eco_nc_star_divisor"}
+                      className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                      {savingEco === "eco_nc_star_divisor" ? "…" : <Save size={12} />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">Currently: {ecoNcStarDivisor}⭐ = 1🃏</p>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">🎫 Tickets per 1 Star</label>
+                  <div className="flex gap-1.5">
+                    <Input value={ecoTicketsPerStar} onChange={e => setEcoTicketsPerStar(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
+                    <button onClick={() => saveEcoConfig("eco_tickets_per_star", { tickets: Number(ecoTicketsPerStar) })} disabled={savingEco === "eco_tickets_per_star"}
+                      className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                      {savingEco === "eco_tickets_per_star" ? "…" : <Save size={12} />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">Currently: 1⭐ = {ecoTicketsPerStar}🎫</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Daily gift claim rewards */}
+            <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Daily Gift Claim Rewards (by Tier)</p>
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      <th className="text-left p-2 text-muted-foreground font-semibold">Tier</th>
+                      <th className="text-center p-2 text-muted-foreground font-semibold">🎫 Tickets</th>
+                      <th className="text-center p-2 text-muted-foreground font-semibold">🃏 NC</th>
+                      <th className="text-center p-2 text-muted-foreground font-semibold">Save</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {([
+                      { tier: "Free",   ecoKey: "eco_daily_free",   tState: ecoDailyFreeTickets,   tSet: setEcoDailyFreeTickets,   nState: ecoDailyFreeNc,   nSet: setEcoDailyFreeNc },
+                      { tier: "Bronze", ecoKey: "eco_daily_bronze", tState: ecoDailyBronzeTickets, tSet: setEcoDailyBronzeTickets, nState: ecoDailyBronzeNc, nSet: setEcoDailyBronzeNc },
+                      { tier: "Silver", ecoKey: "eco_daily_silver", tState: ecoDailySilverTickets, tSet: setEcoDailySilverTickets, nState: ecoDailySilverNc, nSet: setEcoDailySilverNc },
+                      { tier: "Gold",   ecoKey: "eco_daily_gold",   tState: ecoDailyGoldTickets,   tSet: setEcoDailyGoldTickets,   nState: ecoDailyGoldNc,   nSet: setEcoDailyGoldNc },
+                    ] as const).map(({ tier, ecoKey, tState, tSet, nState, nSet }) => (
+                      <tr key={tier} className="border-t border-border">
+                        <td className="p-2 font-bold">{tier}</td>
+                        <td className="p-1.5">
+                          <Input value={tState} onChange={e => tSet(e.target.value)} className="bg-background border-border h-7 text-[11px] text-center" />
+                        </td>
+                        <td className="p-1.5">
+                          <Input value={nState} onChange={e => nSet(e.target.value)} className="bg-background border-border h-7 text-[11px] text-center" />
+                        </td>
+                        <td className="p-1.5 text-center">
+                          <button onClick={() => saveEcoConfig(ecoKey, { tickets: Number(tState), nc: Number(nState) })} disabled={savingEco === ecoKey}
+                            className="px-2 h-7 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20">
+                            {savingEco === ecoKey ? "…" : <Save size={11} />}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

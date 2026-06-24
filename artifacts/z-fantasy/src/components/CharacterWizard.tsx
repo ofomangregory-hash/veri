@@ -170,13 +170,13 @@ export interface WizardData {
 type Step = "name" | "scene" | "behavior" | "personality" | "traits" | "mood" | "review";
 const STEPS: Step[] = ["name", "scene", "behavior", "personality", "traits", "mood", "review"];
 const STEP_LABELS: Record<Step, string> = {
-  name: "Choose Identity",
-  scene: "Select Gender & Preferences",
-  behavior: "Define Personality Traits",
-  personality: "Customize Appearance",
-  traits: "Set Voice & Tone",
-  mood: "Write Core Backstory",
-  review: "Review & Confirm",
+  name:        "Choose a Name",
+  scene:       "Choose Scenes & Settings",
+  behavior:    "Choose Behaviors",
+  personality: "Choose Personality",
+  traits:      "Choose Traits",
+  mood:        "Choose Mood & Energy",
+  review:      "Review & Create",
 };
 
 const MAX_PERSONALITIES = 3;
@@ -273,13 +273,9 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
     });
   }
 
+  // Only the name step is required — all other steps are optional preferences
   const canProceed = (): boolean => {
     if (step === "name") return data.name.length > 0;
-    if (step === "scene") return data.scenes.length > 0;
-    if (step === "behavior") return data.behaviors.length > 0;
-    if (step === "personality") return data.personalities.length > 0;
-    if (step === "traits") return data.traits.length > 0;
-    if (step === "mood") return data.moods.length > 0;
     return true;
   };
 
@@ -361,35 +357,18 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
               ))}
             </div>
 
-            {typeFilter === "Custom" ? (
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Enter a custom name</label>
-                <input
-                  value={customName}
-                  onChange={e => {
-                    setCustomName(e.target.value);
-                    setData(d => ({ ...d, name: e.target.value, characterType: "Custom" }));
-                  }}
-                  placeholder="e.g. Seraphina..."
-                  className="w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/60"
-                />
-                {customName.length >= 2 && (
-                  <button onClick={goNext}
-                    className="w-full py-2.5 rounded-lg bg-primary/20 border border-primary/40 text-primary text-sm font-bold hover:bg-primary/30 transition-colors">
-                    Continue with "{customName}" →
-                  </button>
-                )}
-              </div>
-            ) : (
+            {/* Preset name grid — hidden when Custom filter is active */}
+            {typeFilter !== "Custom" && filteredNames.length > 0 && (
               <div className="grid grid-cols-3 gap-2">
                 {filteredNames.map(({ name, type }) => (
                   <button key={name} onClick={() => {
+                    setCustomName("");
                     setData(d => ({ ...d, name, characterType: type }));
                     // Auto-advance immediately on preset name click
                     setTimeout(goNext, 120);
                   }}
                     className={`p-2.5 rounded-xl border text-left transition-all ${
-                      data.name === name
+                      data.name === name && data.characterType !== "Custom"
                         ? "border-primary/60 bg-primary/15 box-glow-pink"
                         : "border-border bg-card hover:border-primary/30"
                     }`}>
@@ -401,6 +380,44 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
                 ))}
               </div>
             )}
+
+            {/* Always-visible custom name input — works on any filter */}
+            <div className={`pt-3 space-y-2 ${typeFilter !== "Custom" ? "border-t border-border mt-1" : ""}`}>
+              <label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                ✏️ {typeFilter === "Custom" ? "Enter a custom name" : "Or type your own name"}
+              </label>
+              <div className="flex gap-2">
+                <input
+                  value={customName}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setCustomName(val);
+                    if (val.trim()) {
+                      setData(d => ({ ...d, name: val.trim(), characterType: "Custom" }));
+                    } else {
+                      setData(d => ({ ...d, name: d.characterType === "Custom" ? "" : d.name, characterType: d.characterType === "Custom" ? "Modern" : d.characterType }));
+                    }
+                  }}
+                  placeholder="e.g. Seraphina..."
+                  className={`flex-1 h-10 rounded-lg border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none transition-colors ${
+                    customName.trim().length > 0
+                      ? "border-accent focus:border-accent"
+                      : "border-border focus:border-primary/60"
+                  }`}
+                />
+                {customName.trim().length >= 2 && (
+                  <button onClick={goNext}
+                    className="px-3 h-10 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/50 hover:bg-accent/30 transition-colors whitespace-nowrap">
+                    Use →
+                  </button>
+                )}
+              </div>
+              {customName.trim().length >= 2 && (
+                <p className="text-[10px] text-accent">
+                  Using custom name: <strong>{customName.trim()}</strong> · Click "Use →" or "Continue" below
+                </p>
+              )}
+            </div>
           </div>
         )}
 
