@@ -7,7 +7,7 @@ export interface SupabaseCharacterRow {
   character_id: string;
   creator_id: string;
   name: string;
-  visibility: "public" | "private";
+  visibility: "public" | "private" | "premium";
   system_prompt: string;
   avatar_url: string | null;
   teaser_description: string | null;
@@ -24,7 +24,7 @@ export interface NormalizedCharacter {
   characterId: string;
   creatorId: string;
   name: string;
-  visibility: "public" | "private";
+  visibility: "public" | "private" | "premium";
   systemPrompt: string;
   avatarUrl: string | null;
   teaserDescription: string | null;
@@ -82,7 +82,7 @@ function normalizeLocalCharacter(row: typeof charactersTable.$inferSelect): Norm
     characterId: row.characterId,
     creatorId: row.creatorId ?? "",
     name: row.name,
-    visibility: (row.visibility === "public" || row.visibility === "private") ? row.visibility : "private",
+    visibility: (row.visibility === "public" || row.visibility === "private" || row.visibility === "premium") ? row.visibility : "private",
     systemPrompt: row.systemPrompt ?? "",
     avatarUrl: row.avatarUrl ?? null,
     teaserDescription: row.teaserDescription ?? null,
@@ -97,7 +97,9 @@ function normalizeLocalCharacter(row: typeof charactersTable.$inferSelect): Norm
 }
 
 export async function listSupabaseCharacters(opts: {
-  visibility?: "public" | "private";
+  visibility?: "public" | "private" | "premium";
+  userId?: string;    // paid user: show public + premium + own private
+  showAll?: boolean;  // admin: no visibility filter
   search?: string;
   tags?: string;
   creatorId?: string;
@@ -108,7 +110,14 @@ export async function listSupabaseCharacters(opts: {
   if (supabase) {
     let query = supabase.from("characters").select("*", { count: "exact" });
 
-    if (opts.visibility) query = query.eq("visibility", opts.visibility);
+    if (opts.showAll) {
+      // no visibility filter — admin sees all
+    } else if (opts.userId) {
+      // paid user: public + premium + own private characters
+      query = query.or(`visibility.eq.public,visibility.eq.premium,creator_id.eq.${opts.userId}`);
+    } else if (opts.visibility) {
+      query = query.eq("visibility", opts.visibility);
+    }
     if (opts.search) query = query.ilike("name", `%${opts.search}%`);
     if (opts.tags) query = query.contains("tags", [opts.tags]);
     if (opts.creatorId) query = query.eq("creator_id", opts.creatorId);
@@ -182,7 +191,7 @@ export async function getSupabaseCharacterById(characterId: string): Promise<Nor
 export async function createSupabaseCharacter(values: {
   creatorId: string;
   name: string;
-  visibility: "public" | "private";
+  visibility: "public" | "private" | "premium";
   systemPrompt: string;
   avatarUrl?: string | null;
   teaserDescription?: string | null;
@@ -190,6 +199,7 @@ export async function createSupabaseCharacter(values: {
   tags?: string[];
   tagline?: string | null;
   imageSeed?: string | null;
+  isNsfw?: boolean;
 }): Promise<NormalizedCharacter | null> {
   // ── Supabase path ──────────────────────────────────────────────────────────
   if (supabase) {
@@ -254,11 +264,12 @@ export async function updateSupabaseCharacter(
     name?: string;
     teaserDescription?: string | null;
     initialGreeting?: string | null;
-    visibility?: "public" | "private";
+    visibility?: "public" | "private" | "premium";
     tags?: string[];
     avatarUrl?: string | null;
     systemPrompt?: string;
     tagline?: string | null;
+    isNsfw?: boolean;
   }
 ): Promise<NormalizedCharacter | null> {
   // ── Supabase path ──────────────────────────────────────────────────────────
@@ -268,10 +279,16 @@ export async function updateSupabaseCharacter(
     if (values.teaserDescription !== undefined) payload.teaser_description = values.teaserDescription;
     if (values.initialGreeting !== undefined) payload.initial_greeting = values.initialGreeting;
     if (values.visibility != null) payload.visibility = values.visibility;
-    if (values.tags != null) payload.tags = values.tags;
     if (values.avatarUrl !== undefined) payload.avatar_url = values.avatarUrl;
     if (values.systemPrompt != null) payload.system_prompt = values.systemPrompt;
     if (values.tagline !== undefined) payload.tagline = values.tagline;
+    if (typeof values.isNsfw === "boolean") {
+      const currentTags = (values.tags ?? []);
+      const baseTags = currentTags.filter(t => t !== "#NSFW");
+      payload.tags = values.isNsfw ? [...baseTags, "#NSFW"] : baseTags;
+    } else if (values.tags != null) {
+      payload.tags = values.tags;
+    }
 
     const { data, error } = await supabase
       .from("characters")

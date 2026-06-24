@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, sql, or } from "drizzle-orm";
+import { eq, ilike, sql, or, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import { db, usersTable, charactersTable, conversationsTable, transactionsTable, systemConfigurationsTable } from "@workspace/db";
+import { upsertSupabasePrice, getAllPrices, invalidatePricesCache, seedPricesIfEmpty } from "../lib/supabasePrices";
 import {
   GetAdminStatsResponse,
   AdminListUsersQueryParams,
@@ -254,11 +255,20 @@ router.get("/admin/characters", async (req, res): Promise<void> => {
   const limit = 20;
   const offset = (page - 1) * limit;
 
-  // Admin sees ALL characters (no visibility or creator filter) — try Supabase first
-  const { items: supabaseItems, total: supabaseTotal } = await listSupabaseCharacters({ limit, offset });
+  // Admin sees ALL characters (no visibility filter)
+  const { items: supabaseItems, total: supabaseTotal } = await listSupabaseCharacters({ showAll: true, limit, offset });
+
+  // Batch look up creator usernames
+  const creatorIds = [...new Set(supabaseItems.map(c => c.creatorId).filter(Boolean))];
+  const creators = creatorIds.length > 0
+    ? await db.select({ id: usersTable.id, username: usersTable.username })
+        .from(usersTable)
+        .where(inArray(usersTable.id, creatorIds))
+    : [];
+  const creatorMap = Object.fromEntries(creators.map(u => [u.id, u.username]));
 
   if (supabaseItems.length > 0 || supabaseTotal > 0) {
-    res.json(AdminListCharactersResponse.parse({
+    const parsedResult = AdminListCharactersResponse.parse({
       items: supabaseItems.map(c => ({
         characterId: c.characterId,
         creatorId: c.creatorId,
@@ -276,7 +286,14 @@ router.get("/admin/characters", async (req, res): Promise<void> => {
       total: supabaseTotal,
       page,
       limit,
-    }));
+    });
+    res.json({
+      ...parsedResult,
+      items: parsedResult.items.map((item, i) => ({
+        ...item,
+        creatorUsername: creatorMap[supabaseItems[i]?.creatorId ?? ""] ?? null,
+      })),
+    });
     return;
   }
 
@@ -286,12 +303,26 @@ router.get("/admin/characters", async (req, res): Promise<void> => {
     db.select({ count: sql<number>`count(*)` }).from(charactersTable),
   ]);
 
-  res.json(AdminListCharactersResponse.parse({
+  const localCreatorIds = [...new Set(items.map(c => c.creatorId).filter(Boolean) as string[])];
+  const localCreators = localCreatorIds.length > 0
+    ? await db.select({ id: usersTable.id, username: usersTable.username })
+        .from(usersTable).where(inArray(usersTable.id, localCreatorIds))
+    : [];
+  const localCreatorMap = Object.fromEntries(localCreators.map(u => [u.id, u.username]));
+
+  const parsedLocal = AdminListCharactersResponse.parse({
     items: items.map(serializeCharacter),
     total: Number(countResult[0]?.count ?? 0),
     page,
     limit,
-  }));
+  });
+  res.json({
+    ...parsedLocal,
+    items: parsedLocal.items.map((item, i) => ({
+      ...item,
+      creatorUsername: localCreatorMap[items[i]?.creatorId ?? ""] ?? null,
+    })),
+  });
 });
 
 router.post("/admin/characters/:characterId/clone", async (req, res): Promise<void> => {
@@ -326,25 +357,33 @@ router.post("/admin/characters/:characterId/clone", async (req, res): Promise<vo
   res.status(201).json(serializeCharacter(cloned));
 });
 
-// Toggle character visibility between public/private
+// Toggle character visibility: public / private / premium
 router.patch("/admin/characters/:characterId/visibility", async (req, res): Promise<void> => {
   const { characterId } = req.params;
   const visibility = req.body?.visibility;
-  if (visibility !== "public" && visibility !== "private") {
-    res.status(400).json({ error: "visibility must be 'public' or 'private'" });
+  if (visibility !== "public" && visibility !== "private" && visibility !== "premium") {
+    res.status(400).json({ error: "visibility must be 'public', 'private', or 'premium'" });
     return;
   }
 
-  const [updated] = await db.update(charactersTable)
-    .set({ visibility })
+  // Try Supabase first
+  const updated = await updateSupabaseCharacter(characterId, { visibility });
+  if (updated) {
+    res.json(updated);
+    return;
+  }
+
+  // Local DB fallback
+  const [dbUpdated] = await db.update(charactersTable)
+    .set({ visibility: visibility === "premium" ? "public" : visibility })
     .where(eq(charactersTable.characterId, characterId))
     .returning();
 
-  if (!updated) {
+  if (!dbUpdated) {
     res.status(404).json({ error: "Character not found" });
     return;
   }
-  res.json(serializeCharacter(updated));
+  res.json(serializeCharacter(dbUpdated));
 });
 
 // Set a promotional overlay text for a character (stored in system_configurations)
@@ -374,7 +413,7 @@ router.patch("/admin/characters/:characterId", async (req, res): Promise<void> =
   const { characterId } = req.params;
   const { name, bio, initialGreeting, avatarUrl, visibility, isNsfw, tags, systemPrompt } = req.body as {
     name?: string; bio?: string; initialGreeting?: string; avatarUrl?: string;
-    visibility?: "public" | "private"; isNsfw?: boolean; tags?: string[]; systemPrompt?: string;
+    visibility?: "public" | "private" | "premium"; isNsfw?: boolean; tags?: string[]; systemPrompt?: string;
   };
 
   let finalTags: string[] | undefined;
@@ -453,6 +492,35 @@ router.post("/admin/upload-media", async (req, res): Promise<void> => {
   }
 
   res.status(501).json({ error: "Image upload via base64 is not supported. Provide a direct image URL instead." });
+});
+
+// ─── Prices (Supabase prices table + system_configurations fallback) ─────────
+
+// GET /admin/prices — return all prices from Supabase (or defaults)
+router.get("/admin/prices", async (req, res): Promise<void> => {
+  const prices = await getAllPrices();
+  res.json(prices);
+});
+
+// PUT /admin/prices/:priceId — upsert a price into Supabase + system_configurations
+router.put("/admin/prices/:priceId", async (req, res): Promise<void> => {
+  const { priceId } = req.params;
+  const { label, amount } = req.body as { label?: string; amount?: unknown };
+  const amt = Number(amount);
+  if (!priceId || isNaN(amt) || amt <= 0) {
+    res.status(400).json({ error: "priceId and a positive amount are required" });
+    return;
+  }
+  await upsertSupabasePrice(priceId, label ?? priceId, amt);
+  res.json({ id: priceId, label: label ?? priceId, amount: amt });
+});
+
+// POST /admin/prices/seed — seed default prices into Supabase
+router.post("/admin/prices/seed", async (req, res): Promise<void> => {
+  await seedPricesIfEmpty();
+  invalidatePricesCache();
+  const prices = await getAllPrices();
+  res.json({ seeded: prices.length, prices });
 });
 
 // ─── System Configuration (CMS) ───────────────────────────────────────────────

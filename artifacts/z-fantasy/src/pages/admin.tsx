@@ -143,7 +143,7 @@ export function Admin() {
   const [charDrawerAvatar, setCharDrawerAvatar] = useState("");
   const [charDrawerPrompt, setCharDrawerPrompt] = useState("");
   const [charDrawerTags, setCharDrawerTags] = useState("");
-  const [charDrawerVisibility, setCharDrawerVisibility] = useState<"public" | "private">("private");
+  const [charDrawerVisibility, setCharDrawerVisibility] = useState<"public" | "private" | "premium">("private");
   const [charDrawerNsfw, setCharDrawerNsfw] = useState(false);
   const [savingChar, setSavingChar] = useState(false);
 
@@ -194,7 +194,7 @@ export function Admin() {
     }
   };
 
-  const openCharDrawer = (char: NonNullable<typeof charsData>["items"][0]) => {
+  const openCharDrawer = (char: NonNullable<typeof charsData>["items"][0] & { creatorUsername?: string | null }) => {
     setCharDrawerCharId(char.characterId);
     setCharDrawerName(char.name);
     setCharDrawerBio(char.teaserDescription ?? "");
@@ -202,7 +202,7 @@ export function Admin() {
     setCharDrawerAvatar(char.avatarUrl ?? "");
     setCharDrawerPrompt("");
     setCharDrawerTags((char.tags ?? []).filter(t => t !== "#NSFW").join(", "));
-    setCharDrawerVisibility((char.visibility as "public" | "private") ?? "private");
+    setCharDrawerVisibility((char.visibility as "public" | "private" | "premium") ?? "private");
     setCharDrawerNsfw((char.tags ?? []).includes("#NSFW"));
     setCharDrawerOpen(true);
   };
@@ -350,16 +350,18 @@ export function Admin() {
     const stars = parseInt(priceOverrides[key] ?? "", 10);
     if (isNaN(stars) || stars <= 0) { toast({ title: "Invalid price", variant: "destructive" }); return; }
     try {
-      await adminApi("PUT", `/admin/system-config/price_${key}`, { value: { stars } });
-      toast({ title: `${tier} ${period} → ${stars} ⭐ saved` });
+      await Promise.all([
+        adminApi("PUT", `/admin/system-config/price_${key}`, { value: { stars } }),
+        adminApi("PUT", `/admin/prices/sub_${key}`, { label: `${tier} ${period}`, amount: stars }),
+      ]);
+      toast({ title: `${tier} ${period} → ${stars} ⭐ saved to Supabase` });
     } catch (e) { toast({ title: "Save failed", description: String(e), variant: "destructive" }); }
   };
 
-  const toggleVisibility = async (characterId: string, current: string) => {
-    const next = current === "public" ? "private" : "public";
+  const setCharVisibility = async (characterId: string, visibility: "public" | "private" | "premium") => {
     try {
-      await adminApi("PATCH", `/admin/characters/${characterId}/visibility`, { visibility: next });
-      toast({ title: `Character set to ${next}` });
+      await adminApi("PATCH", `/admin/characters/${characterId}/visibility`, { visibility });
+      toast({ title: `✅ Character set to ${visibility}` });
     } catch (e) { toast({ title: "Failed", description: String(e), variant: "destructive" }); }
   };
 
@@ -674,7 +676,7 @@ export function Admin() {
             </div>
           )}
           <div className="space-y-3">
-            {charsData?.items?.map(char => (
+            {((charsData?.items ?? []) as Array<NonNullable<typeof charsData>["items"][0] & { creatorUsername?: string | null }>).map(char => (
               <div key={char.characterId} className="rounded-xl bg-card border border-border overflow-hidden">
                 <div className="flex items-center gap-3 p-3">
                   <div className="w-10 h-10 rounded-full overflow-hidden border border-border shrink-0">
@@ -683,16 +685,34 @@ export function Admin() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-sm truncate">{char.name}</div>
-                    <div className="text-xs text-muted-foreground">{char.genre}</div>
+                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                      <span>{char.genre}</span>
+                      {(char.creatorId && char.creatorId !== "0") && (
+                        <>
+                          <span>·</span>
+                          <UserCircle size={10} />
+                          <span className="truncate max-w-[80px]">
+                            {char.creatorUsername ?? char.creatorId}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <button onClick={() => toggleVisibility(char.characterId, char.visibility)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                      char.visibility === "public"
-                        ? "border-green-500/50 text-green-400 bg-green-500/10 hover:bg-green-500/20"
-                        : "border-border text-muted-foreground hover:border-primary/50"
-                    }`}>
-                    {char.visibility === "public" ? <Eye size={12} /> : <EyeOff size={12} />}
-                    {char.visibility}
+                  {/* Visibility pill — click cycles through private → public → premium */}
+                  <button
+                    onClick={() => {
+                      const next = char.visibility === "private" ? "public" : char.visibility === "public" ? "premium" : "private";
+                      setCharVisibility(char.characterId, next);
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                      char.visibility === "public"  ? "border-green-500/50 text-green-400 bg-green-500/10 hover:bg-green-500/20"
+                      : char.visibility === "premium" ? "border-yellow-500/50 text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/20"
+                      : "border-border text-muted-foreground hover:border-primary/50"
+                    }`}
+                    title="Click to cycle: private → public → premium"
+                  >
+                    {char.visibility === "public"  ? <Eye size={12} /> : char.visibility === "premium" ? <span className="text-[10px]">💎</span> : <EyeOff size={12} />}
+                    <span>{char.visibility}</span>
                   </button>
                   <button onClick={() => setExpandedCharId(p => p === char.characterId ? null : char.characterId)}
                     className="p-1.5 text-muted-foreground hover:text-foreground ml-1">
@@ -708,6 +728,23 @@ export function Admin() {
                 </div>
                 {expandedCharId === char.characterId && (
                   <div className="border-t border-border p-3 bg-background space-y-2">
+                    {/* Quick publish actions */}
+                    {isGodMode && (
+                      <div className="flex gap-2 mb-2">
+                        <button onClick={() => setCharVisibility(char.characterId, "public")}
+                          className="flex-1 py-1.5 rounded-lg border border-green-500/50 text-green-400 text-xs font-bold hover:bg-green-500/10 transition-colors">
+                          🌐 Set Public
+                        </button>
+                        <button onClick={() => setCharVisibility(char.characterId, "premium")}
+                          className="flex-1 py-1.5 rounded-lg border border-yellow-500/50 text-yellow-400 text-xs font-bold hover:bg-yellow-500/10 transition-colors">
+                          💎 Set Premium
+                        </button>
+                        <button onClick={() => setCharVisibility(char.characterId, "private")}
+                          className="flex-1 py-1.5 rounded-lg border border-border text-muted-foreground text-xs font-bold hover:bg-muted/30 transition-colors">
+                          🔒 Set Private
+                        </button>
+                      </div>
+                    )}
                     <label className="text-xs text-muted-foreground flex items-center gap-1.5">
                       <MessageSquare size={12} /> Promotional Overlay Text
                     </label>
@@ -1211,7 +1248,7 @@ interface CharDrawerPanelProps {
   charDrawerAvatar: string; setCharDrawerAvatar: (v: string) => void;
   charDrawerPrompt: string; setCharDrawerPrompt: (v: string) => void;
   charDrawerTags: string; setCharDrawerTags: (v: string) => void;
-  charDrawerVisibility: "private" | "public"; setCharDrawerVisibility: (v: "private" | "public") => void;
+  charDrawerVisibility: "private" | "public" | "premium"; setCharDrawerVisibility: (v: "private" | "public" | "premium") => void;
   charDrawerNsfw: boolean; setCharDrawerNsfw: (v: (prev: boolean) => boolean) => void;
   savingChar: boolean;
   saveCharChanges: () => void;
@@ -1273,10 +1310,16 @@ function CharDrawerPanel({ charDrawerName, setCharDrawerName, charDrawerBio, set
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">Visibility</label>
             <div className="flex h-10 rounded-md border border-border overflow-hidden">
-              {(["private", "public"] as const).map(v => (
+              {(["private", "public", "premium"] as const).map(v => (
                 <button key={v} onClick={() => setCharDrawerVisibility(v)}
-                  className={`flex-1 text-xs font-bold uppercase tracking-wider transition-all ${charDrawerVisibility === v ? (v === "public" ? "bg-green-500/20 text-green-400" : "bg-muted text-foreground") : "text-muted-foreground hover:text-foreground"}`}>
-                  {v === "public" ? "🌐 Public" : "🔒 Private"}
+                  className={`flex-1 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                    charDrawerVisibility === v
+                      ? v === "public" ? "bg-green-500/20 text-green-400"
+                        : v === "premium" ? "bg-yellow-500/20 text-yellow-400"
+                        : "bg-muted text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}>
+                  {v === "public" ? "🌐 Public" : v === "premium" ? "💎 Premium" : "🔒 Private"}
                 </button>
               ))}
             </div>

@@ -34,6 +34,9 @@ router.use(authMiddleware);
 
 const MAX_CHARACTER_SLOTS = 3;
 const CHARACTER_CREATION_NEON_COST = 25;
+const FREE_WEEKLY_CREATION_LIMIT = 1;
+
+const PAID_TIERS = new Set(["Bronze", "Silver", "Gold", "supreme_admin"]);
 
 function serializeCharacter(c: NormalizedCharacter) {
   const triggerMeta = Array.isArray(c.triggerMetadataArray) ? null : (c.triggerMetadataArray ?? null);
@@ -53,9 +56,6 @@ function serializeCharacter(c: NormalizedCharacter) {
   };
 }
 
-// Free users must upgrade — paid tiers are unlimited (NC cost is the gate)
-const FREE_USER_BLOCKED = true;
-
 router.get("/characters", async (req, res): Promise<void> => {
   const parsed = ListCharactersQueryParams.safeParse(req.query);
   if (!parsed.success) {
@@ -66,13 +66,31 @@ router.get("/characters", async (req, res): Promise<void> => {
   const { page = 1, limit = 20, search, tags, genre } = parsed.data;
   const offset = ((page ?? 1) - 1) * (limit ?? 20);
 
-  const { items, total } = await listSupabaseCharacters({
-    visibility: "public",
-    search: search ?? undefined,
-    tags: tags ?? undefined,
-    limit: limit ?? 20,
-    offset,
-  });
+  // Determine visibility scope based on user tier
+  let listOpts: Parameters<typeof listSupabaseCharacters>[0];
+
+  if (req.isAdmin) {
+    // Supreme admin sees all characters
+    listOpts = { showAll: true, search: search ?? undefined, tags: tags ?? undefined, limit: limit ?? 20, offset };
+  } else {
+    // Look up user tier
+    const [user] = await db
+      .select({ subscriptionTier: usersTable.subscriptionTier })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.telegramUserId));
+
+    const tier = user?.subscriptionTier ?? "Free";
+
+    if (PAID_TIERS.has(tier)) {
+      // Paid users see: public + premium + own private characters
+      listOpts = { userId: req.telegramUserId, search: search ?? undefined, tags: tags ?? undefined, limit: limit ?? 20, offset };
+    } else {
+      // Free users see public only
+      listOpts = { visibility: "public", search: search ?? undefined, tags: tags ?? undefined, limit: limit ?? 20, offset };
+    }
+  }
+
+  const { items, total } = await listSupabaseCharacters(listOpts);
 
   const filtered = genre
     ? items.filter(c => c.genre === genre || c.tags.some(t => t.toLowerCase().includes(genre.toLowerCase())))
@@ -138,11 +156,27 @@ router.post("/characters", async (req, res): Promise<void> => {
     return;
   }
 
+  const tier = user.subscriptionTier;
+  const isPaid = PAID_TIERS.has(tier);
+
+  // NC balance check (admins bypass)
   if (!req.isAdmin && user.neonCardBalance < CHARACTER_CREATION_NEON_COST) {
     res.status(402).json({ error: `Insufficient Neon Cards. Character creation costs ${CHARACTER_CREATION_NEON_COST} Neon Cards.` });
     return;
   }
 
+  // Free user weekly creation limit
+  if (!req.isAdmin && !isPaid) {
+    const usedThisWeek = user.weeklyCreationsCount ?? 0;
+    if (usedThisWeek >= FREE_WEEKLY_CREATION_LIMIT) {
+      res.status(402).json({
+        error: `Free users can create ${FREE_WEEKLY_CREATION_LIMIT} character per week. Upgrade to Premium to create more!`,
+      });
+      return;
+    }
+  }
+
+  // Slot cap for all non-admin users
   if (!req.isAdmin) {
     const { total } = await listSupabaseCharacters({ creatorId: req.telegramUserId, limit: 1, offset: 0 });
     if (total >= MAX_CHARACTER_SLOTS) {
@@ -151,19 +185,16 @@ router.post("/characters", async (req, res): Promise<void> => {
     }
   }
 
-  const tier = user.subscriptionTier;
-  if (FREE_USER_BLOCKED && tier === "Free" && !req.isAdmin) {
-    res.status(402).json({ error: "Free users must upgrade to create characters." });
-    return;
-  }
-
-  const requestedVisibility = (req.body as Record<string, unknown>)?.visibility;
+  // Non-admin users always create private SFW characters
   const visibility: "public" | "private" = req.isAdmin
-    ? (requestedVisibility === "private" ? "private" : "public")
-    : (requestedVisibility === "public" ? "public" : "private");
-  const isNsfw = typeof (req.body as Record<string, unknown>)?.isNsfw === "boolean"
-    ? (req.body as Record<string, unknown>).isNsfw as boolean
+    ? ((req.body as Record<string, unknown>)?.visibility === "private" ? "private" : "public")
+    : "private";
+  const isNsfw = req.isAdmin
+    ? (typeof (req.body as Record<string, unknown>)?.isNsfw === "boolean"
+        ? (req.body as Record<string, unknown>).isNsfw as boolean
+        : false)
     : false;
+
   const imageSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
   const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
 

@@ -4,8 +4,7 @@ import { CharacterInputGenre } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Sparkles, Upload, X, Lock, Globe, ChevronLeft, ChevronRight,
-  EyeOff, Eye, Check,
+  Sparkles, Upload, X, ChevronLeft, ChevronRight, Check,
 } from "lucide-react";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 
@@ -31,8 +30,6 @@ const STEPS = [
   { id: 4, title: "Core Data",         subtitle: "Age & biographical directives" },
   { id: 5, title: "First Contact",     subtitle: "Their opening transmission" },
   { id: 6, title: "Signal Tags",       subtitle: "Classify your entity's attributes" },
-  { id: 7, title: "Content Rating",    subtitle: "Set the content boundaries" },
-  { id: 8, title: "Visibility",        subtitle: "Who can discover this entity?" },
 ];
 
 function getToken() {
@@ -390,173 +387,25 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 7: NSFW Toggle ── */}
-        {step === 7 && (
-          <div className="space-y-6">
-            <div className={`p-6 rounded-2xl border-2 transition-all ${
-              isNsfw
-                ? "border-pink-500/60 bg-pink-500/10 shadow-[0_0_30px_rgba(236,72,153,0.2)]"
-                : "border-border bg-card"
-            }`}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  {isNsfw ? (
-                    <EyeOff size={28} className="text-pink-400" />
-                  ) : (
-                    <Eye size={28} className="text-muted-foreground" />
-                  )}
-                  <div>
-                    <p className="font-bold text-white">{isNsfw ? "NSFW — 18+ Content" : "SFW — Safe Content"}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {isNsfw
-                        ? nsfwPrivate
-                          ? "🔒 Private — hidden from public discover"
-                          : "🌐 Public — visible to all users"
-                        : "Visible to all users"}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsNsfw(v => !v)}
-                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus-visible:outline-none ${
-                    isNsfw ? "bg-pink-500" : "bg-muted"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                      isNsfw ? "translate-x-6" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {isNsfw
-                  ? nsfwPrivate
-                    ? "⚠️ This NSFW character is private — only you can find and use it. It will not appear in public Explore."
-                    : "🌐 This NSFW character is public — it will appear in Explore for all users."
-                  : "This entity is suitable for all users. Toggle on if you want to mark it as 18+ content."}
-              </p>
+        {/* Step 6 summary — appears inline below tags */}
+        {step === 6 && (
+          <div className="mt-6 p-4 rounded-xl bg-card border border-border space-y-2">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Summary</p>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Name</span>
+              <span className="font-bold text-white">{resolvedName}</span>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setIsNsfw(false)}
-                className={`py-4 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-2 ${
-                  !isNsfw
-                    ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-300"
-                    : "border-border bg-card text-muted-foreground hover:border-cyan-400/30"
-                }`}
-              >
-                <Eye size={20} />
-                SFW
-              </button>
-              <button
-                onClick={() => setIsNsfw(true)}
-                className={`py-4 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-2 ${
-                  isNsfw
-                    ? "border-pink-500/60 bg-pink-500/15 text-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.3)]"
-                    : "border-border bg-card text-muted-foreground hover:border-pink-500/30"
-                }`}
-              >
-                <EyeOff size={20} />
-                NSFW
-              </button>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Genre</span>
+              <span className="font-semibold text-white">{genre}</span>
             </div>
-
-            {/* NSFW private/public switch — only shown when NSFW is on */}
-            {isNsfw && (
-              <div className="p-4 rounded-xl border border-pink-500/30 bg-pink-500/5 space-y-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-pink-300">NSFW Visibility</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => { setNsfwPrivate(true); setVisibility("private"); }}
-                    className={`py-3 px-3 rounded-xl border font-bold text-xs transition-all flex flex-col items-center gap-1.5 ${
-                      nsfwPrivate
-                        ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
-                        : "border-border bg-card text-muted-foreground hover:border-primary/30"
-                    }`}
-                  >
-                    <Lock size={16} />
-                    Private
-                    <span className="font-normal opacity-70">Only you</span>
-                  </button>
-                  <button
-                    onClick={() => { setNsfwPrivate(false); setVisibility("public"); }}
-                    className={`py-3 px-3 rounded-xl border font-bold text-xs transition-all flex flex-col items-center gap-1.5 ${
-                      !nsfwPrivate
-                        ? "border-pink-500/60 bg-pink-500/15 text-pink-400"
-                        : "border-border bg-card text-muted-foreground hover:border-pink-500/30"
-                    }`}
-                  >
-                    <Globe size={16} />
-                    Public
-                    <span className="font-normal opacity-70">All users</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Step 8: Visibility ── */}
-        {step === 8 && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => setVisibility("private")}
-                className={`py-8 px-4 rounded-2xl border-2 font-bold text-sm transition-all flex flex-col items-center gap-3 ${
-                  visibility === "private"
-                    ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/30"
-                }`}
-              >
-                <Lock size={28} />
-                <span className="text-base">Private</span>
-                <span className="text-[10px] font-normal text-muted-foreground text-center">
-                  Only you can see and use this entity
-                </span>
-              </button>
-              <button
-                onClick={() => setVisibility("public")}
-                className={`py-8 px-4 rounded-2xl border-2 font-bold text-sm transition-all flex flex-col items-center gap-3 ${
-                  visibility === "public"
-                    ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                    : "border-border bg-card text-muted-foreground hover:border-cyan-400/30"
-                }`}
-              >
-                <Globe size={28} />
-                <span className="text-base">Public</span>
-                <span className="text-[10px] font-normal text-muted-foreground text-center">
-                  Discoverable by all users on Explore
-                </span>
-              </button>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Visibility</span>
+              <span className="font-semibold text-white">🔒 Private</span>
             </div>
-
-            {/* Summary */}
-            <div className="p-4 rounded-xl bg-card border border-border space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Summary</p>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Name</span>
-                <span className="font-bold text-white">{resolvedName}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Genre</span>
-                <span className="font-semibold text-white">{genre}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Rating</span>
-                <span className={`font-semibold ${isNsfw ? "text-pink-400" : "text-cyan-300"}`}>
-                  {isNsfw ? "🔞 NSFW" : "✅ SFW"}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Visibility</span>
-                <span className="font-semibold text-white capitalize">{visibility}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Cost</span>
-                <span className="font-bold text-cyan-400">-25 🃏 Neon Cards</span>
-              </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Cost</span>
+              <span className="font-bold text-cyan-400">-25 🃏 Neon Cards</span>
             </div>
           </div>
         )}
