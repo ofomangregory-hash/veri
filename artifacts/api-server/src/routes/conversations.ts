@@ -349,6 +349,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
       teaserDescription: character.teaserDescription,
       imageSeed,
       sceneDescription: parsed.data.description,
+      avatarUrl: character.avatarUrl ?? null,
     });
     matched = true;
   } catch (err) {

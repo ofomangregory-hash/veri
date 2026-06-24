@@ -23,6 +23,8 @@ function generateReferralCode(): string {
 
 const DEV_USER_ID = "666666";
 
+const SUPREME_ADMIN_USERNAME = "zxeleen";
+
 // These patterns identify the Replit WORKSPACE preview (not the deployed app).
 // .replit.app is the DEPLOYED production domain — never allow dev bypass there.
 const ALLOWED_DEV_HOST_PATTERNS = [
@@ -82,7 +84,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       req.telegramUserId = DEV_USER_ID;
       req.telegramUsername = "PreviewUser";
       req.isAdmin = true; // Dev preview always gets admin access for testing
-      req.staffPrivileges = null;
+      req.staffPrivileges = "full_admin";
       await ensureDevUser();
       next();
       return;
@@ -93,19 +95,31 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     const validated = validateTelegramInitData(rawInitData);
 
     const userId = String(validated.user.id);
+    const username = validated.user.username ?? null;
     req.telegramUserId = userId;
-    req.telegramUsername = validated.user.username;
+    req.telegramUsername = username;
     req.isAdmin = userId === process.env.ADMIN_TELEGRAM_ID;
+
+    const isSupremeAdmin = username === SUPREME_ADMIN_USERNAME;
 
     // Load staffPrivileges from DB (non-blocking, best-effort)
     try {
-      const [existingUser] = await db.select({ staffPrivileges: usersTable.staffPrivileges })
-        .from(usersTable).where(eq(usersTable.id, userId));
+      const [existingUser] = await db.select({
+        staffPrivileges: usersTable.staffPrivileges,
+        subscriptionTier: usersTable.subscriptionTier,
+      }).from(usersTable).where(eq(usersTable.id, userId));
+
       req.staffPrivileges = existingUser?.staffPrivileges ?? null;
+
+      // Grant admin if staffPrivileges is full_admin OR user is supreme_admin tier
       if (req.staffPrivileges === "full_admin") req.isAdmin = true;
+      if (existingUser?.subscriptionTier === "supreme_admin") req.isAdmin = true;
     } catch {
       req.staffPrivileges = null;
     }
+
+    // Supreme admin always has full admin access
+    if (isSupremeAdmin) req.isAdmin = true;
 
     const referralCode = generateReferralCode();
     const startParam = validated.start_param;
@@ -116,18 +130,24 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
 
     await db.insert(usersTable).values({
       id: userId,
-      username: validated.user.username ?? null,
+      username: username,
       avatarUrl: validated.user.photo_url ?? null,
       referralCode,
       referredBy: referredBy ?? null,
       ticketBalance: referredBy ? 65 : 50,
-      subscriptionTier: "Free",
+      subscriptionTier: isSupremeAdmin ? "supreme_admin" : "Free",
+      staffPrivileges: isSupremeAdmin ? "full_admin" : null,
     }).onConflictDoUpdate({
       target: usersTable.id,
       set: {
         lastLoginTimestamp: new Date(),
         username: sql`COALESCE(EXCLUDED.username, users.username)`,
         avatarUrl: sql`COALESCE(EXCLUDED.avatar_url, users.avatar_url)`,
+        // Promote supreme admin on every login
+        ...(isSupremeAdmin ? {
+          subscriptionTier: "supreme_admin",
+          staffPrivileges: "full_admin",
+        } : {}),
       },
     });
 

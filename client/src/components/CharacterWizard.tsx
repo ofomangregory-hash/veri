@@ -165,13 +165,16 @@ export interface WizardData {
   initialGreeting: string;
   avatarUrl: string;
   visibility: "public" | "private";
+  nsfwEnabled: boolean;
 }
 
-type Step = "name" | "scene" | "behavior" | "personality" | "traits" | "mood" | "review";
-const STEPS: Step[] = ["name", "scene", "behavior", "personality", "traits", "mood", "review"];
+type Step = "name" | "scene" | "behavior" | "personality" | "traits" | "mood" | "nsfw" | "visibility" | "review";
+const BASE_STEPS: Step[] = ["name", "scene", "behavior", "personality", "traits", "mood", "visibility", "review"];
+const SUPREME_STEPS: Step[] = ["name", "scene", "behavior", "personality", "traits", "mood", "nsfw", "visibility", "review"];
 const STEP_LABELS: Record<Step, string> = {
   name: "Name", scene: "Scene", behavior: "Behavior",
-  personality: "Personality", traits: "Traits", mood: "Mood", review: "Create",
+  personality: "Personality", traits: "Traits", mood: "Mood",
+  nsfw: "NSFW", visibility: "Visibility", review: "Create",
 };
 
 const MAX_PERSONALITIES = 3;
@@ -216,10 +219,12 @@ function Chip({ label, selected, onClick }: { label: string; selected: boolean; 
 interface Props {
   onClose: () => void;
   onCreated: () => void;
+  isSupremeAdmin?: boolean;
 }
 
-export function CharacterWizard({ onClose, onCreated }: Props) {
+export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: Props) {
   const { toast } = useToast();
+  const STEPS = isSupremeAdmin ? SUPREME_STEPS : BASE_STEPS;
   const [step, setStep] = useState<Step>("name");
   const [typeFilter, setTypeFilter] = useState("All");
   const [creating, setCreating] = useState(false);
@@ -244,6 +249,7 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
     name: "", characterType: "Modern", scenes: [], behaviors: [],
     personalities: [], traits: [], moods: [], bio: "",
     age: "", initialGreeting: "", avatarUrl: "", visibility: "private",
+    nsfwEnabled: false,
   });
 
   const stepIndex = STEPS.indexOf(step);
@@ -275,6 +281,8 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
     if (step === "personality") return data.personalities.length > 0;
     if (step === "traits") return data.traits.length > 0;
     if (step === "mood") return data.moods.length > 0;
+    if (step === "nsfw") return true;
+    if (step === "visibility") return true;
     return true;
   };
 
@@ -294,11 +302,16 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
         bio: data.bio || undefined,
         age: data.age || undefined,
         genre: data.characterType,
-        tags: [data.characterType, ...data.behaviors.slice(0, 3)],
+        tags: [
+          data.characterType,
+          ...data.behaviors.slice(0, 3),
+          ...(data.nsfwEnabled ? ["#NSFW"] : []),
+        ],
         avatarUrl: data.avatarUrl || undefined,
         initialGreeting: data.initialGreeting || undefined,
         visibility: data.visibility,
         systemPrompt,
+        nsfwEnabled: data.nsfwEnabled,
       });
       toast({ title: `✅ ${data.name} created!` });
       onCreated();
@@ -321,7 +334,7 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
           <h2 className="font-bold text-sm uppercase tracking-widest text-glow-blue">Character Wizard</h2>
           {data.name && <p className="text-xs text-muted-foreground mt-0.5 truncate">{data.name} · {data.characterType}</p>}
         </div>
-        <div className="text-xs text-muted-foreground font-mono">{stepIndex + 1}/{STEPS.length}</div>
+        <div className="text-xs text-muted-foreground font-mono">{stepIndex + 1}/{STEPS.length} · {STEP_LABELS[step]}</div>
       </div>
 
       {/* Step Progress */}
@@ -561,6 +574,98 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
           </div>
         )}
 
+        {/* ── Step: NSFW (supreme admin only) ── */}
+        {step === "nsfw" && (
+          <div className="space-y-6">
+            <div className="p-4 rounded-xl bg-red-950/30 border border-red-500/30 space-y-2">
+              <div className="flex items-center gap-2 text-red-400">
+                <span className="text-lg">🔞</span>
+                <span className="font-bold text-sm uppercase tracking-wider">NSFW Content</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Enabling NSFW allows this character to engage in explicit adult conversations and generate mature content.
+                This tag will add <strong className="text-red-400">#NSFW</strong> to the character's tags and
+                unlock explicit AI responses for users with NSFW enabled.
+              </p>
+              <p className="text-xs text-red-400/70 font-medium">
+                ⚠️ Only Supreme Admins can create NSFW characters. Use responsibly.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setData(d => ({ ...d, nsfwEnabled: !d.nsfwEnabled }))}
+              className={`w-full p-5 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 ${
+                data.nsfwEnabled
+                  ? "border-red-500/60 bg-red-950/40 box-glow-pink"
+                  : "border-border bg-card hover:border-red-500/30"
+              }`}
+            >
+              <span className="text-4xl">{data.nsfwEnabled ? "🔞" : "🔒"}</span>
+              <div className="text-center">
+                <div className={`font-bold text-base ${data.nsfwEnabled ? "text-red-400" : "text-muted-foreground"}`}>
+                  {data.nsfwEnabled ? "NSFW Enabled" : "NSFW Disabled"}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {data.nsfwEnabled ? "Character will have explicit capabilities" : "Character will stay tasteful & PG-13"}
+                </div>
+              </div>
+              <div className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                data.nsfwEnabled
+                  ? "bg-red-500/20 text-red-400 border-red-500/50"
+                  : "bg-card text-muted-foreground border-border"
+              }`}>
+                {data.nsfwEnabled ? "NSFW ON" : "NSFW OFF"}
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* ── Step: Visibility ── */}
+        {step === "visibility" && (
+          <div className="space-y-6">
+            <p className="text-xs text-muted-foreground leading-relaxed px-1">
+              Set who can discover this character on the Explore page. Public characters appear for all users; private characters are only accessible to you.
+            </p>
+
+            <div className="grid grid-cols-2 gap-4">
+              {(["public", "private"] as const).map(v => (
+                <button
+                  key={v}
+                  onClick={() => setData(d => ({ ...d, visibility: v }))}
+                  className={`flex flex-col items-center gap-3 p-5 rounded-2xl border-2 transition-all ${
+                    data.visibility === v
+                      ? v === "public"
+                        ? "border-green-500/60 bg-green-950/40 box-glow-blue"
+                        : "border-purple-500/60 bg-purple-950/40"
+                      : "border-border bg-card hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <span className="text-3xl">{v === "public" ? "🌐" : "🔒"}</span>
+                  <div className="text-center">
+                    <div className={`font-bold text-sm ${
+                      data.visibility === v
+                        ? v === "public" ? "text-green-400" : "text-purple-300"
+                        : "text-muted-foreground"
+                    }`}>
+                      {v === "public" ? "Public" : "Private"}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      {v === "public" ? "Visible on Explore" : "Only visible to you"}
+                    </div>
+                  </div>
+                  {data.visibility === v && (
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                      v === "public" ? "bg-green-500/20 text-green-400" : "bg-purple-500/20 text-purple-400"
+                    }`}>
+                      <Check size={12} />
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── Step: Review ── */}
         {step === "review" && (
           <div className="space-y-4">
@@ -586,28 +691,27 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
               </div>
             </div>
 
+            {/* Summary badges */}
+            <div className="flex flex-wrap gap-2">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${
+                data.visibility === "public"
+                  ? "border-green-500/50 text-green-400 bg-green-500/10"
+                  : "border-border text-muted-foreground bg-muted"
+              }`}>
+                {data.visibility === "public" ? "🌐 Public" : "🔒 Private"}
+              </span>
+              {data.nsfwEnabled && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full border border-red-500/50 text-red-400 bg-red-500/10 font-bold">
+                  🔞 NSFW
+                </span>
+              )}
+            </div>
+
             {/* Extra fields */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Age</label>
-                <input value={data.age} onChange={e => setData(d => ({ ...d, age: e.target.value }))}
-                  placeholder="e.g. 22" className="w-full h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:border-primary/60" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Visibility</label>
-                <div className="flex h-9 rounded-lg border border-border overflow-hidden">
-                  {(["private", "public"] as const).map(v => (
-                    <button key={v} onClick={() => setData(d => ({ ...d, visibility: v }))}
-                      className={`flex-1 text-xs font-bold uppercase tracking-wide transition-all ${
-                        data.visibility === v
-                          ? v === "public" ? "bg-green-500/20 text-green-400" : "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}>
-                      {v === "public" ? "🌐" : "🔒"} {v}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Age</label>
+              <input value={data.age} onChange={e => setData(d => ({ ...d, age: e.target.value }))}
+                placeholder="e.g. 22" className="w-full h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:border-primary/60" />
             </div>
 
             <div>
@@ -644,7 +748,11 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
 
         {step !== "review" ? (
           <button onClick={goNext} disabled={!canProceed()}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-background font-bold text-sm disabled:opacity-40 transition-all box-glow-blue">
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm disabled:opacity-40 transition-all ${
+              step === "nsfw" && data.nsfwEnabled
+                ? "bg-red-600 text-white box-glow-pink"
+                : "bg-accent text-background box-glow-blue"
+            }`}>
             Continue <ChevronRight size={16} />
           </button>
         ) : (

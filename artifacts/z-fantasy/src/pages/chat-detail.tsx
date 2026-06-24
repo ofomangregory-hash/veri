@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { useGetConversation, useSendMessage, useSendGift, useRequestSelfie, GiftInputGiftType } from "@workspace/api-client-react";
-import { Send, Gift, Camera, ChevronLeft, Heart } from "lucide-react";
+import { Send, Gift, Camera, ChevronLeft, Heart, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,6 +10,8 @@ export function ChatDetail() {
   const { id } = useParams<{ id: string }>();
   const [input, setInput] = useState("");
   const [showGiftTray, setShowGiftTray] = useState(false);
+  const [showSelfieModal, setShowSelfieModal] = useState(false);
+  const [selfieDesc, setSelfieDesc] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -52,9 +54,17 @@ export function ChatDetail() {
 
   const handleSelfie = () => {
     if (!id) return;
-    reqSelfie.mutate({ characterId: id, data: { description: "Show me yourself" } }, {
+    setShowSelfieModal(true);
+  };
+
+  const submitSelfie = () => {
+    if (!id) return;
+    const description = selfieDesc.trim() || "Show me yourself";
+    setShowSelfieModal(false);
+    setSelfieDesc("");
+    reqSelfie.mutate({ characterId: id, data: { description } }, {
       onSuccess: () => {
-        toast({ title: "Selfie Requested!" });
+        toast({ title: "Selfie Requested!", description: "Generating your image…" });
         refetch();
       },
       onError: () => toast({ title: "Request Failed", variant: "destructive" })
@@ -140,6 +150,61 @@ export function ChatDetail() {
           <Send size={20} className="ml-0.5" />
         </button>
       </div>
+
+      {/* Selfie Prompt Modal */}
+      <AnimatePresence>
+        {showSelfieModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowSelfieModal(false)}
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="w-full bg-card border-t border-primary/30 rounded-t-2xl p-5 shadow-[0_-10px_40px_rgba(255,0,127,0.2)]"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-white flex items-center gap-2">
+                  <Camera size={16} className="text-accent" /> Request a Selfie
+                </h3>
+                <button onClick={() => setShowSelfieModal(false)} className="text-muted-foreground hover:text-white transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">Describe the scene or pose (optional)</p>
+              <textarea
+                autoFocus
+                value={selfieDesc}
+                onChange={e => setSelfieDesc(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), submitSelfie())}
+                placeholder="e.g. Sitting on a neon rooftop at night, looking over your shoulder…"
+                rows={3}
+                className="w-full rounded-xl border border-secondary/50 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent resize-none"
+              />
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => setShowSelfieModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-border text-muted-foreground text-sm font-semibold hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitSelfie}
+                  disabled={reqSelfie.isPending}
+                  className="flex-1 py-2.5 rounded-xl bg-accent text-white text-sm font-bold box-glow-blue disabled:opacity-50 transition-all"
+                >
+                  {reqSelfie.isPending ? "Generating…" : "📸 Send"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Gift Tray */}
       <AnimatePresence>

@@ -176,6 +176,13 @@ function buildWizardPrompt(w: WizardState): string {
 
 let bot: TelegramBot | null = null;
 
+// ── Markdown escaping ─────────────────────────────────────────────────────────
+// Escapes special chars for Telegram Markdown v1 parse mode
+function escMd(text: string | null | undefined): string {
+  if (!text) return "—";
+  return text.replace(/[_*[\]`]/g, (c) => `\\${c}`);
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function isAdmin(msg: Message): boolean {
   const id = msg.from?.id;
@@ -1285,12 +1292,12 @@ export function startTelegramBot(): TelegramBot | null {
         `👤 *User Profile*`,
         ``,
         `🆔 ID: \`${user.id}\``,
-        `🏷 Username: @${user.username ?? "—"}`,
-        `📛 Display Name: ${user.customNickname ?? "—"}`,
+        `🏷 Username: @${escMd(user.username)}`,
+        `📛 Display Name: ${escMd(user.customNickname)}`,
         ``,
-        `💎 Tier: *${user.subscriptionTier}*`,
+        `💎 Tier: *${escMd(user.subscriptionTier)}*`,
         `🎟 Tickets: *${user.ticketBalance}*`,
-        `🤖 Active Character: *${activeCharName}*`,
+        `🤖 Active Character: *${escMd(activeCharName)}*`,
         ``,
         `🛡 Staff Role: ${staffLabel}`,
         ``,
@@ -1388,10 +1395,10 @@ export function startTelegramBot(): TelegramBot | null {
         return;
       }
       const lines = results.map(u =>
-        `• \`${u.id}\` @${u.username ?? "—"} | ${u.tier} | 🎟 ${u.balance}`
+        `• \`${u.id}\` @${escMd(u.username)} | ${escMd(u.tier)} | 🎟 ${u.balance}`
       );
       await bot!.sendMessage(msg.chat.id,
-        `🔍 *Search results for "${query}":*\n\n${lines.join("\n")}`,
+        `🔍 *Search results for "${escMd(query)}":*\n\n${lines.join("\n")}`,
         { parse_mode: "Markdown" });
     });
 

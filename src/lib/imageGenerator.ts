@@ -24,6 +24,7 @@ export interface GenerateSelfieOptions {
   teaserDescription: string | null | undefined;
   imageSeed: string;
   sceneDescription: string;
+  avatarUrl?: string | null;
 }
 
 export interface GenerateAvatarOptions {
@@ -44,8 +45,8 @@ export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Prom
   });
 }
 
-export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Promise<string> {
-  const { characterName, genre, systemPrompt, teaserDescription, imageSeed, sceneDescription } = opts;
+function buildPrompt(opts: GenerateSelfieOptions): { fullPrompt: string; negativePrompt: string } {
+  const { characterName, genre, systemPrompt: _systemPrompt, teaserDescription, sceneDescription } = opts;
 
   const visualPrefix = GENRE_VISUAL_PREFIXES[genre] ?? DEFAULT_VISUAL_PREFIX;
 
@@ -69,6 +70,87 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
     "out of frame, duplicate, cropped, worst quality, jpeg artifacts",
   ].join(", ");
 
+  return { fullPrompt, negativePrompt };
+}
+
+async function tryHuggingFaceImg2Img(opts: GenerateSelfieOptions & { avatarUrl: string }): Promise<Buffer | null> {
+  const hfToken = process.env.HF_API_TOKEN;
+  if (!hfToken) return null;
+
+  logger.info({ characterName: opts.characterName }, "Attempting HF img2img generation");
+
+  let avatarBuffer: Buffer;
+  try {
+    const imgRes = await axios.get(opts.avatarUrl, { responseType: "arraybuffer", timeout: 15000 });
+    avatarBuffer = Buffer.from(imgRes.data as ArrayBuffer);
+  } catch (err) {
+    logger.warn({ err }, "HF img2img: failed to download avatar — skipping");
+    return null;
+  }
+
+  const { fullPrompt, negativePrompt } = buildPrompt(opts);
+  const avatarBase64 = avatarBuffer.toString("base64");
+
+  try {
+    const response = await fetch(
+      "https://api-inference.huggingface.co/models/stablediffusionapi/pony-diffusion-v6-xl",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${hfToken}`,
+          "Content-Type": "application/json",
+          "X-Use-Cache": "false",
+        },
+        body: JSON.stringify({
+          inputs: avatarBase64,
+          parameters: {
+            prompt: fullPrompt,
+            negative_prompt: negativePrompt,
+            strength: 0.65,
+            num_inference_steps: 30,
+            guidance_scale: 7,
+          },
+        }),
+        signal: AbortSignal.timeout(120000),
+      },
+    );
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      logger.warn({ status: response.status, body: errText.slice(0, 200) }, "HF img2img HTTP error — falling back");
+      return null;
+    }
+
+    const imageBuffer = Buffer.from(await response.arrayBuffer());
+    logger.info({ characterName: opts.characterName, bytes: imageBuffer.length }, "HF img2img succeeded");
+    return imageBuffer;
+  } catch (err) {
+    logger.warn({ err }, "HF img2img request failed — falling back to Perchance");
+    return null;
+  }
+}
+
+export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Promise<string> {
+  const { imageSeed } = opts;
+
+  // If avatar URL is provided, try HF img2img first for character consistency
+  if (opts.avatarUrl) {
+    try {
+      const hfBuffer = await tryHuggingFaceImg2Img({ ...opts, avatarUrl: opts.avatarUrl });
+      if (hfBuffer) {
+        const requestId = Math.random().toString(36).slice(2, 16);
+        const telegraphUrl = await uploadToTelegraph(hfBuffer, `selfie_${requestId}.jpg`);
+        logger.info({ telegraphUrl }, "HF img2img selfie uploaded to Telegra.ph");
+        return telegraphUrl;
+      }
+    } catch (err) {
+      logger.warn({ err }, "HF img2img pipeline failed — falling back to Perchance");
+    }
+  }
+
+  // Fallback: Perchance text-to-image
+  const { fullPrompt, negativePrompt } = buildPrompt(opts);
+
   const requestId = Math.random().toString(36).slice(2, 16);
 
   const params = new URLSearchParams();
@@ -85,7 +167,7 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
 
   const apiUrl = `https://image-generation.perchance.org/api/generateImage?${params.toString()}`;
 
-  logger.info({ characterName, genre, imageSeed, sceneDescription }, "Requesting Perchance image generation");
+  logger.info({ characterName: opts.characterName, genre: opts.genre, imageSeed }, "Requesting Perchance image generation");
 
   let perchanceImageUrl: string;
 

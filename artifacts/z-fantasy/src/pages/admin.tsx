@@ -71,6 +71,7 @@ export function Admin() {
 
   const isGodMode = me?.isAdmin === true || me?.staffPrivileges === "full_admin";
   const isLimitedAdmin = me?.staffPrivileges === "limited_admin";
+  const isSupremeAdmin = me?.subscriptionTier === "supreme_admin";
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
@@ -979,6 +980,7 @@ export function Admin() {
       <CharacterWizard
         onClose={() => setShowWizard(false)}
         onCreated={() => { setShowWizard(false); loadConfigs(); }}
+        isSupremeAdmin={isSupremeAdmin}
       />
     )}
 

@@ -1,5 +1,7 @@
 import { supabase } from "./supabase";
 import { logger } from "./logger";
+import { db, charactersTable } from "@workspace/db";
+import { eq, ilike, and } from "drizzle-orm";
 
 export interface SupabaseCharacterRow {
   character_id: string;
@@ -16,7 +18,6 @@ export interface SupabaseCharacterRow {
   character_advertisement: string | null;
   status_level: number;
   image_seed: number | null;
-  is_nsfw?: boolean | null;
 }
 
 export interface NormalizedCharacter {
@@ -34,7 +35,6 @@ export interface NormalizedCharacter {
   triggerMetadataArray: unknown[] | null;
   tagline: string | null;
   imageSeed: string | null;
-  isNsfw: boolean;
 }
 
 const TAG_TO_GENRE: Record<string, string> = {
@@ -58,11 +58,7 @@ function deriveGenre(tags: string[]): string | null {
   return null;
 }
 
-const NSFW_TAG = "#NSFW";
-
 export function serializeSupabaseCharacter(row: SupabaseCharacterRow): NormalizedCharacter {
-  const tags = row.tags ?? [];
-  const isNsfw = row.is_nsfw === true || tags.includes(NSFW_TAG);
   return {
     characterId: row.character_id,
     creatorId: row.creator_id,
@@ -72,13 +68,31 @@ export function serializeSupabaseCharacter(row: SupabaseCharacterRow): Normalize
     avatarUrl: row.avatar_url ?? null,
     teaserDescription: row.teaser_description ?? null,
     initialGreeting: row.initial_greeting ?? null,
-    tags,
-    genre: deriveGenre(tags),
+    tags: row.tags ?? [],
+    genre: deriveGenre(row.tags ?? []),
     age: null,
     triggerMetadataArray: row.trigger_metadata_array ?? null,
     tagline: row.tagline ?? null,
     imageSeed: row.image_seed != null ? String(row.image_seed) : null,
-    isNsfw,
+  };
+}
+
+function normalizeLocalCharacter(row: typeof charactersTable.$inferSelect): NormalizedCharacter {
+  return {
+    characterId: row.characterId,
+    creatorId: row.creatorId ?? "",
+    name: row.name,
+    visibility: (row.visibility === "public" || row.visibility === "private") ? row.visibility : "private",
+    systemPrompt: row.systemPrompt ?? "",
+    avatarUrl: row.avatarUrl ?? null,
+    teaserDescription: row.teaserDescription ?? null,
+    initialGreeting: row.initialGreeting ?? null,
+    tags: row.tags ?? [],
+    genre: row.genre ?? null,
+    age: row.age ?? null,
+    triggerMetadataArray: Array.isArray(row.triggerMetadataArray) ? (row.triggerMetadataArray as unknown[]) : null,
+    tagline: null,
+    imageSeed: row.imageSeed ?? null,
   };
 }
 
@@ -89,68 +103,83 @@ export async function listSupabaseCharacters(opts: {
   creatorId?: string;
   limit?: number;
   offset?: number;
-  excludeNsfw?: boolean;
 }): Promise<{ items: NormalizedCharacter[]; total: number }> {
-  if (!supabase) {
-    logger.warn("listSupabaseCharacters: Supabase client unavailable");
-    return { items: [], total: 0 };
+  // ── Supabase path ──────────────────────────────────────────────────────────
+  if (supabase) {
+    let query = supabase.from("characters").select("*", { count: "exact" });
+
+    if (opts.visibility) query = query.eq("visibility", opts.visibility);
+    if (opts.search) query = query.ilike("name", `%${opts.search}%`);
+    if (opts.tags) query = query.contains("tags", [opts.tags]);
+    if (opts.creatorId) query = query.eq("creator_id", opts.creatorId);
+
+    const from = opts.offset ?? 0;
+    const to = from + (opts.limit ?? 20) - 1;
+    query = query.range(from, to);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      logger.error({ error }, "listSupabaseCharacters: Supabase query failed — falling back to local DB");
+    } else {
+      return {
+        items: ((data ?? []) as SupabaseCharacterRow[]).map(serializeSupabaseCharacter),
+        total: count ?? 0,
+      };
+    }
   }
 
-  let query = supabase.from("characters").select("*", { count: "exact" });
+  // ── Local DB fallback ──────────────────────────────────────────────────────
+  logger.debug("listSupabaseCharacters: using local DB fallback");
 
-  if (opts.visibility) {
-    query = query.eq("visibility", opts.visibility);
-  }
-  if (opts.search) {
-    query = query.ilike("name", `%${opts.search}%`);
-  }
-  if (opts.tags) {
-    query = query.contains("tags", [opts.tags]);
-  }
-  if (opts.creatorId) {
-    query = query.eq("creator_id", opts.creatorId);
-  }
+  const wheres = [];
+  if (opts.visibility) wheres.push(eq(charactersTable.visibility, opts.visibility));
+  if (opts.creatorId) wheres.push(eq(charactersTable.creatorId, opts.creatorId));
+  if (opts.search) wheres.push(ilike(charactersTable.name, `%${opts.search}%`));
 
-  const from = opts.offset ?? 0;
-  const to = from + (opts.limit ?? 20) - 1;
-  query = query.range(from, to);
+  const allRows = await db.select().from(charactersTable)
+    .where(wheres.length > 0 ? and(...wheres) : undefined);
 
-  const { data, error, count } = await query;
+  const total = allRows.length;
+  const offset = opts.offset ?? 0;
+  const limit = opts.limit ?? 20;
+  const paged = allRows.slice(offset, offset + limit);
 
-  if (error) {
-    logger.error({ error }, "listSupabaseCharacters: query failed");
-    return { items: [], total: 0 };
-  }
-
-  let items = ((data ?? []) as SupabaseCharacterRow[]).map(serializeSupabaseCharacter);
-  if (opts.excludeNsfw) {
-    items = items.filter(c => !c.isNsfw);
-  }
-
-  return { items, total: count ?? 0 };
+  return {
+    items: paged.map(normalizeLocalCharacter),
+    total,
+  };
 }
 
 export async function getSupabaseCharacterById(characterId: string): Promise<NormalizedCharacter | null> {
-  if (!supabase) return null;
+  // ── Supabase path ──────────────────────────────────────────────────────────
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("characters")
+      .select("*")
+      .eq("character_id", characterId)
+      .single();
 
-  const { data, error } = await supabase
-    .from("characters")
-    .select("*")
-    .eq("character_id", characterId)
-    .single();
-
-  if (error || !data) {
-    if (error?.code !== "PGRST116") {
-      logger.error({ error, characterId }, "getSupabaseCharacterById: query failed");
+    if (!error && data) {
+      return serializeSupabaseCharacter(data as SupabaseCharacterRow);
     }
-    return null;
+    if (error?.code !== "PGRST116") {
+      logger.error({ error, characterId }, "getSupabaseCharacterById: Supabase query failed — trying local DB");
+    }
   }
 
-  return serializeSupabaseCharacter(data as SupabaseCharacterRow);
+  // ── Local DB fallback ──────────────────────────────────────────────────────
+  try {
+    const [row] = await db.select().from(charactersTable)
+      .where(eq(charactersTable.characterId, characterId));
+    return row ? normalizeLocalCharacter(row) : null;
+  } catch (err) {
+    logger.error({ err, characterId }, "getSupabaseCharacterById: local DB fallback failed");
+    return null;
+  }
 }
 
 export async function createSupabaseCharacter(values: {
-  characterId?: string;
   creatorId: string;
   name: string;
   visibility: "public" | "private";
@@ -161,41 +190,62 @@ export async function createSupabaseCharacter(values: {
   tags?: string[];
   tagline?: string | null;
   imageSeed?: string | null;
-  isNsfw?: boolean;
 }): Promise<NormalizedCharacter | null> {
-  if (!supabase) return null;
+  // ── Supabase path ──────────────────────────────────────────────────────────
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("characters")
+      .insert({
+        creator_id: values.creatorId,
+        name: values.name,
+        visibility: values.visibility,
+        system_prompt: values.systemPrompt,
+        avatar_url: values.avatarUrl ?? null,
+        teaser_description: values.teaserDescription ?? null,
+        initial_greeting: values.initialGreeting ?? null,
+        tags: values.tags ?? [],
+        tagline: values.tagline ?? null,
+        image_seed: values.imageSeed ? parseInt(values.imageSeed) : null,
+        trigger_metadata_array: [],
+        status_level: 1,
+      })
+      .select("*")
+      .single();
 
-  const tags = [...(values.tags ?? [])];
-  if (values.isNsfw && !tags.includes(NSFW_TAG)) tags.push(NSFW_TAG);
+    if (!error && data) {
+      return serializeSupabaseCharacter(data as SupabaseCharacterRow);
+    }
 
-  const payload: Record<string, unknown> = {
-    creator_id: values.creatorId,
-    name: values.name,
-    visibility: values.visibility,
-    system_prompt: values.systemPrompt,
-    avatar_url: values.avatarUrl ?? null,
-    teaser_description: values.teaserDescription ?? null,
-    initial_greeting: values.initialGreeting ?? null,
-    tags,
-    tagline: values.tagline ?? null,
-    image_seed: values.imageSeed ? parseInt(values.imageSeed) : null,
-    trigger_metadata_array: [],
-    status_level: 1,
-  };
-  if (values.characterId) payload.character_id = values.characterId;
-
-  const { data, error } = await supabase
-    .from("characters")
-    .insert(payload)
-    .select("*")
-    .single();
-
-  if (error || !data) {
-    logger.error({ error }, "createSupabaseCharacter: insert failed");
-    return null;
+    logger.error({
+      error,
+      errorCode: error?.code,
+      errorDetails: error?.details,
+      errorHint: error?.hint,
+      errorMessage: error?.message,
+      characterName: values.name,
+    }, "createSupabaseCharacter: Supabase insert failed — falling back to local DB");
   }
 
-  return serializeSupabaseCharacter(data as SupabaseCharacterRow);
+  // ── Local DB fallback ──────────────────────────────────────────────────────
+  logger.info({ name: values.name, visibility: values.visibility }, "createSupabaseCharacter: using local DB fallback");
+  try {
+    const [row] = await db.insert(charactersTable).values({
+      creatorId: values.creatorId,
+      name: values.name,
+      visibility: values.visibility,
+      systemPrompt: values.systemPrompt,
+      avatarUrl: values.avatarUrl ?? null,
+      teaserDescription: values.teaserDescription ?? null,
+      initialGreeting: values.initialGreeting ?? null,
+      tags: values.tags ?? [],
+      genre: "Modern",
+      imageSeed: values.imageSeed ?? null,
+    }).returning();
+    return normalizeLocalCharacter(row);
+  } catch (err) {
+    logger.error({ err, name: values.name }, "createSupabaseCharacter: local DB insert also failed");
+    return null;
+  }
 }
 
 export async function updateSupabaseCharacter(
@@ -209,57 +259,67 @@ export async function updateSupabaseCharacter(
     avatarUrl?: string | null;
     systemPrompt?: string;
     tagline?: string | null;
-    isNsfw?: boolean;
   }
 ): Promise<NormalizedCharacter | null> {
-  if (!supabase) return null;
+  // ── Supabase path ──────────────────────────────────────────────────────────
+  if (supabase) {
+    const payload: Record<string, unknown> = {};
+    if (values.name != null) payload.name = values.name;
+    if (values.teaserDescription !== undefined) payload.teaser_description = values.teaserDescription;
+    if (values.initialGreeting !== undefined) payload.initial_greeting = values.initialGreeting;
+    if (values.visibility != null) payload.visibility = values.visibility;
+    if (values.tags != null) payload.tags = values.tags;
+    if (values.avatarUrl !== undefined) payload.avatar_url = values.avatarUrl;
+    if (values.systemPrompt != null) payload.system_prompt = values.systemPrompt;
+    if (values.tagline !== undefined) payload.tagline = values.tagline;
 
-  const payload: Record<string, unknown> = {};
-  if (values.name != null) payload.name = values.name;
-  if (values.teaserDescription !== undefined) payload.teaser_description = values.teaserDescription;
-  if (values.initialGreeting !== undefined) payload.initial_greeting = values.initialGreeting;
-  if (values.visibility != null) payload.visibility = values.visibility;
-  if (values.avatarUrl !== undefined) payload.avatar_url = values.avatarUrl;
-  if (values.systemPrompt != null) payload.system_prompt = values.systemPrompt;
-  if (values.tagline !== undefined) payload.tagline = values.tagline;
+    const { data, error } = await supabase
+      .from("characters")
+      .update(payload)
+      .eq("character_id", characterId)
+      .select("*")
+      .single();
 
-  // Manage #NSFW tag
-  if (values.isNsfw !== undefined) {
-    let tags = (values.tags ?? []) as string[];
-    if (values.isNsfw && !tags.includes(NSFW_TAG)) tags = [...tags, NSFW_TAG];
-    if (!values.isNsfw) tags = tags.filter(t => t !== NSFW_TAG);
-    payload.tags = tags;
-  } else if (values.tags != null) {
-    payload.tags = values.tags;
+    if (!error && data) {
+      return serializeSupabaseCharacter(data as SupabaseCharacterRow);
+    }
+    logger.error({ error, characterId }, "updateSupabaseCharacter: Supabase update failed — falling back to local DB");
   }
 
-  const { data, error } = await supabase
-    .from("characters")
-    .update(payload)
-    .eq("character_id", characterId)
-    .select("*")
-    .single();
+  // ── Local DB fallback ──────────────────────────────────────────────────────
+  try {
+    const localPayload: Partial<typeof charactersTable.$inferInsert> = {};
+    if (values.name != null) localPayload.name = values.name;
+    if (values.teaserDescription !== undefined) localPayload.teaserDescription = values.teaserDescription;
+    if (values.initialGreeting !== undefined) localPayload.initialGreeting = values.initialGreeting;
+    if (values.visibility != null) localPayload.visibility = values.visibility;
+    if (values.tags != null) localPayload.tags = values.tags;
+    if (values.avatarUrl !== undefined) localPayload.avatarUrl = values.avatarUrl;
+    if (values.systemPrompt != null) localPayload.systemPrompt = values.systemPrompt;
 
-  if (error || !data) {
-    logger.error({ error, characterId }, "updateSupabaseCharacter: update failed");
+    const [row] = await db.update(charactersTable)
+      .set(localPayload)
+      .where(eq(charactersTable.characterId, characterId))
+      .returning();
+    return row ? normalizeLocalCharacter(row) : null;
+  } catch (err) {
+    logger.error({ err, characterId }, "updateSupabaseCharacter: local DB update also failed");
     return null;
   }
-
-  return serializeSupabaseCharacter(data as SupabaseCharacterRow);
 }
 
 export async function deleteSupabaseCharacter(characterId: string): Promise<boolean> {
-  if (!supabase) return false;
-
-  const { error } = await supabase
-    .from("characters")
-    .delete()
-    .eq("character_id", characterId);
-
-  if (error) {
-    logger.error({ error, characterId }, "deleteSupabaseCharacter: delete failed");
-    return false;
+  if (supabase) {
+    const { error } = await supabase.from("characters").delete().eq("character_id", characterId);
+    if (!error) return true;
+    logger.error({ error, characterId }, "deleteSupabaseCharacter: Supabase delete failed — trying local DB");
   }
 
-  return true;
+  try {
+    await db.delete(charactersTable).where(eq(charactersTable.characterId, characterId));
+    return true;
+  } catch (err) {
+    logger.error({ err, characterId }, "deleteSupabaseCharacter: local DB delete also failed");
+    return false;
+  }
 }

@@ -69,7 +69,8 @@ export function Admin() {
   const { data: charsData } = useAdminListCharacters({});
   const { toast } = useToast();
 
-  const isGodMode = me?.isAdmin === true || me?.staffPrivileges === "full_admin";
+  const isGodMode = me?.isAdmin === true || me?.staffPrivileges === "full_admin" || (me as unknown as {subscriptionTier?: string})?.subscriptionTier === "supreme_admin";
+  const isSupremeAdmin = (me as unknown as {subscriptionTier?: string})?.subscriptionTier === "supreme_admin";
   const isLimitedAdmin = me?.staffPrivileges === "limited_admin";
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
@@ -757,6 +758,7 @@ export function Admin() {
       <CharacterWizard
         onClose={() => setShowWizard(false)}
         onCreated={() => { setShowWizard(false); loadConfigs(); }}
+        isSupremeAdmin={isSupremeAdmin}
       />
     )}
 

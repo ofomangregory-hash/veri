@@ -2,8 +2,8 @@ import { logger } from "./logger";
 
 const PRIMARY_MODEL = "mistralai/mistral-7b-instruct:free";
 const FALLBACK_MODELS = [
-  "google/gemma-3-1b-it:free",
-  "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+  "meta-llama/llama-3.2-3b-instruct:free",
+  "google/gemma-2-9b-it:free",
 ];
 
 interface Message {
@@ -19,7 +19,7 @@ interface OpenRouterResponse {
   }>;
 }
 
-async function callModel(model: string, messages: Message[], nsfwEnabled: boolean): Promise<string> {
+async function callModel(model: string, messages: Message[]): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY not set — add it to Replit Secrets");
 
@@ -38,15 +38,14 @@ async function callModel(model: string, messages: Message[], nsfwEnabled: boolea
       temperature: 0.88,
       top_p: 0.9,
     }),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(20000),
   });
 
   if (!response.ok) {
     const status = response.status;
     let bodyText = "";
     try { bodyText = await response.text(); } catch { /* ignore */ }
-    logger.error({ model, status, body: bodyText.slice(0, 300) }, "OpenRouter HTTP error");
-    // All HTTP errors are thrown; caller decides whether to retry with next model
+    logger.warn({ model, status, body: bodyText.slice(0, 200) }, "OpenRouter HTTP error");
     throw new Error(`OpenRouter ${status}: ${bodyText.slice(0, 120)}`);
   }
 
@@ -89,12 +88,14 @@ Keep replies short (1-3 sentences), casual, intimate texting style.`;
 
   for (const model of allModels) {
     try {
-      return await callModel(model, messages, nsfwEnabled);
+      const reply = await callModel(model, messages);
+      logger.info({ model }, "OpenRouter reply generated successfully");
+      return reply;
     } catch (err) {
       logger.warn({ err: err instanceof Error ? err.message : err, model }, "Model failed, trying next");
     }
   }
 
   logger.error("All OpenRouter models failed — returning soft fallback");
-  return "I'm feeling a little overwhelmed right now... give me a moment? 💭";
+  return `*${characterName} smiles softly* I'm feeling a little quiet right now... but I'm here with you 💭`;
 }

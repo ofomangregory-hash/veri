@@ -165,10 +165,12 @@ export interface WizardData {
   initialGreeting: string;
   avatarUrl: string;
   visibility: "public" | "private";
+  nsfwEnabled: boolean;
 }
 
-type Step = "name" | "scene" | "behavior" | "personality" | "traits" | "mood" | "review";
-const STEPS: Step[] = ["name", "scene", "behavior", "personality", "traits", "mood", "review"];
+type Step = "name" | "scene" | "behavior" | "personality" | "traits" | "mood" | "nsfw" | "visibility" | "review";
+const BASE_STEPS: Step[] = ["name", "scene", "behavior", "personality", "traits", "mood", "visibility", "review"];
+const SUPREME_STEPS: Step[] = ["name", "scene", "behavior", "personality", "traits", "mood", "nsfw", "visibility", "review"];
 const STEP_LABELS: Record<Step, string> = {
   name:        "Choose a Name",
   scene:       "Choose Scenes & Settings",
@@ -176,6 +178,8 @@ const STEP_LABELS: Record<Step, string> = {
   personality: "Choose Personality",
   traits:      "Choose Traits",
   mood:        "Choose Mood & Energy",
+  nsfw:        "Content Settings",
+  visibility:  "Visibility",
   review:      "Review & Create",
 };
 
@@ -221,10 +225,12 @@ function Chip({ label, selected, onClick }: { label: string; selected: boolean; 
 interface Props {
   onClose: () => void;
   onCreated: () => void;
+  isSupremeAdmin?: boolean;
 }
 
-export function CharacterWizard({ onClose, onCreated }: Props) {
+export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: Props) {
   const { toast } = useToast();
+  const STEPS = isSupremeAdmin ? SUPREME_STEPS : BASE_STEPS;
   const [step, setStep] = useState<Step>("name");
   const [typeFilter, setTypeFilter] = useState("All");
   const [creating, setCreating] = useState(false);
@@ -249,6 +255,7 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
     name: "", characterType: "Modern", scenes: [], behaviors: [],
     personalities: [], traits: [], moods: [], bio: "",
     age: "", initialGreeting: "", avatarUrl: "", visibility: "private",
+    nsfwEnabled: false,
   });
 
   const stepIndex = STEPS.indexOf(step);
@@ -290,12 +297,14 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
     setCreating(true);
     try {
       const systemPrompt = buildSystemPrompt(data);
+      const tags = [data.characterType, ...data.behaviors.slice(0, 3)];
+      if (data.nsfwEnabled) tags.push("#NSFW");
       await adminApi("POST", "/admin/characters/create", {
         name: data.name.trim(),
         bio: data.bio || undefined,
         age: data.age || undefined,
         genre: data.characterType,
-        tags: [data.characterType, ...data.behaviors.slice(0, 3)],
+        tags,
         avatarUrl: data.avatarUrl || undefined,
         initialGreeting: data.initialGreeting || undefined,
         visibility: data.visibility,
@@ -590,6 +599,58 @@ export function CharacterWizard({ onClose, onCreated }: Props) {
                 ➕ Add Custom
               </button>
             )}
+          </div>
+        )}
+
+        {/* ── Step: NSFW (supreme admin only) ── */}
+        {step === "nsfw" && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl border border-yellow-500/30 bg-yellow-500/5 text-yellow-300 text-xs">
+              ⚠️ <strong>Supreme Admin Only</strong> — Enable explicit adult content for this character. Users will see an adult-content disclaimer before chatting.
+            </div>
+            <div className="flex flex-col gap-3">
+              {[
+                { value: false, label: "SFW — Safe For Work", desc: "Romantic and flirtatious but not explicit", icon: "💫" },
+                { value: true, label: "NSFW — Adult Content", desc: "Explicit adult content enabled for this character", icon: "🔞" },
+              ].map(opt => (
+                <button key={String(opt.value)}
+                  onClick={() => setData(d => ({ ...d, nsfwEnabled: opt.value }))}
+                  className={`p-4 rounded-xl border text-left transition-all ${
+                    data.nsfwEnabled === opt.value
+                      ? "border-primary/60 bg-primary/15 box-glow-pink"
+                      : "border-border bg-card hover:border-primary/30"
+                  }`}>
+                  <div className="text-lg mb-1">{opt.icon}</div>
+                  <div className="font-bold text-sm text-foreground">{opt.label}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Step: Visibility ── */}
+        {step === "visibility" && (
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">Control who can discover this character on the Explore page.</p>
+            <div className="flex flex-col gap-3">
+              {[
+                { value: "private" as const, label: "Private", desc: "Only you can see and chat with this character", icon: "🔒" },
+                { value: "public" as const, label: "Public", desc: "Anyone can discover this character on Explore", icon: "🌐" },
+              ].map(opt => (
+                <button key={opt.value}
+                  onClick={() => setData(d => ({ ...d, visibility: opt.value }))}
+                  className={`p-4 rounded-xl border text-left transition-all ${
+                    data.visibility === opt.value
+                      ? "border-primary/60 bg-primary/15 box-glow-pink"
+                      : "border-border bg-card hover:border-primary/30"
+                  }`}>
+                  <div className="text-lg mb-1">{opt.icon}</div>
+                  <div className="font-bold text-sm text-foreground">{opt.label}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{opt.desc}</div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

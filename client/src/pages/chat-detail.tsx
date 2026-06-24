@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { useGetConversation, useSendMessage, useSendGift, useRequestSelfie, GiftInputGiftType } from "@workspace/api-client-react";
-import { Send, Gift, Camera, ChevronLeft, Heart } from "lucide-react";
+import { Send, Gift, Camera, ChevronLeft, Heart, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,6 +10,8 @@ export function ChatDetail() {
   const { id } = useParams<{ id: string }>();
   const [input, setInput] = useState("");
   const [showGiftTray, setShowGiftTray] = useState(false);
+  const [showSelfieModal, setShowSelfieModal] = useState(false);
+  const [selfiePrompt, setSelfiePrompt] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -50,14 +52,17 @@ export function ChatDetail() {
     });
   };
 
-  const handleSelfie = () => {
+  const handleSelfieSubmit = () => {
     if (!id) return;
-    reqSelfie.mutate({ characterId: id, data: { description: "Show me yourself" } }, {
+    const description = selfiePrompt.trim() || "Show me yourself";
+    setShowSelfieModal(false);
+    setSelfiePrompt("");
+    reqSelfie.mutate({ characterId: id, data: { description } }, {
       onSuccess: () => {
-        toast({ title: "Selfie Requested!" });
+        toast({ title: "📸 Selfie Requested!", description: "Generating a consistent image..." });
         refetch();
       },
-      onError: () => toast({ title: "Request Failed", variant: "destructive" })
+      onError: (err) => toast({ title: "Request Failed", description: String(err), variant: "destructive" })
     });
   };
 
@@ -107,6 +112,12 @@ export function ChatDetail() {
             <span className="animate-bounce">.</span><span className="animate-bounce delay-75">.</span><span className="animate-bounce delay-150">.</span>
           </div>
         )}
+        {reqSelfie.isPending && (
+          <div className="mr-auto p-3 rounded-2xl bg-card border border-accent/30 rounded-tl-sm text-accent text-sm flex items-center gap-2">
+            <Camera size={14} className="animate-pulse" />
+            <span>Generating image...</span>
+          </div>
+        )}
       </div>
 
       {/* Input */}
@@ -118,7 +129,7 @@ export function ChatDetail() {
           <Gift size={20} />
         </button>
         <button 
-          onClick={handleSelfie}
+          onClick={() => { setShowSelfieModal(true); setShowGiftTray(false); }}
           disabled={reqSelfie.isPending}
           className="p-2.5 rounded-full bg-card border border-border text-accent hover:box-glow-blue hover:border-accent transition-all shrink-0 disabled:opacity-50"
         >
@@ -167,6 +178,65 @@ export function ChatDetail() {
                 </button>
               ))}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Selfie Prompt Modal */}
+      <AnimatePresence>
+        {showSelfieModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+            onClick={(e) => e.target === e.currentTarget && setShowSelfieModal(false)}
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="w-full bg-card border-t border-accent/40 rounded-t-2xl p-5 shadow-[0_-10px_40px_rgba(0,212,255,0.2)]"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Camera size={16} className="text-accent" />
+                  <h3 className="font-bold text-sm text-accent uppercase tracking-wider">Request a Photo</h3>
+                </div>
+                <button onClick={() => setShowSelfieModal(false)} className="p-1 text-muted-foreground hover:text-foreground">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3 bg-background/50 rounded-lg p-2.5 border border-border">
+                <img
+                  src={conv?.character?.avatarUrl || ""}
+                  alt="avatar"
+                  className="w-6 h-6 rounded-full object-cover border border-accent/40 shrink-0"
+                />
+                <span>
+                  The image will be generated to look like <span className="text-accent font-semibold">{conv?.character?.name}</span>. Describe the scene or pose.
+                </span>
+              </div>
+
+              <textarea
+                value={selfiePrompt}
+                onChange={e => setSelfiePrompt(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSelfieSubmit()}
+                placeholder={`e.g. "Smiling at the beach in summer dress" or "In a cozy bedroom setting"`}
+                rows={3}
+                className="w-full rounded-xl border border-border bg-background p-3 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-accent/60 mb-3"
+                autoFocus
+              />
+
+              <button
+                onClick={handleSelfieSubmit}
+                className="w-full py-3 rounded-xl bg-accent text-background font-bold text-sm box-glow-blue transition-all flex items-center justify-center gap-2 hover:opacity-90"
+              >
+                <Camera size={16} />
+                Generate Photo (15 NC)
+              </button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

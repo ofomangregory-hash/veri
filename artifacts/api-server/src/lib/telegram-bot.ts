@@ -1656,12 +1656,12 @@ export function startTelegramBot(): TelegramBot | null {
         `👤 *User Profile*`,
         ``,
         `🆔 ID: \`${user.id}\``,
-        `🏷 Username: @${user.username ?? "—"}`,
-        `📛 Display Name: ${user.customNickname ?? "—"}`,
+        `🏷 Username: @${escMd(user.username ?? "—")}`,
+        `📛 Display Name: ${escMd(user.customNickname ?? "—")}`,
         ``,
-        `💎 Tier: *${user.subscriptionTier}*`,
+        `💎 Tier: *${escMd(user.subscriptionTier)}*`,
         `🎟 Tickets: *${user.ticketBalance}*`,
-        `🤖 Active Character: *${activeCharName}*`,
+        `🤖 Active Character: *${escMd(activeCharName)}*`,
         ``,
         `🛡 Staff Role: ${staffLabel}`,
         ``,
@@ -1759,10 +1759,10 @@ export function startTelegramBot(): TelegramBot | null {
         return;
       }
       const lines = results.map(u =>
-        `• \`${u.id}\` @${u.username ?? "—"} | ${u.tier} | 🎟 ${u.balance}`
+        `• \`${u.id}\` @${escMd(u.username ?? "—")} | ${escMd(u.tier)} | 🎟 ${u.balance}`
       );
       await bot!.sendMessage(msg.chat.id,
-        `🔍 *Search results for "${query}":*\n\n${lines.join("\n")}`,
+        `🔍 *Search results for "${escMd(query)}":*\n\n${lines.join("\n")}`,
         { parse_mode: "Markdown" });
     });
 

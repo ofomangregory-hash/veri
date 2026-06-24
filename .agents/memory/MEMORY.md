@@ -1,4 +1,5 @@
 - [Z-Fantasy stack decisions](z-fantasy-stack.md) — auth, DB upsert pattern, cron, and AI failover quirks worth knowing for future work
+- [Active source directories](active-source-dirs.md) — ALWAYS edit artifacts/api-server/src/ and artifacts/z-fantasy/src/ — root src/ is dead code, never served
 - [Supabase character data source](supabase-characters.md) — characters live in Supabase, not local Replit PostgreSQL; triggerMetadataArray is an array in Supabase but Zod expects object|null
 - [Flat monorepo build order](flat-build-order.md) — esbuild build.mjs must not wipe dist/public/ (vite frontend output); also needs src/generated/index.ts barrel
 - [Economy and admin rules](economy-admin.md) — gifts cost NC not tickets; daily claim is tier-based (Free=30T+15NC … Gold=100T+56NC); admin ID 8704633862; 3 stars=1 ticket (was 2); Railway deploy uses railway.toml
