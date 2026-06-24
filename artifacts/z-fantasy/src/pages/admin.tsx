@@ -984,286 +984,35 @@ export function Admin() {
 
     {/* ── User Detail Drawer ─────────────────────────────────────────────── */}
     {drawerOpen && (
-      <>
-        {/* Backdrop */}
-        <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-          onClick={() => setDrawerOpen(false)}
-        />
-
-        {/* Panel */}
-        <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-background border-l border-border shadow-2xl flex flex-col overflow-hidden"
-          style={{ animation: "slideInRight 0.25s ease-out" }}>
-
-          {/* Drawer Header */}
-          <div className="flex items-center gap-3 p-4 border-b border-border shrink-0">
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center border border-border shrink-0">
-              <UserCircle size={22} className="text-accent" />
-            </div>
-            <div className="flex-1 min-w-0">
-              {drawerLoading ? (
-                <div className="h-4 w-32 bg-muted rounded animate-pulse" />
-              ) : (
-                <>
-                  <div className="font-bold text-sm truncate">
-                    {drawerUser?.username ? `@${drawerUser.username}` : drawerUser?.id ?? "Loading…"}
-                  </div>
-                  <div className="text-xs text-muted-foreground truncate">{drawerUser?.id}</div>
-                </>
-              )}
-            </div>
-            <button onClick={() => setDrawerOpen(false)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-              <X size={18} />
-            </button>
-          </div>
-
-          {/* Drawer Body */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-5">
-            {drawerLoading ? (
-              <div className="space-y-3">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="h-14 bg-muted rounded-xl animate-pulse" />
-                ))}
-              </div>
-            ) : drawerUser ? (
-              <>
-                {/* Read-only stats */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-card border border-border">
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">NSFW</div>
-                    <div className="text-sm font-bold">{drawerUser.nsfwEnabled ? "Enabled" : "Disabled"}</div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-card border border-border">
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Last Login</div>
-                    <div className="text-xs font-medium truncate">
-                      {drawerUser.lastLoginTimestamp
-                        ? new Date(drawerUser.lastLoginTimestamp).toLocaleDateString()
-                        : "Never"}
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-card border border-border">
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Daily Msgs</div>
-                    <div className="text-sm font-bold">{drawerUser.dailyTriggerRequestsCount ?? 0}</div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-card border border-border">
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Creations</div>
-                    <div className="text-sm font-bold">{drawerUser.weeklyCreationsCount ?? 0}</div>
-                  </div>
-                </div>
-
-                {/* Ticket Balance */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <Ticket size={12} className="text-primary" /> Ticket Balance
-                  </label>
-                  <Input
-                    type="number"
-                    value={editTickets}
-                    onChange={e => setEditTickets(e.target.value)}
-                    className="bg-card border-border h-10 text-sm"
-                    placeholder="0"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Current: {drawerUser.ticketBalance} 🎟️</p>
-                </div>
-
-                {/* Neon Card Balance */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <CardIcon size={12} className="text-accent" /> Neon Card Balance
-                  </label>
-                  <Input
-                    type="number"
-                    value={editNeon}
-                    onChange={e => setEditNeon(e.target.value)}
-                    className="bg-card border-border h-10 text-sm"
-                    placeholder="0"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Current: {drawerUser.neonCardBalance} 🃏</p>
-                </div>
-
-                {/* Subscription Tier */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <Star size={12} className="text-yellow-400" /> Subscription Tier
-                  </label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {ALL_TIERS.map(t => (
-                      <button key={t} onClick={() => setEditTier(t)}
-                        className={`py-2 rounded-lg text-xs font-bold border transition-all ${
-                          editTier === t
-                            ? tierColor(t) + " ring-1 ring-current"
-                            : "border-border text-muted-foreground hover:text-foreground"
-                        }`}>
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Staff Privileges */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <ShieldCheck size={12} className="text-yellow-400" /> Staff Privileges
-                  </label>
-                  <div className="grid grid-cols-1 gap-1.5">
-                    {STAFF_ROLES.map(role => (
-                      <button key={role.value} onClick={() => setEditStaff(role.value)}
-                        className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-all text-left flex items-center gap-2 ${
-                          editStaff === role.value
-                            ? role.value === "full_admin"
-                              ? "border-yellow-500/60 text-yellow-400 bg-yellow-500/10"
-                              : role.value === "limited_admin"
-                              ? "border-accent/60 text-accent bg-accent/10"
-                              : "border-border text-foreground bg-muted/30"
-                            : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
-                        }`}>
-                        <div className={`w-2 h-2 rounded-full ${editStaff === role.value ? "bg-current" : "bg-muted"}`} />
-                        {role.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Transaction History */}
-                {drawerTxns.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5 pt-1">
-                      <div className="flex-1 h-px bg-border" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-2">Transaction History</span>
-                      <div className="flex-1 h-px bg-border" />
-                    </div>
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {drawerTxns.map(txn => (
-                        <TxnRow key={txn.transactionId} txn={txn} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : null}
-          </div>
-
-          {/* Drawer Footer */}
-          {!drawerLoading && drawerUser && (
-            <div className="p-4 border-t border-border shrink-0 space-y-2">
-              <button onClick={saveUserChanges} disabled={savingUser}
-                className="w-full py-3 rounded-xl bg-accent text-background font-bold text-sm box-glow-blue disabled:opacity-50 flex items-center justify-center gap-2 transition-all">
-                {savingUser ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                {savingUser ? "Saving…" : "Save Changes"}
-              </button>
-              <button onClick={() => setDrawerOpen(false)}
-                className="w-full py-2.5 rounded-xl border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border/80 transition-all">
-                Cancel
-              </button>
-            </div>
-          )}
-        </div>
-      </>
+      <UserDrawer
+        drawerUser={drawerUser}
+        drawerLoading={drawerLoading}
+        drawerTxns={drawerTxns}
+        editTickets={editTickets} setEditTickets={setEditTickets}
+        editNeon={editNeon} setEditNeon={setEditNeon}
+        editTier={editTier} setEditTier={setEditTier}
+        editStaff={editStaff} setEditStaff={setEditStaff}
+        savingUser={savingUser}
+        saveUserChanges={saveUserChanges}
+        onClose={() => setDrawerOpen(false)}
+      />
     )}
 
     {/* ── Character Edit Drawer ─────────────────────────────────────────────── */}
     {charDrawerOpen && (
-      <>
-        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={() => setCharDrawerOpen(false)} />
-        <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-background border-l border-border shadow-2xl flex flex-col overflow-hidden"
-          style={{ animation: "slideInRight 0.25s ease-out" }}>
-
-          <div className="flex items-center gap-3 p-4 border-b border-border shrink-0">
-            <div className="w-10 h-10 rounded-full overflow-hidden border border-border shrink-0">
-              <img src={charDrawerAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${charDrawerName}`}
-                alt={charDrawerName} className="w-full h-full object-cover" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-bold text-sm truncate">{charDrawerName || "Character"}</div>
-              <div className="text-xs text-muted-foreground">{charDrawerNsfw ? "🔞 NSFW" : "Safe"} · {charDrawerVisibility}</div>
-            </div>
-            <button onClick={() => setCharDrawerOpen(false)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-              <X size={18} />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Name</label>
-              <Input value={charDrawerName} onChange={e => setCharDrawerName(e.target.value)}
-                className="bg-card border-border h-10 text-sm" placeholder="Character name" />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Bio / Description</label>
-              <textarea value={charDrawerBio} onChange={e => setCharDrawerBio(e.target.value)}
-                rows={3} placeholder="A rebel hacker from Neo-Tokyo..."
-                className="w-full rounded-md border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-primary/60" />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Initial Greeting</label>
-              <Input value={charDrawerGreeting} onChange={e => setCharDrawerGreeting(e.target.value)}
-                className="bg-card border-border h-10 text-sm" placeholder="Hey, I've been waiting for you..." />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Avatar URL</label>
-              <Input value={charDrawerAvatar} onChange={e => setCharDrawerAvatar(e.target.value)}
-                className="bg-card border-border h-10 text-sm" placeholder="https://..." />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Tags (comma-separated)</label>
-              <Input value={charDrawerTags} onChange={e => setCharDrawerTags(e.target.value)}
-                className="bg-card border-border h-10 text-sm" placeholder="Hacker, Tsundere, Anime" />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">System Prompt Override</label>
-              <textarea value={charDrawerPrompt} onChange={e => setCharDrawerPrompt(e.target.value)}
-                rows={3} placeholder="Leave blank to keep existing prompt..."
-                className="w-full rounded-md border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-primary/60" />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Visibility</label>
-              <div className="flex h-10 rounded-md border border-border overflow-hidden">
-                {(["private", "public"] as const).map(v => (
-                  <button key={v} onClick={() => setCharDrawerVisibility(v)}
-                    className={`flex-1 text-xs font-bold uppercase tracking-wider transition-all ${
-                      charDrawerVisibility === v
-                        ? v === "public" ? "bg-green-500/20 text-green-400" : "bg-muted text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}>
-                    {v === "public" ? "🌐 Public" : "🔒 Private"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-3 rounded-lg bg-card border border-border">
-              <div>
-                <div className="text-xs font-semibold text-foreground">NSFW Content</div>
-                <div className="text-[10px] text-muted-foreground">Adds #NSFW tag, hides from Free users</div>
-              </div>
-              <button onClick={() => setCharDrawerNsfw(v => !v)}
-                className={`w-10 h-6 rounded-full transition-all relative ${charDrawerNsfw ? "bg-pink-500" : "bg-muted"}`}>
-                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${charDrawerNsfw ? "left-5" : "left-1"}`} />
-              </button>
-            </div>
-          </div>
-
-          <div className="p-4 border-t border-border shrink-0 space-y-2">
-            <button onClick={saveCharChanges} disabled={savingChar}
-              className="w-full py-3 rounded-xl bg-accent text-background font-bold text-sm box-glow-blue disabled:opacity-50 flex items-center justify-center gap-2 transition-all">
-              {savingChar ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-              {savingChar ? "Saving…" : "Save Changes"}
-            </button>
-            <button onClick={() => setCharDrawerOpen(false)}
-              className="w-full py-2.5 rounded-xl border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border/80 transition-all">
-              Cancel
-            </button>
-          </div>
-        </div>
-      </>
+      <CharDrawerPanel
+        charDrawerName={charDrawerName} setCharDrawerName={setCharDrawerName}
+        charDrawerBio={charDrawerBio} setCharDrawerBio={setCharDrawerBio}
+        charDrawerGreeting={charDrawerGreeting} setCharDrawerGreeting={setCharDrawerGreeting}
+        charDrawerAvatar={charDrawerAvatar} setCharDrawerAvatar={setCharDrawerAvatar}
+        charDrawerPrompt={charDrawerPrompt} setCharDrawerPrompt={setCharDrawerPrompt}
+        charDrawerTags={charDrawerTags} setCharDrawerTags={setCharDrawerTags}
+        charDrawerVisibility={charDrawerVisibility} setCharDrawerVisibility={setCharDrawerVisibility}
+        charDrawerNsfw={charDrawerNsfw} setCharDrawerNsfw={setCharDrawerNsfw}
+        savingChar={savingChar}
+        saveCharChanges={saveCharChanges}
+        onClose={() => setCharDrawerOpen(false)}
+      />
     )}
 
     <style>{`
@@ -1282,6 +1031,278 @@ function Star({ size, className }: { size: number; className?: string }) {
       strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
     </svg>
+  );
+}
+
+interface UserDrawerProps {
+  drawerUser: UserDetail | null;
+  drawerLoading: boolean;
+  drawerTxns: Array<{ transactionId: string; actionType: string; ticketAmount: number; timestamp?: string | null; neonCardAmount?: number | null }>;
+  editTickets: string; setEditTickets: (v: string) => void;
+  editNeon: string; setEditNeon: (v: string) => void;
+  editTier: string; setEditTier: (v: string) => void;
+  editStaff: string; setEditStaff: (v: string) => void;
+  savingUser: boolean;
+  saveUserChanges: () => void;
+  onClose: () => void;
+}
+
+function UserDrawer({ drawerUser, drawerLoading, drawerTxns, editTickets, setEditTickets, editNeon, setEditNeon, editTier, setEditTier, editStaff, setEditStaff, savingUser, saveUserChanges, onClose }: UserDrawerProps) {
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-background border-l border-border shadow-2xl flex flex-col overflow-hidden"
+        style={{ animation: "slideInRight 0.25s ease-out" }}>
+        <div className="flex items-center gap-3 p-4 border-b border-border shrink-0">
+          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center border border-border shrink-0">
+            <UserCircle size={22} className="text-accent" />
+          </div>
+          <div className="flex-1 min-w-0">
+            {drawerLoading
+              ? <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+              : <>
+                  <div className="font-bold text-sm truncate">
+                    {drawerUser?.username ? `@${drawerUser.username}` : drawerUser?.id ?? "Loading…"}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">{drawerUser?.id}</div>
+                </>
+            }
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          {drawerLoading ? (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => <div key={i} className="h-14 bg-muted rounded-xl animate-pulse" />)}
+            </div>
+          ) : drawerUser ? (
+            <UserDrawerContent
+              drawerUser={drawerUser} drawerTxns={drawerTxns}
+              editTickets={editTickets} setEditTickets={setEditTickets}
+              editNeon={editNeon} setEditNeon={setEditNeon}
+              editTier={editTier} setEditTier={setEditTier}
+              editStaff={editStaff} setEditStaff={setEditStaff}
+            />
+          ) : null}
+        </div>
+        {!drawerLoading && drawerUser && (
+          <div className="p-4 border-t border-border shrink-0 space-y-2">
+            <button onClick={saveUserChanges} disabled={savingUser}
+              className="w-full py-3 rounded-xl bg-accent text-background font-bold text-sm box-glow-blue disabled:opacity-50 flex items-center justify-center gap-2 transition-all">
+              {savingUser ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+              {savingUser ? "Saving…" : "Save Changes"}
+            </button>
+            <button onClick={onClose}
+              className="w-full py-2.5 rounded-xl border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border/80 transition-all">
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+interface UserDrawerContentProps {
+  drawerUser: UserDetail;
+  drawerTxns: Array<{ transactionId: string; actionType: string; ticketAmount: number; timestamp?: string | null; neonCardAmount?: number | null }>;
+  editTickets: string; setEditTickets: (v: string) => void;
+  editNeon: string; setEditNeon: (v: string) => void;
+  editTier: string; setEditTier: (v: string) => void;
+  editStaff: string; setEditStaff: (v: string) => void;
+}
+
+function UserDrawerContent({ drawerUser, drawerTxns, editTickets, setEditTickets, editNeon, setEditNeon, editTier, setEditTier, editStaff, setEditStaff }: UserDrawerContentProps) {
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="p-3 rounded-xl bg-card border border-border">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">NSFW</div>
+          <div className="text-sm font-bold">{drawerUser.nsfwEnabled ? "Enabled" : "Disabled"}</div>
+        </div>
+        <div className="p-3 rounded-xl bg-card border border-border">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Last Login</div>
+          <div className="text-xs font-medium truncate">
+            {drawerUser.lastLoginTimestamp ? new Date(drawerUser.lastLoginTimestamp).toLocaleDateString() : "Never"}
+          </div>
+        </div>
+        <div className="p-3 rounded-xl bg-card border border-border">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Daily Msgs</div>
+          <div className="text-sm font-bold">{drawerUser.dailyTriggerRequestsCount ?? 0}</div>
+        </div>
+        <div className="p-3 rounded-xl bg-card border border-border">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Creations</div>
+          <div className="text-sm font-bold">{drawerUser.weeklyCreationsCount ?? 0}</div>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+          <Ticket size={12} className="text-primary" /> Ticket Balance
+        </label>
+        <Input type="number" value={editTickets} onChange={e => setEditTickets(e.target.value)}
+          className="bg-card border-border h-10 text-sm" placeholder="0" />
+        <p className="text-[10px] text-muted-foreground">Current: {drawerUser.ticketBalance} 🎟️</p>
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+          <CardIcon size={12} className="text-accent" /> Neon Card Balance
+        </label>
+        <Input type="number" value={editNeon} onChange={e => setEditNeon(e.target.value)}
+          className="bg-card border-border h-10 text-sm" placeholder="0" />
+        <p className="text-[10px] text-muted-foreground">Current: {drawerUser.neonCardBalance} 🃏</p>
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+          <Star size={12} className="text-yellow-400" /> Subscription Tier
+        </label>
+        <div className="grid grid-cols-4 gap-1.5">
+          {ALL_TIERS.map(t => (
+            <button key={t} onClick={() => setEditTier(t)}
+              className={`py-2 rounded-lg text-xs font-bold border transition-all ${editTier === t ? tierColor(t) + " ring-1 ring-current" : "border-border text-muted-foreground hover:text-foreground"}`}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+          <ShieldCheck size={12} className="text-yellow-400" /> Staff Privileges
+        </label>
+        <div className="grid grid-cols-1 gap-1.5">
+          {STAFF_ROLES.map(role => (
+            <button key={role.value} onClick={() => setEditStaff(role.value)}
+              className={`px-3 py-2.5 rounded-lg text-xs font-semibold border transition-all text-left flex items-center gap-2 ${
+                editStaff === role.value
+                  ? role.value === "full_admin" ? "border-yellow-500/60 text-yellow-400 bg-yellow-500/10"
+                    : role.value === "limited_admin" ? "border-accent/60 text-accent bg-accent/10"
+                    : "border-border text-foreground bg-muted/30"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+              }`}>
+              <div className={`w-2 h-2 rounded-full ${editStaff === role.value ? "bg-current" : "bg-muted"}`} />
+              {role.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {drawerTxns.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 pt-1">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-2">Transaction History</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            {drawerTxns.map(txn => <TxnRow key={txn.transactionId} txn={txn} />)}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+interface CharDrawerPanelProps {
+  charDrawerName: string; setCharDrawerName: (v: string) => void;
+  charDrawerBio: string; setCharDrawerBio: (v: string) => void;
+  charDrawerGreeting: string; setCharDrawerGreeting: (v: string) => void;
+  charDrawerAvatar: string; setCharDrawerAvatar: (v: string) => void;
+  charDrawerPrompt: string; setCharDrawerPrompt: (v: string) => void;
+  charDrawerTags: string; setCharDrawerTags: (v: string) => void;
+  charDrawerVisibility: "private" | "public"; setCharDrawerVisibility: (v: "private" | "public") => void;
+  charDrawerNsfw: boolean; setCharDrawerNsfw: (v: (prev: boolean) => boolean) => void;
+  savingChar: boolean;
+  saveCharChanges: () => void;
+  onClose: () => void;
+}
+
+function CharDrawerPanel({ charDrawerName, setCharDrawerName, charDrawerBio, setCharDrawerBio, charDrawerGreeting, setCharDrawerGreeting, charDrawerAvatar, setCharDrawerAvatar, charDrawerPrompt, setCharDrawerPrompt, charDrawerTags, setCharDrawerTags, charDrawerVisibility, setCharDrawerVisibility, charDrawerNsfw, setCharDrawerNsfw, savingChar, saveCharChanges, onClose }: CharDrawerPanelProps) {
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-background border-l border-border shadow-2xl flex flex-col overflow-hidden"
+        style={{ animation: "slideInRight 0.25s ease-out" }}>
+        <div className="flex items-center gap-3 p-4 border-b border-border shrink-0">
+          <div className="w-10 h-10 rounded-full overflow-hidden border border-border shrink-0">
+            <img src={charDrawerAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${charDrawerName}`}
+              alt={charDrawerName} className="w-full h-full object-cover" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-sm truncate">{charDrawerName || "Character"}</div>
+            <div className="text-xs text-muted-foreground">{charDrawerNsfw ? "🔞 NSFW" : "Safe"} · {charDrawerVisibility}</div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Name</label>
+            <Input value={charDrawerName} onChange={e => setCharDrawerName(e.target.value)}
+              className="bg-card border-border h-10 text-sm" placeholder="Character name" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Bio / Description</label>
+            <textarea value={charDrawerBio} onChange={e => setCharDrawerBio(e.target.value)}
+              rows={3} placeholder="A rebel hacker from Neo-Tokyo..."
+              className="w-full rounded-md border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-primary/60" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Initial Greeting</label>
+            <Input value={charDrawerGreeting} onChange={e => setCharDrawerGreeting(e.target.value)}
+              className="bg-card border-border h-10 text-sm" placeholder="Hey, I've been waiting for you..." />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Avatar URL</label>
+            <Input value={charDrawerAvatar} onChange={e => setCharDrawerAvatar(e.target.value)}
+              className="bg-card border-border h-10 text-sm" placeholder="https://..." />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Tags (comma-separated)</label>
+            <Input value={charDrawerTags} onChange={e => setCharDrawerTags(e.target.value)}
+              className="bg-card border-border h-10 text-sm" placeholder="Hacker, Tsundere, Anime" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">System Prompt Override</label>
+            <textarea value={charDrawerPrompt} onChange={e => setCharDrawerPrompt(e.target.value)}
+              rows={3} placeholder="Leave blank to keep existing prompt..."
+              className="w-full rounded-md border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-primary/60" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Visibility</label>
+            <div className="flex h-10 rounded-md border border-border overflow-hidden">
+              {(["private", "public"] as const).map(v => (
+                <button key={v} onClick={() => setCharDrawerVisibility(v)}
+                  className={`flex-1 text-xs font-bold uppercase tracking-wider transition-all ${charDrawerVisibility === v ? (v === "public" ? "bg-green-500/20 text-green-400" : "bg-muted text-foreground") : "text-muted-foreground hover:text-foreground"}`}>
+                  {v === "public" ? "🌐 Public" : "🔒 Private"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-lg bg-card border border-border">
+            <div>
+              <div className="text-xs font-semibold text-foreground">NSFW Content</div>
+              <div className="text-[10px] text-muted-foreground">Adds #NSFW tag, hides from Free users</div>
+            </div>
+            <button onClick={() => setCharDrawerNsfw(v => !v)}
+              className={`w-10 h-6 rounded-full transition-all relative ${charDrawerNsfw ? "bg-pink-500" : "bg-muted"}`}>
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${charDrawerNsfw ? "left-5" : "left-1"}`} />
+            </button>
+          </div>
+        </div>
+        <div className="p-4 border-t border-border shrink-0 space-y-2">
+          <button onClick={saveCharChanges} disabled={savingChar}
+            className="w-full py-3 rounded-xl bg-accent text-background font-bold text-sm box-glow-blue disabled:opacity-50 flex items-center justify-center gap-2 transition-all">
+            {savingChar ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+            {savingChar ? "Saving…" : "Save Changes"}
+          </button>
+          <button onClick={onClose}
+            className="w-full py-2.5 rounded-xl border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border/80 transition-all">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
