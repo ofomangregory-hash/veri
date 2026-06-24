@@ -142,7 +142,7 @@ export function Premium() {
       border: "border-amber-500",
       glow: "hover:shadow-[0_0_25px_rgba(245,158,11,0.5)]",
       icon: Shield,
-      features: ["UNLIMITED MESSAGES", "Includes 150 Neon Tickets to start", "4/6 Image Ratio Loop"],
+      features: ["UNLIMITED MESSAGES", "Includes 150 Neon Tickets to start", "4/6 Image Ratio Loop", "2x daily gift claim"],
     },
     {
       id: InvoiceRequestTier.Silver,
@@ -151,7 +151,7 @@ export function Premium() {
       border: "border-slate-300",
       glow: "hover:shadow-[0_0_25px_rgba(203,213,225,0.5)]",
       icon: Zap,
-      features: ["UNLIMITED MESSAGES", "Includes 350 Neon Tickets to start", "Max 40 Daily Requests"],
+      features: ["UNLIMITED MESSAGES", "Includes 350 Neon Tickets to start", "Max 40 Daily Requests", "2x daily gift claim"],
     },
     {
       id: InvoiceRequestTier.Gold,
@@ -160,7 +160,7 @@ export function Premium() {
       border: "border-yellow-400",
       glow: "hover:shadow-[0_0_25px_rgba(250,204,21,0.5)]",
       icon: Infinity,
-      features: ["UNLIMITED MESSAGES", "Includes 600 Neon Tickets to start", "Balance limits set to 9999"],
+      features: ["UNLIMITED MESSAGES", "Includes 600 Neon Tickets to start", "Balance limits set to 9999", "2x daily gift claim + AUTO CLAIM ⚡"],
     },
   ];
 

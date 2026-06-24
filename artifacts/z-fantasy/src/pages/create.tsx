@@ -62,6 +62,7 @@ export function Create() {
   const [greeting, setGreeting] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [isNsfw, setIsNsfw] = useState(false);
+  const [nsfwPrivate, setNsfwPrivate] = useState(true);
   const [visibility, setVisibility] = useState<"public" | "private">("private");
 
   const resolvedName = usingCustomName ? customNameInput.trim() : name;
@@ -407,7 +408,11 @@ export function Create() {
                   <div>
                     <p className="font-bold text-white">{isNsfw ? "NSFW — 18+ Content" : "SFW — Safe Content"}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {isNsfw ? "Only visible to premium users" : "Visible to all users"}
+                      {isNsfw
+                        ? nsfwPrivate
+                          ? "🔒 Private — hidden from public discover"
+                          : "🌐 Public — visible to all users"
+                        : "Visible to all users"}
                     </p>
                   </div>
                 </div>
@@ -426,8 +431,10 @@ export function Create() {
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 {isNsfw
-                  ? "⚠️ Marking as NSFW restricts this character to premium subscribers only. Free users will not see or access this entity."
-                  : "This entity is suitable for all users. Toggle on if you want to restrict access to premium subscribers only."}
+                  ? nsfwPrivate
+                    ? "⚠️ This NSFW character is private — only you can find and use it. It will not appear in public Explore."
+                    : "🌐 This NSFW character is public — it will appear in Explore for all users."
+                  : "This entity is suitable for all users. Toggle on if you want to mark it as 18+ content."}
               </p>
             </div>
 
@@ -455,6 +462,39 @@ export function Create() {
                 NSFW
               </button>
             </div>
+
+            {/* NSFW private/public switch — only shown when NSFW is on */}
+            {isNsfw && (
+              <div className="p-4 rounded-xl border border-pink-500/30 bg-pink-500/5 space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-pink-300">NSFW Visibility</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => { setNsfwPrivate(true); setVisibility("private"); }}
+                    className={`py-3 px-3 rounded-xl border font-bold text-xs transition-all flex flex-col items-center gap-1.5 ${
+                      nsfwPrivate
+                        ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
+                        : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                    }`}
+                  >
+                    <Lock size={16} />
+                    Private
+                    <span className="font-normal opacity-70">Only you</span>
+                  </button>
+                  <button
+                    onClick={() => { setNsfwPrivate(false); setVisibility("public"); }}
+                    className={`py-3 px-3 rounded-xl border font-bold text-xs transition-all flex flex-col items-center gap-1.5 ${
+                      !nsfwPrivate
+                        ? "border-pink-500/60 bg-pink-500/15 text-pink-400"
+                        : "border-border bg-card text-muted-foreground hover:border-pink-500/30"
+                    }`}
+                  >
+                    <Globe size={16} />
+                    Public
+                    <span className="font-normal opacity-70">All users</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

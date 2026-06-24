@@ -66,17 +66,12 @@ router.get("/characters", async (req, res): Promise<void> => {
   const { page = 1, limit = 20, search, tags, genre } = parsed.data;
   const offset = ((page ?? 1) - 1) * (limit ?? 20);
 
-  const [user] = await db.select({ subscriptionTier: usersTable.subscriptionTier })
-    .from(usersTable).where(eq(usersTable.id, req.telegramUserId));
-  const isFreeUser = !req.isAdmin && (!user || user.subscriptionTier === "Free");
-
   const { items, total } = await listSupabaseCharacters({
     visibility: "public",
     search: search ?? undefined,
     tags: tags ?? undefined,
     limit: limit ?? 20,
     offset,
-    excludeNsfw: isFreeUser,
   });
 
   const filtered = genre
