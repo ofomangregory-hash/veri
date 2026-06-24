@@ -300,7 +300,11 @@ export function startTelegramBot(): TelegramBot | null {
         try {
           await (callback as (msg: any, match: any) => Promise<void>)(msg, match);
         } catch (err) {
-          logger.error({ err }, "Bot onText handler error");
+          logger.error({
+            errMessage: err instanceof Error ? err.message : String(err),
+            errStack: err instanceof Error ? err.stack : undefined,
+            err,
+          }, "Bot onText handler error");
           try { await bot!.sendMessage(msg.chat.id, "⚠️ Something went wrong. Please try again in a moment."); } catch { /* ignore */ }
         }
       });
@@ -316,7 +320,12 @@ export function startTelegramBot(): TelegramBot | null {
         try {
           await callback(...args);
         } catch (err) {
-          logger.error({ err, event }, "Bot event handler error");
+          logger.error({
+            errMessage: err instanceof Error ? err.message : String(err),
+            errStack: err instanceof Error ? err.stack : undefined,
+            err,
+            event,
+          }, "Bot event handler error");
         }
       });
       return bot!;
@@ -435,9 +444,9 @@ export function startTelegramBot(): TelegramBot | null {
 
         // Visibility check
         if (char.visibility === "private") {
-          const isAdmin = isAdminUser(msg.from?.id ?? 0);
+          const isAdminCheck = isAdmin(msg);
           const isOwner = char.creatorId === userId;
-          if (!isAdmin && !isOwner) {
+          if (!isAdminCheck && !isOwner) {
             await bot!.sendMessage(chatId, "🔒 This character is private and cannot be accessed.");
             return;
           }
