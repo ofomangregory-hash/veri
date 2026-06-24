@@ -301,11 +301,7 @@ export function startTelegramBot(): TelegramBot | null {
         try {
           await (callback as (msg: any, match: any) => Promise<void>)(msg, match);
         } catch (err) {
-          logger.error({
-            errMessage: err instanceof Error ? err.message : String(err),
-            errStack: err instanceof Error ? err.stack : undefined,
-            err,
-          }, "Bot onText handler error");
+          console.error('Bot onText handler error:', err instanceof Error ? err.message : String(err), err instanceof Error ? err.stack : undefined);
           try { await bot!.sendMessage(msg.chat.id, "⚠️ Something went wrong. Please try again in a moment."); } catch { /* ignore */ }
         }
       });

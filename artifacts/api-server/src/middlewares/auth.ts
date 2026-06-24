@@ -244,7 +244,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
 
     next();
   } catch (err) {
-    req.log.warn({ err }, "Auth failed");
+    console.error('Auth failed:', err instanceof Error ? err.message : String(err), err instanceof Error ? err.stack : undefined);
     res.status(401).json({ error: "Unauthorized" });
   }
 }

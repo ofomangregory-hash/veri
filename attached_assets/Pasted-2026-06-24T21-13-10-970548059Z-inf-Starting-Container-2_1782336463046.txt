@@ -1,0 +1,143 @@
+2026-06-24T21:13:10.970548059Z [inf]  Starting Container
+2026-06-24T21:13:11.251767839Z [inf]  
+2026-06-24T21:13:11.251770389Z [inf]  > @workspace/api-server@0.0.0 start /app/artifacts/api-server
+2026-06-24T21:13:11.251772989Z [inf]  > node --enable-source-maps ./dist/index.mjs
+2026-06-24T21:13:11.251775609Z [inf]  
+2026-06-24T21:13:11.251778179Z [inf]  Serving static frontend from directory
+2026-06-24T21:13:11.611699385Z [inf]  system_configurations table ready
+2026-06-24T21:13:11.658559378Z [inf]  Server listening
+2026-06-24T21:13:11.658562768Z [inf]  Cron jobs started
+2026-06-24T21:13:11.911445610Z [inf]  request completed
+2026-06-24T21:13:12.275245115Z [inf]  Webhook cleared and pending updates dropped
+2026-06-24T21:13:12.275247585Z [inf]  Telegram bot polling active
+2026-06-24T21:13:16.264879306Z [err]  (node:15) [node-telegram-bot-api] DeprecationWarning: deleteWebHook(...) is deprecated; use deleteWebhook(...) instead.
+2026-06-24T21:13:16.264882506Z [err]  (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-06-24T21:14:16.204498354Z [inf]  [BOT UPDATE] Event received
+2026-06-24T21:14:16.204500794Z [inf]  [BOT UPDATE] Message received
+2026-06-24T21:14:16.204503874Z [inf]  Bot onText handler error
+2026-06-24T21:14:16.205205863Z [inf]  [BOT UPDATE] Event received
+2026-06-24T21:14:16.205209113Z [inf]  [BOT UPDATE] Message received
+2026-06-24T21:14:16.205211713Z [inf]  Bot onText handler error
+2026-06-24T21:14:20.078298036Z [inf]  request completed
+2026-06-24T21:14:20.666734260Z [inf]  request completed
+2026-06-24T21:14:20.666737210Z [inf]  request completed
+2026-06-24T21:14:21.861808458Z [inf]  request completed
+2026-06-24T21:14:21.875813154Z [inf]  request completed
+2026-06-24T21:14:22.646062447Z [inf]  request completed
+2026-06-24T21:14:22.646066397Z [inf]  Auth failed
+2026-06-24T21:14:22.646301914Z [inf]  request completed
+2026-06-24T21:14:22.647028093Z [inf]  Auth failed
+2026-06-24T21:14:22.647905480Z [inf]  request completed
+2026-06-24T21:14:22.649145260Z [inf]  Auth failed
+2026-06-24T21:14:22.650745887Z [inf]  request completed
+2026-06-24T21:14:22.651853929Z [inf]  Auth failed
+2026-06-24T21:14:22.652477900Z [inf]  request completed
+2026-06-24T21:14:22.691764189Z [inf]  Auth failed
+2026-06-24T21:14:22.693984975Z [inf]  request completed
+2026-06-24T21:14:24.247753269Z [inf]  Auth failed
+2026-06-24T21:14:24.248495438Z [inf]  request completed
+2026-06-24T21:14:24.961502377Z [inf]  Auth failed
+2026-06-24T21:14:24.961704894Z [inf]  request completed
+2026-06-24T21:14:24.961707564Z [inf]  Auth failed
+2026-06-24T21:14:24.964282995Z [inf]  request completed
+2026-06-24T21:14:24.964290215Z [inf]  Auth failed
+2026-06-24T21:14:24.964890095Z [inf]  request completed
+2026-06-24T21:14:24.964894705Z [inf]  Auth failed
+2026-06-24T21:14:24.965684743Z [inf]  request completed
+2026-06-24T21:14:27.766499893Z [inf]  Auth failed
+2026-06-24T21:14:27.766785489Z [inf]  request completed
+2026-06-24T21:14:28.228133025Z [inf]  Auth failed
+2026-06-24T21:14:28.228997442Z [inf]  request completed
+2026-06-24T21:14:28.229012711Z [inf]  Auth failed
+2026-06-24T21:14:28.229768479Z [inf]  request completed
+2026-06-24T21:14:28.251975900Z [inf]  Auth failed
+2026-06-24T21:14:28.252837027Z [inf]  request completed
+2026-06-24T21:14:28.275941554Z [inf]  Auth failed
+2026-06-24T21:14:28.276492775Z [inf]  request completed
+2026-06-24T21:14:32.795599676Z [inf]  Auth failed
+2026-06-24T21:14:32.796587711Z [inf]  request completed
+2026-06-24T21:14:33.731996840Z [inf]  Auth failed
+2026-06-24T21:14:33.732302895Z [inf]  request completed
+2026-06-24T21:14:33.732307845Z [inf]  Auth failed
+2026-06-24T21:14:33.735109193Z [inf]  request completed
+2026-06-24T21:14:33.735112843Z [inf]  Auth failed
+2026-06-24T21:14:33.735116023Z [inf]  request completed
+2026-06-24T21:14:33.735119082Z [inf]  Auth failed
+2026-06-24T21:14:33.735121812Z [inf]  request completed
+2026-06-24T21:14:34.156938123Z [inf]  request completed
+2026-06-24T21:14:34.156940923Z [inf]  request completed
+2026-06-24T21:14:54.136651976Z [inf]  Auth failed
+2026-06-24T21:14:54.137268767Z [inf]  request completed
+2026-06-24T21:14:56.332670708Z [inf]  Auth failed
+2026-06-24T21:14:56.333403446Z [inf]  request completed
+2026-06-24T21:14:59.659894347Z [inf]  Auth failed
+2026-06-24T21:14:59.660852402Z [inf]  request completed
+2026-06-24T21:15:04.912094891Z [inf]  request completed
+2026-06-24T21:15:04.912097541Z [inf]  Auth failed
+2026-06-24T21:15:34.841057214Z [inf]  Auth failed
+2026-06-24T21:15:34.842037508Z [inf]  request completed
+2026-06-24T21:15:34.842040418Z [inf]  Auth failed
+2026-06-24T21:15:34.843103392Z [inf]  request completed
+2026-06-24T21:15:34.843106852Z [inf]  Auth failed
+2026-06-24T21:15:34.843953380Z [inf]  request completed
+2026-06-24T21:15:37.214349131Z [inf]  Auth failed
+2026-06-24T21:15:37.214700416Z [inf]  request completed
+2026-06-24T21:16:07.202251018Z [inf]  Auth failed
+2026-06-24T21:16:07.202945728Z [inf]  request completed
+2026-06-24T21:16:07.202948928Z [inf]  Auth failed
+2026-06-24T21:16:07.203791294Z [inf]  request completed
+2026-06-24T21:16:07.203795004Z [inf]  Auth failed
+2026-06-24T21:16:07.204186008Z [inf]  request completed
+2026-06-24T21:16:09.106751924Z [inf]  Auth failed
+2026-06-24T21:16:09.107087799Z [inf]  request completed
+2026-06-24T21:16:39.110549108Z [inf]  Auth failed
+2026-06-24T21:16:39.111258827Z [inf]  request completed
+2026-06-24T21:16:39.111261437Z [inf]  Auth failed
+2026-06-24T21:16:39.112336290Z [inf]  request completed
+2026-06-24T21:16:39.112342000Z [inf]  Auth failed
+2026-06-24T21:16:39.112681575Z [inf]  request completed
+2026-06-24T21:16:59.145741318Z [inf]  request completed
+2026-06-24T21:16:59.145748328Z [inf]  request completed
+2026-06-24T21:16:59.145752028Z [inf]  request completed
+2026-06-24T21:16:59.145755148Z [inf]  request completed
+2026-06-24T21:16:59.145757698Z [inf]  request completed
+2026-06-24T21:16:59.145760638Z [inf]  Auth failed
+2026-06-24T21:16:59.145804247Z [inf]  request completed
+2026-06-24T21:16:59.146516245Z [inf]  request completed
+2026-06-24T21:16:59.146521425Z [inf]  Auth failed
+2026-06-24T21:16:59.147881225Z [inf]  request completed
+2026-06-24T21:16:59.147885435Z [inf]  Auth failed
+2026-06-24T21:16:59.148939379Z [inf]  request completed
+2026-06-24T21:16:59.148943759Z [inf]  Auth failed
+2026-06-24T21:16:59.150660363Z [inf]  request completed
+2026-06-24T21:16:59.150664423Z [inf]  Auth failed
+2026-06-24T21:16:59.151807595Z [inf]  request completed
+2026-06-24T21:16:59.151810865Z [inf]  Auth failed
+2026-06-24T21:16:59.154494374Z [inf]  request completed
+2026-06-24T21:16:59.154497214Z [inf]  Auth failed
+2026-06-24T21:16:59.155609757Z [inf]  request completed
+2026-06-24T21:16:59.155613567Z [inf]  Auth failed
+2026-06-24T21:16:59.156687111Z [inf]  request completed
+2026-06-24T21:16:59.156691471Z [inf]  Auth failed
+2026-06-24T21:16:59.157764564Z [inf]  request completed
+2026-06-24T21:16:59.157768164Z [inf]  Auth failed
+2026-06-24T21:16:59.158465184Z [inf]  request completed
+2026-06-24T21:16:59.158468374Z [inf]  request completed
+2026-06-24T21:16:59.476655652Z [inf]  Auth failed
+2026-06-24T21:16:59.477777015Z [inf]  request completed
+2026-06-24T21:17:00.172338703Z [inf]  Auth failed
+2026-06-24T21:17:00.173740352Z [inf]  request completed
+2026-06-24T21:17:00.173746401Z [inf]  Auth failed
+2026-06-24T21:17:00.175253309Z [inf]  request completed
+2026-06-24T21:17:00.217763659Z [inf]  Auth failed
+2026-06-24T21:17:00.219056659Z [inf]  request completed
+2026-06-24T21:17:02.629920525Z [inf]  Auth failed
+2026-06-24T21:17:02.631086327Z [inf]  request completed
+2026-06-24T21:17:04.732426443Z [inf]  Auth failed
+2026-06-24T21:17:04.732704329Z [inf]  request completed
+2026-06-24T21:17:05.555199742Z [inf]  Auth failed
+2026-06-24T21:17:05.556449653Z [inf]  request completed
+2026-06-24T21:17:05.556453833Z [inf]  Auth failed
+2026-06-24T21:17:05.558607600Z [inf]  request completed
+2026-06-24T21:17:05.558611360Z [inf]  Auth failed
+2026-06-24T21:17:05.560097847Z [inf]  request completed
