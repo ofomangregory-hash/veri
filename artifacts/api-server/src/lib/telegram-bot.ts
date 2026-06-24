@@ -5,6 +5,7 @@ import { logger } from "./logger";
 import { generateAIReply } from "./openrouter";
 import { generateCharacterAvatar } from "./imageGenerator";
 import { createSupabaseCharacter } from "./supabaseCharacters";
+import { getPrice } from "./supabasePrices";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Trait { type: string; name: string; description: string }
@@ -799,12 +800,12 @@ export function startTelegramBot(): TelegramBot | null {
       }
 
       const dailyTier = user.subscriptionTier ?? "Free";
-      let DAILY_TICKETS = 30;
-      let DAILY_NC = 15;
+      let DAILY_TICKETS = await getPrice("daily_free_tickets", 30);
+      let DAILY_NC = await getPrice("daily_free_nc", 15);
       if (dailyTier === "supreme_admin") { DAILY_TICKETS = 1_000_000; DAILY_NC = 1_000_000; }
-      else if (dailyTier === "Gold")   { DAILY_TICKETS = 100; DAILY_NC = 56; }
-      else if (dailyTier === "Silver") { DAILY_TICKETS = 75;  DAILY_NC = 37; }
-      else if (dailyTier === "Bronze") { DAILY_TICKETS = 50;  DAILY_NC = 25; }
+      else if (dailyTier === "Gold")   { DAILY_TICKETS = await getPrice("daily_gold_tickets", 100);   DAILY_NC = await getPrice("daily_gold_nc", 56); }
+      else if (dailyTier === "Silver") { DAILY_TICKETS = await getPrice("daily_silver_tickets", 75);  DAILY_NC = await getPrice("daily_silver_nc", 37); }
+      else if (dailyTier === "Bronze") { DAILY_TICKETS = await getPrice("daily_bronze_tickets", 50);  DAILY_NC = await getPrice("daily_bronze_nc", 25); }
 
       await db.update(usersTable).set({
         ticketBalance: sql`ticket_balance + ${DAILY_TICKETS}`,
@@ -965,9 +966,10 @@ export function startTelegramBot(): TelegramBot | null {
           return;
         }
 
-        if ((user.neonCardBalance ?? 0) < 25) {
+        const charCreateCost = await getPrice("char_create_nc", 25);
+        if ((user.neonCardBalance ?? 0) < charCreateCost) {
           await bot!.sendMessage(chatId,
-            `❌ *Insufficient Neon Cards.*\n\nCharacter creation costs *25 🃏 Neon Cards*.\nYour balance: *${user.neonCardBalance ?? 0}* 🃏\n\nVisit /premium to purchase more.`,
+            `❌ *Insufficient Neon Cards.*\n\nCharacter creation costs *${charCreateCost} 🃏 Neon Cards*.\nYour balance: *${user.neonCardBalance ?? 0}* 🃏\n\nVisit /premium to purchase more.`,
             { parse_mode: "Markdown" });
           return;
         }
@@ -2084,12 +2086,13 @@ export function startTelegramBot(): TelegramBot | null {
       if (query.data?.startsWith("premium_tier_")) {
         const tier = query.data.replace("premium_tier_", "");
         const tierEmoji: Record<string, string> = { Bronze: "🥉", Silver: "🥈", Gold: "🥇" };
-        const tierPrices: Record<string, { weekly: number; monthly: number; yearly: number }> = {
-          Bronze: { weekly: 100,  monthly: 300,   yearly: 3000  },
-          Silver: { weekly: 200,  monthly: 600,   yearly: 6000  },
-          Gold:   { weekly: 350,  monthly: 1050,  yearly: 10500 },
+        const tierKey = tier.toLowerCase();
+        const tierPrices = {
+          weekly:  await getPrice(`${tierKey}_weekly`,  tier === "Bronze" ? 100 : tier === "Silver" ? 200 : 350),
+          monthly: await getPrice(`${tierKey}_monthly`, tier === "Bronze" ? 300 : tier === "Silver" ? 600 : 1050),
+          yearly:  await getPrice(`${tierKey}_yearly`,  tier === "Bronze" ? 3000 : tier === "Silver" ? 6000 : 10500),
         };
-        const prices = tierPrices[tier];
+        const prices = ["Bronze", "Silver", "Gold"].includes(tier) ? tierPrices : null;
         if (!prices) return;
         const emoji = tierEmoji[tier] ?? "💎";
         try {
@@ -2139,11 +2142,25 @@ export function startTelegramBot(): TelegramBot | null {
         const tier = parts[0];
         const period = parts[1];
 
+        const tk = tier?.toLowerCase() ?? "";
         const PRICES: Record<string, Record<string, { stars: number; label: string }>> = {
-          Bronze: { weekly: { stars: 100, label: "Bronze Weekly" }, monthly: { stars: 300, label: "Bronze Monthly" }, yearly: { stars: 3000, label: "Bronze Yearly" } },
-          Silver: { weekly: { stars: 200, label: "Silver Weekly" }, monthly: { stars: 600, label: "Silver Monthly" }, yearly: { stars: 6000, label: "Silver Yearly" } },
-          Gold:   { weekly: { stars: 350, label: "Gold Weekly"   }, monthly: { stars: 1050, label: "Gold Monthly"  }, yearly: { stars: 10500, label: "Gold Yearly" } },
+          Bronze: {
+            weekly:  { stars: await getPrice("bronze_weekly",  100),  label: "Bronze Weekly"  },
+            monthly: { stars: await getPrice("bronze_monthly", 300),  label: "Bronze Monthly" },
+            yearly:  { stars: await getPrice("bronze_yearly",  3000), label: "Bronze Yearly"  },
+          },
+          Silver: {
+            weekly:  { stars: await getPrice("silver_weekly",  200),  label: "Silver Weekly"  },
+            monthly: { stars: await getPrice("silver_monthly", 600),  label: "Silver Monthly" },
+            yearly:  { stars: await getPrice("silver_yearly",  6000), label: "Silver Yearly"  },
+          },
+          Gold: {
+            weekly:  { stars: await getPrice("gold_weekly",   350),   label: "Gold Weekly"  },
+            monthly: { stars: await getPrice("gold_monthly",  1050),  label: "Gold Monthly" },
+            yearly:  { stars: await getPrice("gold_yearly",   10500), label: "Gold Yearly"  },
+          },
         };
+        void tk;
 
         const plan = PRICES[tier]?.[period];
         if (!plan) { await bot!.sendMessage(chatId, "❌ Invalid plan selected."); return; }

@@ -1,9 +1,193 @@
 import { useGetTrendingCharacters } from "@workspace/api-client-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Sparkles, ArrowRight, Star, Megaphone } from "lucide-react";
+import { Sparkles, ArrowRight, Star, Megaphone, Pencil, Check, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useState, useCallback } from "react";
+
+function getToken() {
+  return window.Telegram?.WebApp?.initData || "mock_init_data_for_dev";
+}
+
+const AVATAR_PRESETS = [
+  { id: "av1", seed: "crystal",  style: "bottts" },
+  { id: "av2", seed: "nova",     style: "bottts" },
+  { id: "av3", seed: "raven",    style: "bottts" },
+  { id: "av4", seed: "ember",    style: "bottts" },
+  { id: "av5", seed: "vex",      style: "adventurer" },
+  { id: "av6", seed: "jade",     style: "adventurer" },
+  { id: "av7", seed: "orion",    style: "adventurer" },
+  { id: "av8", seed: "dusk",     style: "adventurer" },
+];
+
+function avatarUrl(id: string | null | undefined): string {
+  const preset = AVATAR_PRESETS.find(p => p.id === id);
+  if (preset) return `https://api.dicebear.com/7.x/${preset.style}/svg?seed=${preset.seed}`;
+  return `https://api.dicebear.com/7.x/bottts/svg?seed=default`;
+}
+
+interface MeData {
+  id: string;
+  username: string | null;
+  customNickname: string | null;
+  avatarId?: string | null;
+  subscriptionTier: string;
+  ticketBalance: number;
+  neonCardBalance: number;
+}
+
+function ProfileCard() {
+  const qc = useQueryClient();
+  const { data: me } = useQuery<MeData>({
+    queryKey: ["me-home"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/me", {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch profile");
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  const [editing, setEditing]     = useState(false);
+  const [nickname, setNickname]   = useState("");
+  const [selAvatar, setSelAvatar] = useState<string | null>(null);
+  const [saving, setSaving]       = useState(false);
+  const [pickingAvatar, setPickingAvatar] = useState(false);
+
+  const startEdit = useCallback(() => {
+    setNickname(me?.customNickname ?? "");
+    setSelAvatar(me?.avatarId ?? null);
+    setEditing(true);
+  }, [me]);
+
+  const cancel = () => { setEditing(false); setPickingAvatar(false); };
+
+  const save = useCallback(async () => {
+    setSaving(true);
+    try {
+      await fetch("/api/auth/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ customNickname: nickname || null, avatarId: selAvatar }),
+      });
+      await qc.invalidateQueries({ queryKey: ["me-home"] });
+      setEditing(false);
+      setPickingAvatar(false);
+    } finally {
+      setSaving(false);
+    }
+  }, [nickname, selAvatar, qc]);
+
+  if (!me) return null;
+
+  const displayName = me.customNickname || me.username || `User ${me.id}`;
+  const currentAvatarId = selAvatar ?? me.avatarId;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mx-4 rounded-2xl bg-card border border-border overflow-hidden"
+    >
+      <div className="flex items-center gap-3 p-4">
+        {/* Avatar */}
+        <button
+          onClick={() => { if (editing) setPickingAvatar(p => !p); else { startEdit(); setPickingAvatar(true); } }}
+          className="relative shrink-0 w-14 h-14 rounded-full overflow-hidden border-2 border-primary/40 box-glow-pink bg-muted"
+        >
+          <img src={avatarUrl(currentAvatarId)} alt="avatar" className="w-full h-full object-cover" />
+          {editing && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <Pencil size={12} className="text-white" />
+            </div>
+          )}
+        </button>
+
+        {/* Name / nickname */}
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <input
+              value={nickname}
+              onChange={e => setNickname(e.target.value)}
+              placeholder="Set nickname…"
+              maxLength={32}
+              className="w-full bg-transparent border-b border-primary/60 text-sm font-semibold text-foreground pb-0.5 focus:outline-none placeholder:text-muted-foreground"
+              autoFocus
+            />
+          ) : (
+            <div className="text-sm font-bold text-foreground truncate">{displayName}</div>
+          )}
+          {me.username && (
+            <div className="text-[10px] text-muted-foreground truncate">@{me.username}</div>
+          )}
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-[10px] text-accent">🎟 {me.ticketBalance}</span>
+            <span className="text-[10px] text-primary">🃏 {me.neonCardBalance}</span>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded border uppercase font-bold ${
+              me.subscriptionTier === "Gold" ? "text-yellow-400 border-yellow-500/40" :
+              me.subscriptionTier === "Silver" ? "text-slate-300 border-slate-400/40" :
+              me.subscriptionTier === "Bronze" ? "text-orange-400 border-orange-500/40" :
+              me.subscriptionTier === "supreme_admin" ? "text-purple-400 border-purple-500/40" :
+              "text-muted-foreground border-border"
+            }`}>{me.subscriptionTier}</span>
+          </div>
+        </div>
+
+        {/* Edit controls */}
+        {editing ? (
+          <div className="flex gap-1.5 shrink-0">
+            <button onClick={save} disabled={saving}
+              className="w-8 h-8 rounded-full bg-green-500/20 border border-green-500/40 text-green-400 flex items-center justify-center disabled:opacity-50">
+              <Check size={14} />
+            </button>
+            <button onClick={cancel}
+              className="w-8 h-8 rounded-full bg-card border border-border text-muted-foreground flex items-center justify-center">
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <button onClick={startEdit}
+            className="w-8 h-8 rounded-full bg-card border border-border text-muted-foreground flex items-center justify-center shrink-0">
+            <Pencil size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Avatar picker grid */}
+      <AnimatePresence>
+        {pickingAvatar && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden border-t border-border"
+          >
+            <div className="p-3">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Choose Avatar</div>
+              <div className="grid grid-cols-4 gap-2">
+                {AVATAR_PRESETS.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelAvatar(p.id)}
+                    className={`rounded-xl overflow-hidden border-2 aspect-square transition-all ${
+                      (selAvatar ?? me.avatarId) === p.id
+                        ? "border-primary box-glow-pink scale-105"
+                        : "border-border"
+                    }`}
+                  >
+                    <img src={`https://api.dicebear.com/7.x/${p.style}/svg?seed=${p.seed}`} alt={p.id} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
 
 interface BannerData {
   imageUrl?: string;
@@ -173,6 +357,9 @@ export function Home() {
           </motion.div>
         </div>
       </section>
+
+      {/* Profile Card */}
+      <ProfileCard />
 
       {/* CMS Banners — only renders when admin has configured them */}
       {banners?.banner1 && <CMSBanner banner={banners.banner1} index={0} />}

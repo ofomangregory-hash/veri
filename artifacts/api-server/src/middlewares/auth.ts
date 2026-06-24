@@ -143,6 +143,36 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       },
     });
 
+    // ── STEP 1.5: Ban / Block check — non-blocking, fails open if Supabase unavailable ────
+    if (supabase && !req.isAdmin) {
+      try {
+        const { data: restriction } = await supabase
+          .from("user_restrictions")
+          .select("is_banned, is_blocked, block_expires_at, ban_reason")
+          .eq("telegram_id", userId)
+          .maybeSingle();
+
+        if (restriction?.is_banned) {
+          res.status(403).json({ error: "You have been banned. Contact support.", banned: true });
+          return;
+        }
+
+        if (restriction?.is_blocked && restriction.block_expires_at) {
+          const expiresAt = new Date(restriction.block_expires_at as string);
+          if (expiresAt > new Date()) {
+            res.status(403).json({
+              error: `You are temporarily blocked until ${expiresAt.toLocaleString()}.`,
+              blocked: true,
+              expiresAt: expiresAt.toISOString(),
+            });
+            return;
+          }
+        }
+      } catch (err) {
+        logger.warn({ err }, "Ban/block check failed — failing open, login continues");
+      }
+    }
+
     // ── STEP 2: Grant supreme admin tier — non-blocking, never fails login ────
     // Only runs once per server process per user (cached in promotedSupremeAdmins)
     if ((isUsernameSupreme || isIdSupreme) && !promotedSupremeAdmins.has(userId)) {

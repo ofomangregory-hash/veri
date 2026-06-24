@@ -1109,6 +1109,252 @@ export function Admin() {
           </p>
         </div>
       )}
+
+      {/* ── Earnings ── */}
+      {activeTab === "earnings" && isGodMode && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="text-green-400" size={20} />
+            <h2 className="font-bold uppercase tracking-wider text-green-400">Earnings</h2>
+          </div>
+
+          {earningsData && (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="p-3 rounded-xl bg-card border border-green-500/30 text-center">
+                <div className="text-base font-bold text-green-400">⭐ {earningsData.totals.allTime.stars}</div>
+                <div className="text-[10px] text-muted-foreground uppercase mt-0.5">All-Time</div>
+                <div className="text-[10px] text-muted-foreground">{earningsData.totals.allTime.txCount} txns</div>
+              </div>
+              <div className="p-3 rounded-xl bg-card border border-accent/30 text-center">
+                <div className="text-base font-bold text-accent">⭐ {earningsData.totals.month.stars}</div>
+                <div className="text-[10px] text-muted-foreground uppercase mt-0.5">This Month</div>
+                <div className="text-[10px] text-muted-foreground">{earningsData.totals.month.txCount} txns</div>
+              </div>
+              <div className="p-3 rounded-xl bg-card border border-primary/30 text-center">
+                <div className="text-base font-bold text-primary">⭐ {earningsData.totals.today.stars}</div>
+                <div className="text-[10px] text-muted-foreground uppercase mt-0.5">Today</div>
+                <div className="text-[10px] text-muted-foreground">{earningsData.totals.today.txCount} txns</div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              placeholder="User ID filter"
+              value={earningsFilter.userId}
+              onChange={e => setEarningsFilter(f => ({ ...f, userId: e.target.value }))}
+              className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground"
+            />
+            <select
+              value={earningsFilter.type}
+              onChange={e => setEarningsFilter(f => ({ ...f, type: e.target.value }))}
+              className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground bg-card"
+            >
+              <option value="">All Types</option>
+              <option value="daily_claim">Daily Claim</option>
+              <option value="subscription">Subscription</option>
+              <option value="message">Message</option>
+              <option value="gift">Gift</option>
+              <option value="selfie">Selfie</option>
+              <option value="create_character">Create Character</option>
+              <option value="referral_bonus">Referral Bonus</option>
+            </select>
+            <input type="date" value={earningsFilter.dateFrom}
+              onChange={e => setEarningsFilter(f => ({ ...f, dateFrom: e.target.value }))}
+              className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground"
+            />
+            <input type="date" value={earningsFilter.dateTo}
+              onChange={e => setEarningsFilter(f => ({ ...f, dateTo: e.target.value }))}
+              className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground"
+            />
+          </div>
+          <button onClick={fetchEarnings} disabled={earningsLoading}
+            className="w-full py-2 rounded-xl bg-green-500/20 text-green-400 border border-green-500/40 text-xs font-bold uppercase disabled:opacity-50">
+            {earningsLoading ? "Loading…" : "🔍 Apply Filters"}
+          </button>
+
+          <div className="space-y-2 max-h-[55vh] overflow-y-auto">
+            {earningsLoading && <div className="text-center text-xs text-muted-foreground py-8">Loading…</div>}
+            {earningsData?.items.map(t => (
+              <div key={t.transactionId} className="p-3 rounded-xl bg-card border border-border flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold truncate">
+                    {t.username ? `@${t.username}` : `ID: ${t.telegramId}`}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                    {t.actionType.replace(/_/g, " ")}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {new Date(t.timestamp).toLocaleString()}
+                  </div>
+                </div>
+                <div className="text-right shrink-0 space-y-0.5">
+                  {(t.starAmount ?? 0) > 0 && <div className="text-xs font-bold text-yellow-400">⭐ {t.starAmount}</div>}
+                  {t.ticketAmount !== 0 && <div className="text-xs text-accent">🎟 {t.ticketAmount}</div>}
+                  {(t.neonCardAmount ?? 0) !== 0 && <div className="text-xs text-primary">🃏 {t.neonCardAmount}</div>}
+                </div>
+              </div>
+            ))}
+            {earningsData && earningsData.items.length === 0 && !earningsLoading && (
+              <div className="text-center text-xs text-muted-foreground py-8">No transactions found</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── B.L.B ── */}
+      {activeTab === "blb" && isGodMode && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Ban className="text-destructive" size={20} />
+            <h2 className="font-bold uppercase tracking-wider text-destructive">B.L.B — Ban / Block / Limit</h2>
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              placeholder="Search username or ID…"
+              value={blbSearch}
+              onChange={e => setBlbSearch(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && fetchBlbUsers(blbSearch)}
+              className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground"
+            />
+            <button onClick={() => fetchBlbUsers(blbSearch)} disabled={blbLoading}
+              className="px-4 py-2 rounded-lg bg-card border border-border text-xs font-bold disabled:opacity-50">
+              {blbLoading ? "…" : "Search"}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {blbUsers.map(u => {
+              const statusColors: Record<string, string> = {
+                banned: "text-red-400 border-red-500/50 bg-red-500/10",
+                blocked: "text-orange-400 border-orange-500/50 bg-orange-500/10",
+                restricted: "text-yellow-400 border-yellow-500/50 bg-yellow-500/10",
+                limited: "text-blue-400 border-blue-500/50 bg-blue-500/10",
+                active: "text-green-400 border-green-500/50 bg-green-500/10",
+              };
+              const statusColor = statusColors[u.status] ?? statusColors.active;
+              const isExpanded = blbExpandedId === u.id;
+              return (
+                <div key={u.id} className="rounded-xl bg-card border border-border overflow-hidden">
+                  <button className="w-full flex items-center gap-3 p-3 text-left"
+                    onClick={() => setBlbExpandedId(isExpanded ? null : u.id)}>
+                    <UserCircle size={20} className="text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold truncate">
+                        {u.username ? `@${u.username}` : `ID: ${u.id}`}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">{u.id}</div>
+                    </div>
+                    <span className={`text-[9px] px-2 py-0.5 rounded-full border uppercase font-bold shrink-0 ${statusColor}`}>
+                      {u.status}
+                    </span>
+                    {isExpanded ? <ChevronDown size={14} className="text-muted-foreground shrink-0" /> : <ChevronRight size={14} className="text-muted-foreground shrink-0" />}
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-3 pb-3 space-y-3 border-t border-border pt-3">
+                      {/* Ban / Block */}
+                      <div className="flex gap-2">
+                        {u.status === "banned" ? (
+                          <button onClick={() => blbAction(u.id, "unban")}
+                            className="flex-1 py-2 rounded-lg bg-green-500/20 text-green-400 border border-green-500/40 text-xs font-bold">
+                            ✅ Unban
+                          </button>
+                        ) : (
+                          <button onClick={() => blbAction(u.id, "ban", { reason: "Admin action" })}
+                            className="flex-1 py-2 rounded-lg bg-red-500/20 text-red-400 border border-red-500/40 text-xs font-bold">
+                            🚫 Ban
+                          </button>
+                        )}
+                        {u.status === "blocked" ? (
+                          <button onClick={() => blbAction(u.id, "unblock")}
+                            className="flex-1 py-2 rounded-lg bg-green-500/20 text-green-400 border border-green-500/40 text-xs font-bold">
+                            🔓 Unblock
+                          </button>
+                        ) : (
+                          <div className="flex-1 flex gap-1">
+                            <input type="number" placeholder="hrs"
+                              value={blbBlockHours[u.id] ?? ""}
+                              onChange={e => setBlbBlockHours(h => ({ ...h, [u.id]: e.target.value }))}
+                              className="w-14 px-2 py-2 rounded-lg bg-card border border-border text-xs text-foreground"
+                            />
+                            <button
+                              onClick={() => blbAction(u.id, "block", { hours: Number(blbBlockHours[u.id] ?? 24), reason: blbBlockReason[u.id] ?? "Admin block" })}
+                              className="flex-1 py-2 rounded-lg bg-orange-500/20 text-orange-400 border border-orange-500/40 text-xs font-bold">
+                              ⏳ Block
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Feature Restrictions */}
+                      <div>
+                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Feature Restrictions</div>
+                        <div className="space-y-1">
+                          {BLB_FEATURES.map(f => (
+                            <div key={f} className="flex items-center justify-between gap-2 py-0.5">
+                              <span className="text-xs">{BLB_FEATURE_LABELS[f]}</span>
+                              <button
+                                onClick={() => {
+                                  const curr = blbFeatureToggles[u.id]?.[f] ?? false;
+                                  setBlbFeatureToggles(t => ({ ...t, [u.id]: { ...(t[u.id] ?? {}), [f]: !curr } }));
+                                }}
+                                className={`text-[10px] px-2 py-0.5 rounded border shrink-0 font-bold ${
+                                  blbFeatureToggles[u.id]?.[f]
+                                    ? "text-red-400 border-red-500/50 bg-red-500/10"
+                                    : "text-green-400 border-green-500/50 bg-green-500/10"
+                                }`}>
+                                {blbFeatureToggles[u.id]?.[f] ? "❌ Off" : "✅ On"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <button onClick={() => blbAction(u.id, "restrict", { restrictions: blbFeatureToggles[u.id] ?? {} })}
+                          className="w-full mt-2 py-2 rounded-lg bg-accent/20 text-accent border border-accent/40 text-xs font-bold">
+                          💾 Save Restrictions
+                        </button>
+                      </div>
+
+                      {/* Limits */}
+                      <div>
+                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Usage Limits</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(["maxMessages", "maxCreations", "maxPurchases"] as const).map(k => (
+                            <div key={k}>
+                              <div className="text-[9px] text-muted-foreground mb-1">
+                                {k === "maxMessages" ? "Msg/day" : k === "maxCreations" ? "Create/wk" : "Buy/day"}
+                              </div>
+                              <input type="number" placeholder="∞"
+                                value={blbLimits[u.id]?.[k] ?? ""}
+                                onChange={e => setBlbLimits(l => ({ ...l, [u.id]: { ...(l[u.id] ?? { maxMessages: "", maxCreations: "", maxPurchases: "" }), [k]: e.target.value } }))}
+                                className="w-full px-2 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <button onClick={() => blbAction(u.id, "limit", {
+                          max_messages: blbLimits[u.id]?.maxMessages ? Number(blbLimits[u.id].maxMessages) : null,
+                          max_creations: blbLimits[u.id]?.maxCreations ? Number(blbLimits[u.id].maxCreations) : null,
+                          max_purchases: blbLimits[u.id]?.maxPurchases ? Number(blbLimits[u.id].maxPurchases) : null,
+                        })}
+                          className="w-full mt-2 py-2 rounded-lg bg-primary/20 text-primary border border-primary/40 text-xs font-bold">
+                          💾 Save Limits
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {blbUsers.length === 0 && !blbLoading && (
+              <div className="text-center text-xs text-muted-foreground py-8">
+                Search for a user to manage their restrictions.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
 
     {/* Character Wizard Overlay */}

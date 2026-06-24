@@ -1,0 +1,77 @@
+Fix Supreme Admin Privileges (Persistent Failure)
+The log shows Failed to grant supreme admin privileges — login continues on every login for every user. The fix applied earlier is not working.
+Find the supreme admin grant function and rewrite it completely:
+
+Fetch the user's row from Supabase using their Telegram ID
+If their telegram_id matches the hardcoded supreme admin ID, set subscription_tier = 'supreme_admin' and staff_privileges = true (boolean, not string)
+The update must use .eq('telegram_id', userId) — not .eq('id', userId) — confirm which column is the correct identifier in the users table
+Log the full Supabase error if the update fails so we can see the exact reason
+This must run once at login and not fire for every user
+
+
+2. Wire Prices Table (Already Created in Supabase)
+The prices table already exists in Supabase with this structure:
+id (text, primary key) | label (text) | amount (numeric) | updated_at (timestamptz)
+Price IDs: bronze_weekly, bronze_monthly, bronze_yearly, silver_weekly, silver_monthly, silver_yearly, gold_weekly, gold_monthly, gold_yearly, msg_cost_tickets, selfie_cost_nc, char_create_nc, gift_cyber_cocktail, gift_neon_bracelet, gift_secret_key, stars_per_nc, tickets_per_star, daily_free_tickets, daily_free_nc, daily_bronze_tickets, daily_bronze_nc, daily_silver_tickets, daily_silver_nc, daily_gold_tickets, daily_gold_nc.
+Do not create the table — just read and write to it.
+
+Create a priceCache service that fetches all rows on server start and refreshes every 5 minutes. Expose a getPrice(id) function returning the amount for that id.
+Replace every hardcoded price in the bot and Mini App with getPrice('price_id').
+When admin saves a price in the admin panel, upsert the new amount into the prices table and immediately invalidate the cache.
+Gold tier 50% discount on gift prices must be calculated dynamically from cached prices, not hardcoded.
+
+
+3. Earnings Section in Admin Panel
+Add a new page called Earnings accessible from a box on the Stats page labeled "💰 Earnings".
+Use the existing transactions table. Display:
+
+Full transaction history: who paid, how much, what for, timestamp
+Filter by: date range, user, transaction type
+Daily earnings summary grouped by type
+Running totals: all-time, this month, today
+Each row: username/telegram ID, transaction type, amount (Stars/Tickets/NC), date
+
+If any fields are missing add them and update all transaction writes to include them.
+
+4. Ban/Block/Limit (B.L.B) Section in Admin Panel
+Add a new page called B.L.B accessible from a box on the Stats page labeled "🚫 B.L.B".
+The user_restrictions table already exists in Supabase — do not create it.
+Ban — permanent:
+
+Banned users cannot log in, use the bot, or access the Mini App
+User sees: "You have been banned. Contact support."
+Admin can unban anytime
+
+Block — temporary:
+
+Admin sets duration (hours/days), user sees remaining time, admin can lift early
+
+Feature Restrictions — per-feature toggle per user:
+
+✅/❌ Chat
+✅/❌ Character Creation
+✅/❌ Shop
+✅/❌ Gifts
+✅/❌ Daily Claim
+✅/❌ Invite & Earn
+✅/❌ Media Inventory
+✅/❌ Quest Hub
+✅/❌ Premium Upgrade
+
+Save toggles to Supabase immediately. Bot and Mini App check restrictions before every action.
+Limit — usage caps:
+
+Max messages per day
+Max character creations per week
+Max shop purchases per day
+
+UI: search by username or Telegram ID, status badge per user: Active / Blocked / Banned / Limited / Restricted.
+
+5. Profile: Nickname and Avatar
+On the home page profile section, above the current display name:
+
+Nickname field — user sets a custom nickname, saved to users table as nickname, displayed above Telegram username everywhere in app and bot
+Avatar selector — at least 8 preset options, selected avatar shows in the top-left circle, saved as avatar_id, bot also uses it
+
+Both appear in the admin panel user list.
+Do not break any existing functionality or UI.You said: to your earning section add it to the stats section as abox named earning
