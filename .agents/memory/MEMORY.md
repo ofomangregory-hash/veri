@@ -2,4 +2,5 @@
 - [Supabase character data source](supabase-characters.md) — characters live in Supabase, not local Replit PostgreSQL; triggerMetadataArray is an array in Supabase but Zod expects object|null
 - [Flat monorepo build order](flat-build-order.md) — esbuild build.mjs must not wipe dist/public/ (vite frontend output); also needs src/generated/index.ts barrel
 - [Economy and admin rules](economy-admin.md) — gifts cost NC not tickets; daily claim is tier-based (Free=30T+15NC … Gold=100T+56NC); admin ID 8704633862; 3 stars=1 ticket (was 2); Railway deploy uses railway.toml
+- [Admin JSX esbuild fix](admin-jsx-esbuild.md) — esbuild JSX parser fails on deeply nested conditionals in admin.tsx; fix is to extract large tab content into separate components (PricingTab, PricingCell, PremiumTierCard, TxnRow)
 - [NSFW access pattern](nsfw-access.md) — NSFW uses #NSFW tag (no Supabase schema column needed); free users filtered in GET /characters via excludeNsfw; admin PATCH /admin/characters/:id in admin.ts uses updateSupabaseCharacter
