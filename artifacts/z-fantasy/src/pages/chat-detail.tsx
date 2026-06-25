@@ -166,7 +166,7 @@ export function ChatDetail() {
         <Link href="/chat" className="p-2 -ml-2 text-muted-foreground hover:text-white">
           <ChevronLeft size={24} />
         </Link>
-        <Link href={conv?.character?.characterId ? `/character/${conv.character.characterId}` : "#"}
+        <Link href={conv?.character?.characterId ? `/character/${conv.character.characterId}?from=chat` : "#"}
           className="w-10 h-10 rounded-full overflow-hidden border border-secondary box-glow-purple shrink-0 cursor-pointer hover:opacity-80 transition-opacity">
           <img src={conv?.character?.avatarUrl || ""} alt="Avatar" className="w-full h-full object-cover" />
         </Link>

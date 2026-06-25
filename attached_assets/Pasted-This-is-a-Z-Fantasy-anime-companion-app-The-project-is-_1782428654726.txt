@@ -1,0 +1,57 @@
+This is a Z-Fantasy anime companion app. The project is already synced from GitHub. Do not create any new tables — all Supabase tables already exist.
+First, read the entire codebase before doing anything.
+Then fix these remaining items:
+1. Start Fresh / New Chat still failing
+
+In src/routes/conversations.ts, find every insert into conversations query. Before each one, add an update to archive any existing row with the same (telegram_id, character_id):
+typescriptawait db.update(conversations)
+  .set({ archived: true, updated_at: new Date() })
+  .where(
+    and(
+      eq(conversations.telegram_id, telegramId),
+      eq(conversations.character_id, characterId)
+    )
+  );
+Then proceed with the insert.
+2. CharacterBio — Multiple Avatar Gallery
+
+Fetch all avatars from character_avatars table for the character
+Tapping the current avatar opens a swipeable gallery showing "Avatar X of Y"
+Accessible from character listing AND from chat page
+When accessed from chat, show WhatsApp-style tabs: Images | Links | Media from that conversation
+Blurred images stay blurred with unlock amount from Supabase
+
+3. premium.tsx — All values from Supabase
+
+Fetch everything from premium_tiers table in real time
+No hardcoded prices, features, or limits anywhere in premium.tsx
+Updates instantly when changed from bot, admin panel, or Supabase directly
+
+4. Pollinations image generation fix
+
+In the image generation function:
+
+Trim prompt to max 100 characters before encoding
+Use encodeURIComponent(prompt.trim().substring(0, 100))
+Simple fallback prompt max 50 characters
+Increase timeout from 15000ms to 30000ms
+Log the full URL before every fetch call
+Fall through to avatar_url silently if both fail
+
+5. Verify these are working after the previous session:
+
+Archive chat is the third tab (Active | Vault | Archive)
+Search bar exists in active chat list and in admin chat section
+HelpDesk section exists in side panel
+Customer service routes to the 3 Telegram numbers
+Quest Hub tab exists in admin panel
+Referrals section exists in admin panel
+Explore page shows correct prize currency (neon cards not tickets)
+Premium unlimited messages — no ticket deduction for premium users
+Affection caps enforced (100% max percentage, 1000 max points per user per character)
+
+For any item in point 5 that is missing or broken, fix it.
+Existing Supabase tables to use:
+
+users, characters, character_avatars, conversations, affection_words, affection_word_triggers, user_character_intimacy, trigger_words, transaction_logs, pending_grants, prices, system_configurations, user_restrictions, vault_items, tickets, helpdesk_messages, customer_support_messages, customer_service_threads, quests, quest_completions, quest_progress, referral_rewards, referral_logs, events, premium_tiers
+Do not generate SQL. Do not create tables. Wire everything to the exact table names above.

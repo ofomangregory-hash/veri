@@ -70,8 +70,8 @@ function sanitizePrompt(raw: string): string {
 
 async function tryPollinations(prompt: string, seed: string, nsfwEnabled: boolean): Promise<string | null> {
   try {
-    const clean = sanitizePrompt(prompt);
-    const encodedPrompt = encodeURIComponent(clean);
+    const clean = sanitizePrompt(prompt).substring(0, 100);
+    const encodedPrompt = encodeURIComponent(clean.trim());
     const seedNum = parseInt(seed, 10) || Math.floor(Math.random() * 9999999);
 
     const url = nsfwEnabled
@@ -83,7 +83,7 @@ async function tryPollinations(prompt: string, seed: string, nsfwEnabled: boolea
 
     const response = await axios.get(url, {
       responseType: "arraybuffer",
-      timeout: 15000,
+      timeout: 30000,
       headers: {
         "User-Agent": "Mozilla/5.0",
         "Accept": "image/jpeg,image/png,image/*",
@@ -108,15 +108,16 @@ async function tryPollinations(prompt: string, seed: string, nsfwEnabled: boolea
 
 async function tryPollinationsSimple(genre: string, characterName: string): Promise<string | null> {
   try {
-    const simplePrompt = sanitizePrompt(`${genre} ${characterName} portrait beautiful`);
-    const encodedPrompt = encodeURIComponent(simplePrompt);
+    const simplePrompt = sanitizePrompt(`${genre} ${characterName} portrait`).substring(0, 50);
+    const encodedPrompt = encodeURIComponent(simplePrompt.trim());
     const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=42`;
 
+    console.log("Pollinations simple URL:", url);
     logger.info({ url }, "Attempting Pollinations simple fallback");
 
     const response = await axios.get(url, {
       responseType: "arraybuffer",
-      timeout: 15000,
+      timeout: 30000,
       headers: {
         "User-Agent": "Mozilla/5.0",
         "Accept": "image/jpeg,image/png,image/*",

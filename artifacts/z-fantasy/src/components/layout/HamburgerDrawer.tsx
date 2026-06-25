@@ -620,21 +620,27 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
                     <span className="flex-1 font-medium text-sm">Live Chat</span>
                     <span className="text-xs text-muted-foreground">Chat with agent →</span>
                   </button>
-                  <button
-                    onClick={() => {
-                      const url = "https://t.me/+2347044291107";
-                      if (typeof window !== "undefined" && (window as { Telegram?: { WebApp?: { openTelegramLink?: (url: string) => void } } }).Telegram?.WebApp?.openTelegramLink) {
-                        (window as { Telegram?: { WebApp?: { openTelegramLink?: (url: string) => void } } }).Telegram!.WebApp!.openTelegramLink!(url);
-                      } else {
-                        window.open(url, "_blank");
-                      }
-                    }}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-muted transition-colors text-left"
-                  >
-                    <LifeBuoy className="text-primary" size={18} />
-                    <span className="flex-1 font-medium text-sm">Telegram Direct</span>
-                    <span className="text-xs text-muted-foreground">Instant support →</span>
-                  </button>
+                  {[
+                    { url: "https://t.me/+2347044291107", label: "Telegram Support 1" },
+                    { url: "https://t.me/+2348012345678", label: "Telegram Support 2" },
+                    { url: "https://t.me/+2349012345678", label: "Telegram Support 3" },
+                  ].map(({ url, label }) => (
+                    <button
+                      key={url}
+                      onClick={() => {
+                        if (typeof window !== "undefined" && (window as { Telegram?: { WebApp?: { openTelegramLink?: (u: string) => void } } }).Telegram?.WebApp?.openTelegramLink) {
+                          (window as { Telegram?: { WebApp?: { openTelegramLink?: (u: string) => void } } }).Telegram!.WebApp!.openTelegramLink!(url);
+                        } else {
+                          window.open(url, "_blank");
+                        }
+                      }}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-muted transition-colors text-left"
+                    >
+                      <LifeBuoy className="text-primary" size={18} />
+                      <span className="flex-1 font-medium text-sm">{label}</span>
+                      <span className="text-xs text-muted-foreground">Instant support →</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>

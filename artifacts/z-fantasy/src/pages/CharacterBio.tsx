@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { useParams, useLocation } from "wouter";
-import { ChevronLeft, Share2, MessageCircle, Tag, User, Globe, Lock, EyeOff, RefreshCw } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { useParams, useLocation, useSearch } from "wouter";
+import { ChevronLeft, Share2, MessageCircle, Tag, User, Globe, Lock, EyeOff, RefreshCw, ChevronRight, X, Image, Link2, Film } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 function getToken() {
@@ -21,10 +21,43 @@ interface Character {
   visibility: "public" | "private";
 }
 
+interface CharacterAvatar {
+  id: string;
+  avatarUrl: string;
+  isPrimary: boolean;
+}
+
+interface ChatMessage {
+  role: string;
+  content: string;
+  imageUrl: string | null;
+  isLocked?: boolean;
+  timestamp: string | null;
+}
+
+interface VaultItem {
+  id: string;
+  imageUrl: string;
+  unlocked: boolean;
+  characterName: string;
+}
+
 const BOT_USERNAME = "zfantasy_bot";
+const URL_RE = /https?:\/\/[^\s]+/g;
+
+function extractLinks(messages: ChatMessage[]): string[] {
+  const links: string[] = [];
+  for (const m of messages) {
+    const found = m.content.match(URL_RE);
+    if (found) links.push(...found);
+  }
+  return [...new Set(links)];
+}
 
 export function CharacterBio() {
   const { id } = useParams<{ id: string }>();
+  const search = useSearch();
+  const fromChat = search.includes("from=chat");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [char, setChar] = useState<Character | null>(null);
@@ -32,6 +65,16 @@ export function CharacterBio() {
   const [hasConv, setHasConv] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
+
+  const [avatars, setAvatars] = useState<CharacterAvatar[]>([]);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+
+  const [mediaTab, setMediaTab] = useState<"images" | "links" | "media">("images");
+  const [convMessages, setConvMessages] = useState<ChatMessage[]>([]);
+  const [vaultItems, setVaultItems] = useState<VaultItem[]>([]);
+
+  const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -41,12 +84,36 @@ export function CharacterBio() {
         .then(r => r.ok ? r.json() : null),
       fetch(`/api/conversations`, { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.ok ? r.json() : []),
-    ]).then(([charData, convs]: [Character | null, Array<{ characterId: string }>]) => {
+      fetch(`/api/characters/${id}/avatars`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : []),
+    ]).then(([charData, convs, avts]: [Character | null, Array<{ characterId: string }>, CharacterAvatar[]]) => {
       setChar(charData);
       setHasConv(Array.isArray(convs) && convs.some(c => c.characterId === id));
+      const allAvatars = Array.isArray(avts) ? avts : [];
+      if (charData?.avatarUrl && !allAvatars.some(a => a.avatarUrl === charData.avatarUrl)) {
+        allAvatars.unshift({ id: "primary", avatarUrl: charData.avatarUrl, isPrimary: true });
+      }
+      setAvatars(allAvatars);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!fromChat || !id) return;
+    const token = getToken();
+    fetch(`/api/conversations/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { messages?: ChatMessage[] } | null) => {
+        if (data?.messages) setConvMessages(data.messages);
+      })
+      .catch(() => {});
+    fetch(`/api/media/vault`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then((items: VaultItem[]) => {
+        setVaultItems(Array.isArray(items) ? items : []);
+      })
+      .catch(() => {});
+  }, [fromChat, id]);
 
   const handleNewChat = async () => {
     if (!id) return;
@@ -65,6 +132,24 @@ export function CharacterBio() {
     } finally {
       setArchiving(false);
     }
+  };
+
+  const openGallery = (index: number) => {
+    setGalleryIndex(index);
+    setGalleryOpen(true);
+  };
+
+  const galleryPrev = () => setGalleryIndex(i => (i - 1 + avatars.length) % avatars.length);
+  const galleryNext = () => setGalleryIndex(i => (i + 1) % avatars.length);
+
+  const handleGalleryTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleGalleryTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(dx) > 40) dx < 0 ? galleryNext() : galleryPrev();
+    touchStartX.current = null;
   };
 
   const shareLink = `https://t.me/${BOT_USERNAME}?start=char_${id}`;
@@ -88,6 +173,9 @@ export function CharacterBio() {
       }
     }
   };
+
+  const convImages = convMessages.filter(m => m.imageUrl).map(m => m.imageUrl as string);
+  const convLinks = extractLinks(convMessages);
 
   if (loading) {
     return (
@@ -125,16 +213,26 @@ export function CharacterBio() {
         </button>
       </div>
 
-      {/* Avatar section */}
+      {/* Avatar section with gallery tap */}
       <div className="relative flex justify-center pt-8 pb-4">
         <div className="relative">
-          <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-secondary box-glow-purple shadow-2xl">
+          <button
+            onClick={() => avatars.length > 0 && openGallery(0)}
+            className="w-32 h-32 rounded-full overflow-hidden border-4 border-secondary box-glow-purple shadow-2xl focus:outline-none"
+          >
             <img
               src={char.avatarUrl ?? `https://api.dicebear.com/7.x/bottts/svg?seed=${char.name}`}
               alt={char.name}
               className="w-full h-full object-cover"
             />
-          </div>
+          </button>
+          {avatars.length > 1 && (
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+              {avatars.slice(0, Math.min(4, avatars.length)).map((_, i) => (
+                <div key={i} className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-secondary" : "bg-muted-foreground/50"}`} />
+              ))}
+            </div>
+          )}
           {isNsfw && (
             <div className="absolute -top-1 -right-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-pink-500/20 border border-pink-500/60 text-pink-400 text-[10px] font-bold">
               <EyeOff size={9} /> NSFW
@@ -142,6 +240,13 @@ export function CharacterBio() {
           )}
         </div>
       </div>
+
+      {/* Avatar count hint */}
+      {avatars.length > 1 && (
+        <p className="text-center text-[10px] text-muted-foreground mb-2">
+          Tap avatar to view all {avatars.length} photos
+        </p>
+      )}
 
       {/* Name + meta */}
       <div className="text-center px-4 pb-6">
@@ -159,6 +264,81 @@ export function CharacterBio() {
           </span>
         </div>
       </div>
+
+      {/* WhatsApp-style Media Tabs (only when accessed from chat) */}
+      {fromChat && (
+        <div className="px-4 mb-4">
+          <div className="flex p-1 bg-card rounded-lg border border-border gap-1 mb-3">
+            {([
+              { id: "images" as const, label: "Images", icon: Image },
+              { id: "links" as const, label: "Links", icon: Link2 },
+              { id: "media" as const, label: "Media", icon: Film },
+            ]).map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setMediaTab(tab.id)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-all ${
+                  mediaTab === tab.id
+                    ? "bg-secondary text-white box-glow-purple"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <tab.icon size={12} /> {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {mediaTab === "images" && (
+            <div className="grid grid-cols-3 gap-2">
+              {convImages.length === 0 ? (
+                <p className="col-span-3 text-center text-xs text-muted-foreground py-6">No images in this chat yet.</p>
+              ) : (
+                convImages.map((url, i) => (
+                  <button key={i} onClick={() => { setAvatars(convImages.map((u, j) => ({ id: String(j), avatarUrl: u, isPrimary: false }))); openGallery(i); }}
+                    className="aspect-square rounded-lg overflow-hidden border border-border">
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
+          {mediaTab === "links" && (
+            <div className="space-y-2">
+              {convLinks.length === 0 ? (
+                <p className="text-center text-xs text-muted-foreground py-6">No links shared in this chat.</p>
+              ) : (
+                convLinks.map((link, i) => (
+                  <a key={i} href={link} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border hover:border-accent/50 transition-colors text-sm text-accent truncate">
+                    <Link2 size={14} className="shrink-0" />
+                    <span className="truncate">{link}</span>
+                  </a>
+                ))
+              )}
+            </div>
+          )}
+
+          {mediaTab === "media" && (
+            <div className="grid grid-cols-3 gap-2">
+              {vaultItems.length === 0 ? (
+                <p className="col-span-3 text-center text-xs text-muted-foreground py-6">No vault media for this character.</p>
+              ) : (
+                vaultItems.map((item, i) => (
+                  <div key={item.id} className="aspect-square rounded-lg overflow-hidden border border-border relative">
+                    <img src={item.imageUrl} alt="" className={`w-full h-full object-cover ${!item.unlocked ? "blur-md brightness-50" : ""}`} />
+                    {!item.unlocked && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-[10px] text-white/80 font-bold bg-black/60 px-2 py-0.5 rounded-full">10 🃏</span>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="px-4 space-y-4">
         {/* Bio */}
@@ -189,6 +369,23 @@ export function CharacterBio() {
                   className="px-3 py-1 rounded-full bg-secondary/15 border border-secondary/40 text-secondary text-xs font-semibold">
                   {tag.replace(/^#/, "")}
                 </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Avatar strip */}
+        {avatars.length > 1 && (
+          <div className="p-4 rounded-2xl bg-card border border-border">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+              <Image size={11} /> Photos ({avatars.length})
+            </p>
+            <div className="flex gap-2 overflow-x-auto scrollbar-none">
+              {avatars.map((a, i) => (
+                <button key={a.id} onClick={() => openGallery(i)}
+                  className="w-20 h-20 rounded-xl overflow-hidden border-2 border-border hover:border-secondary shrink-0 transition-all">
+                  <img src={a.avatarUrl} alt={`Avatar ${i + 1}`} className="w-full h-full object-cover" />
+                </button>
               ))}
             </div>
           </div>
@@ -255,6 +452,81 @@ export function CharacterBio() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Avatar Gallery Modal */}
+      {galleryOpen && avatars.length > 0 && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/95 flex flex-col"
+          onTouchStart={handleGalleryTouchStart}
+          onTouchEnd={handleGalleryTouchEnd}
+        >
+          {/* Gallery header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <button onClick={() => setGalleryOpen(false)} className="p-2 text-white/70 hover:text-white">
+              <X size={22} />
+            </button>
+            <span className="text-sm font-semibold text-white/80">
+              Avatar {galleryIndex + 1} of {avatars.length}
+            </span>
+            <div className="w-10" />
+          </div>
+
+          {/* Gallery image */}
+          <div className="flex-1 flex items-center justify-center relative px-4">
+            <img
+              src={avatars[galleryIndex].avatarUrl}
+              alt={`Avatar ${galleryIndex + 1}`}
+              className="max-w-full max-h-full object-contain rounded-xl"
+            />
+            {avatars.length > 1 && (
+              <>
+                <button
+                  onClick={galleryPrev}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <button
+                  onClick={galleryNext}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Dot indicators */}
+          {avatars.length > 1 && (
+            <div className="flex justify-center gap-1.5 py-4">
+              {avatars.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setGalleryIndex(i)}
+                  className={`w-2 h-2 rounded-full transition-all ${i === galleryIndex ? "bg-white w-4" : "bg-white/30"}`}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Thumbnail strip */}
+          {avatars.length > 1 && (
+            <div className="flex gap-2 px-4 pb-4 overflow-x-auto scrollbar-none">
+              {avatars.map((a, i) => (
+                <button
+                  key={a.id}
+                  onClick={() => setGalleryIndex(i)}
+                  className={`w-14 h-14 rounded-lg overflow-hidden shrink-0 border-2 transition-all ${
+                    i === galleryIndex ? "border-secondary" : "border-white/20 opacity-60"
+                  }`}
+                >
+                  <img src={a.avatarUrl} alt="" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

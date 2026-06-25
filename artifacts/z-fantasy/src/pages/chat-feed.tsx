@@ -89,8 +89,8 @@ export function ChatFeed() {
 
   const TAB_CONFIG: { id: Tab; label: string; activeClass: string }[] = [
     { id: "chats",   label: "Active",  activeClass: "bg-secondary text-white box-glow-purple" },
-    { id: "archive", label: "Archive", activeClass: "bg-muted/80 text-white" },
     { id: "vault",   label: "Vault",   activeClass: "bg-primary text-white box-glow-pink" },
+    { id: "archive", label: "Archive", activeClass: "bg-muted/80 text-white" },
   ];
 
   return (

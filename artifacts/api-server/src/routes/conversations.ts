@@ -301,6 +301,12 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     .limit(1);
 
   if (!conv) {
+    await db.update(conversationsTable)
+      .set({ archived: true, updatedAt: new Date() })
+      .where(and(
+        eq(conversationsTable.telegramId, req.telegramUserId),
+        eq(conversationsTable.characterId, params.data.characterId),
+      ));
     [conv] = await db.insert(conversationsTable).values({
       telegramId: req.telegramUserId,
       characterId: params.data.characterId,
@@ -705,7 +711,7 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     secret_key:     giftEco.giftLargeAp,
   };
   const giftAp = giftApMap[parsed.data.giftType] ?? giftReaction.ap;
-  const newAP = conv.affectionPoints + giftAp;
+  const newAP = Math.min(1000, conv.affectionPoints + giftAp);
   const newLevel = newAP >= 100 ? 3 : newAP >= 40 ? 2 : 1;
 
   await db.update(conversationsTable)
