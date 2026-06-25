@@ -142,7 +142,7 @@ export function Explore() {
             charactersData?.items.map(char => (
               <Link
                 key={char.characterId}
-                href={`/chat/${char.characterId}`}
+                href={`/character/${char.characterId}`}
                 className="group relative aspect-[3/4] rounded-xl overflow-hidden bg-card border border-border hover:border-secondary transition-all hover:box-glow-purple flex flex-col justify-end"
               >
                 <img 

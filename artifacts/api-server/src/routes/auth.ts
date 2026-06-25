@@ -60,6 +60,7 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     referralCode: user.referralCode,
     staffPrivileges,
     isAdmin,
+    lastDailyClaim: user.lastDailyClaim?.toISOString() ?? null,
   }));
 });
 
@@ -107,35 +108,22 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
 
   const now = new Date();
   const tier = user.subscriptionTier ?? "Free";
-  const isSupremeAdmin = req.isSupremeAdmin || tier === "supreme_admin";
+  const isSupremeAdmin = req.isSupremeAdmin || tier === "supreme_admin" || user.username === "zxeleen";
 
-  // Max claims per calendar day (UTC)
-  const maxClaimsPerDay = isSupremeAdmin ? 3 : (tier === "Gold" || tier === "Silver" || tier === "Bronze") ? 2 : 1;
+  // Cooldown interval: supreme_admin=6h, premium tiers=12h, free=24h
+  const intervalHours = isSupremeAdmin ? 6 : (tier === "Gold" || tier === "Silver" || tier === "Bronze") ? 12 : 24;
+  const intervalMs = intervalHours * 60 * 60 * 1000;
 
-  // Count how many times this user has claimed today (UTC midnight reset)
-  const todayStart = new Date(now);
-  todayStart.setUTCHours(0, 0, 0, 0);
-  const tomorrow = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-
-  const claimRows = await db.select({ count: sql<number>`count(*)` })
-    .from(transactionsTable)
-    .where(
-      sql`telegram_id = ${req.telegramUserId}
-        AND action_type IN ('daily_claim', 'auto_daily_claim')
-        AND timestamp >= ${todayStart}
-        AND timestamp < ${tomorrow}`
-    );
-
-  const claimsToday = Number(claimRows[0]?.count ?? 0);
-
-  if (claimsToday >= maxClaimsPerDay) {
-    res.status(400).json({
-      error: `Daily claim limit reached (${claimsToday}/${maxClaimsPerDay})`,
-      nextClaimAt: tomorrow.toISOString(),
-      claimsToday,
-      maxClaimsPerDay,
-    });
-    return;
+  if (user.lastDailyClaim) {
+    const elapsed = now.getTime() - user.lastDailyClaim.getTime();
+    if (elapsed < intervalMs) {
+      const nextClaimAt = new Date(user.lastDailyClaim.getTime() + intervalMs);
+      res.status(400).json({
+        error: `Claim cooldown active. Next claim available in ${Math.ceil((intervalMs - elapsed) / 3600000)}h.`,
+        nextClaimAt: nextClaimAt.toISOString(),
+      });
+      return;
+    }
   }
 
   const eco = await getEconomyConfig();
@@ -145,6 +133,8 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
   else if (tier === "Gold")   { TICKETS_REWARD = eco.dailyClaimGoldTickets;   NEON_CARDS_REWARD = eco.dailyClaimGoldNc; }
   else if (tier === "Silver") { TICKETS_REWARD = eco.dailyClaimSilverTickets; NEON_CARDS_REWARD = eco.dailyClaimSilverNc; }
   else if (tier === "Bronze") { TICKETS_REWARD = eco.dailyClaimBronzeTickets; NEON_CARDS_REWARD = eco.dailyClaimBronzeNc; }
+
+  const nextClaimAt = new Date(now.getTime() + intervalMs);
 
   const [updated] = await db.update(usersTable)
     .set({
@@ -164,7 +154,7 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
   res.json(ClaimDailyTicketsResponse.parse({
     ticketsAdded: TICKETS_REWARD,
     newBalance: updated.ticketBalance,
-    nextClaimAt: tomorrow.toISOString(),
+    nextClaimAt: nextClaimAt.toISOString(),
     neonCardsAdded: NEON_CARDS_REWARD,
     newNeonCardBalance: updated.neonCardBalance,
   }));

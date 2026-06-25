@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { useGetConversation, useSendMessage, useSendGift, useRequestSelfie, useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Send, Gift, Camera, ChevronLeft, Heart, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +24,12 @@ export function ChatDetail() {
   const sendMsg = useSendMessage();
   const sendGift = useSendGift();
   const reqSelfie = useRequestSelfie();
+
+  const { data: ecoConfig } = useQuery<{ giftSmall: number; giftMedium: number; giftLarge: number }>({
+    queryKey: ["economy-config"],
+    queryFn: () => fetch("/api/economy-config").then(r => r.json()),
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -233,11 +240,11 @@ export function ChatDetail() {
             </p>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { type: GiftInputGiftType.cyber_cocktail, name: "Cyber Cocktail", cost: 10, costGold: 5, ap: 5, icon: "🍹" },
-                { type: GiftInputGiftType.neon_bracelet, name: "Neon Bracelet", cost: 25, costGold: 12, ap: 15, icon: "💎" },
-                { type: GiftInputGiftType.secret_key, name: "Secret Key", cost: 50, costGold: 25, ap: 35, icon: "🔑" },
+                { type: GiftInputGiftType.cyber_cocktail, name: "Cyber Cocktail", cost: ecoConfig?.giftSmall ?? 10, ap: 5, icon: "🍹" },
+                { type: GiftInputGiftType.neon_bracelet, name: "Neon Bracelet", cost: ecoConfig?.giftMedium ?? 25, ap: 15, icon: "💎" },
+                { type: GiftInputGiftType.secret_key, name: "Secret Key", cost: ecoConfig?.giftLarge ?? 50, ap: 35, icon: "🔑" },
               ].map(gift => {
-                const displayCost = isGold ? gift.costGold : gift.cost;
+                const displayCost = isGold ? Math.floor(gift.cost / 2) : gift.cost;
                 return (
                   <button
                     key={gift.type}

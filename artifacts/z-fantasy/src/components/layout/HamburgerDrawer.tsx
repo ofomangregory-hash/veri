@@ -60,6 +60,12 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   const [expandProfile, setExpandProfile] = useState(false);
   const [expandMedia, setExpandMedia] = useState(false);
   const [expandQuest, setExpandQuest] = useState(false);
@@ -165,6 +171,13 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
 
   const unlockedItems = (Array.isArray(vaultItems) ? vaultItems : []).filter(v => v.unlocked);
   const tier = user?.subscriptionTier ?? "Free";
+  const claimIntervalMs = (tier === "supreme_admin" ? 6 : (tier === "Bronze" || tier === "Silver" || tier === "Gold") ? 12 : 24) * 3600000;
+  const lastClaimMs = user?.lastDailyClaim ? new Date(user.lastDailyClaim).getTime() : 0;
+  const nextClaimMs = lastClaimMs + claimIntervalMs;
+  const msLeft = Math.max(0, nextClaimMs - nowMs);
+  const canClaimNow = msLeft === 0;
+  const claimHoursLeft = Math.floor(msLeft / 3600000);
+  const claimMinsLeft = Math.floor((msLeft % 3600000) / 60000);
   const tierColor = TIER_COLOR[tier] ?? TIER_COLOR.Free;
   const tierLabel = tier === "supreme_admin" ? "Supreme Admin" : `${tier} Tier`;
   const displayName = user?.customNickname || user?.username || "Guest";
@@ -354,16 +367,15 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
               <div className="space-y-2">
                 <button
                   onClick={handleClaim}
-                  disabled={claimTickets.isPending}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-muted transition-colors text-left"
+                  disabled={claimTickets.isPending || !canClaimNow}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-muted transition-colors text-left disabled:opacity-60"
                 >
-                  <Ticket className="text-accent" />
-                  <span className="flex-1 font-medium">Claim Daily Tickets</span>
+                  <Ticket className={canClaimNow ? "text-accent" : "text-muted-foreground"} />
+                  <span className="flex-1 font-medium">
+                    {canClaimNow ? "Claim Daily Tickets" : `Next claim in ${claimHoursLeft}h ${claimMinsLeft}m`}
+                  </span>
                   <span className="text-xs text-muted-foreground">
-                    {(() => {
-                      const r = dailyRewards[tier] ?? dailyRewards.Free;
-                      return `+${r?.tickets ?? 30} 🎟️ +${r?.nc ?? 15} 🃏`;
-                    })()}
+                    {tier === "supreme_admin" ? "+1M 🎟️ +1M 🃏" : tier === "Gold" ? "+100 🎟️ +56 🃏" : tier === "Silver" ? "+75 🎟️ +37 🃏" : tier === "Bronze" ? "+50 🎟️ +25 🃏" : "+30 🎟️ +15 🃏"}
                   </span>
                 </button>
                 <button

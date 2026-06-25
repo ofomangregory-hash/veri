@@ -417,12 +417,7 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
   const isGiftAdmin = req.isAdmin;
   const cost = isGiftAdmin ? 0 : (tier === "Gold" ? giftCosts.costGold : giftCosts.cost);
 
-  if (!isGiftAdmin && user.neonCardBalance < cost) {
-    res.status(402).json({ error: `Insufficient Neon Cards. This gift costs ${cost} 🃏.` });
-    return;
-  }
-
-  // Update conversation affection
+  // Fetch conversation first (needed for affection update later)
   const [conv] = await db.select().from(conversationsTable)
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
@@ -434,6 +429,20 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     return;
   }
 
+  // Atomically deduct NC (single SQL WHERE neon_card_balance >= cost guarantees no race)
+  if (!isGiftAdmin && cost > 0) {
+    const [deducted] = await db.update(usersTable)
+      .set({ neonCardBalance: sql`neon_card_balance - ${cost}` })
+      .where(and(eq(usersTable.id, req.telegramUserId), sql`neon_card_balance >= ${cost}`))
+      .returning({ neonCardBalance: usersTable.neonCardBalance });
+
+    if (!deducted) {
+      res.status(402).json({ error: `Insufficient Neon Cards. This gift costs ${cost} 🃏.` });
+      return;
+    }
+  }
+
+  // NC deducted — now update affection (both succeed or NC deduction failed before this)
   const newAP = conv.affectionPoints + giftReaction.ap;
   const newLevel = newAP >= 100 ? 3 : newAP >= 40 ? 2 : 1;
 
@@ -443,13 +452,6 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
       affectionLevel: newLevel,
     })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
-
-  // Deduct neon cards
-  if (cost > 0) {
-    await db.update(usersTable).set({
-      neonCardBalance: sql`neon_card_balance - ${cost}`,
-    }).where(eq(usersTable.id, req.telegramUserId));
-  }
 
   await db.insert(transactionsTable).values({
     telegramId: req.telegramUserId,

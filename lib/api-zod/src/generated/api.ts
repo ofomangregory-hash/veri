@@ -36,7 +36,8 @@ export const GetMeResponse = zod.object({
   "avatarUrl": zod.string().nullish(),
   "referralCode": zod.string().nullish(),
   "isAdmin": zod.boolean().optional(),
-  "staffPrivileges": zod.string().nullish()
+  "staffPrivileges": zod.string().nullish(),
+  "lastDailyClaim": zod.string().nullish()
 })
 
 

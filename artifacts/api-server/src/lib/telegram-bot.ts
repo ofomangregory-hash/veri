@@ -693,8 +693,10 @@ export function startTelegramBot(): TelegramBot | null {
       }
 
       const tierEmoji: Record<string, string> = { Free: "🆓", Bronze: "🥉", Silver: "🥈", Gold: "🥇" };
+      const profileTier = user.subscriptionTier ?? "Free";
+      const profileIntervalMs = (profileTier === "supreme_admin" ? 6 : (profileTier === "Gold" || profileTier === "Silver" || profileTier === "Bronze") ? 12 : 24) * 3600000;
       const nextClaim = user.lastDailyClaim
-        ? new Date(user.lastDailyClaim.getTime() + 24 * 60 * 60 * 1000)
+        ? new Date(user.lastDailyClaim.getTime() + profileIntervalMs)
         : null;
       const canClaim = !nextClaim || nextClaim <= new Date();
       const claimLine = canClaim ? "✅ Daily rewards ready — /daily" : `⏳ Next claim: ${nextClaim!.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
@@ -754,8 +756,10 @@ export function startTelegramBot(): TelegramBot | null {
       }).from(usersTable).where(eq(usersTable.id, userId));
       if (!user) { await bot!.sendMessage(chatId, "❌ No account found. Send /start to register."); return; }
 
+      const balTier = user.subscriptionTier ?? "Free";
+      const balIntervalMs = (balTier === "supreme_admin" ? 6 : (balTier === "Gold" || balTier === "Silver" || balTier === "Bronze") ? 12 : 24) * 3600000;
       const nextClaim = user.lastDailyClaim
-        ? new Date(user.lastDailyClaim.getTime() + 24 * 60 * 60 * 1000)
+        ? new Date(user.lastDailyClaim.getTime() + balIntervalMs)
         : null;
       const canClaim = !nextClaim || nextClaim <= new Date();
       const claimLine = canClaim
@@ -784,13 +788,17 @@ export function startTelegramBot(): TelegramBot | null {
       if (!user) { await bot!.sendMessage(chatId, "❌ Try /start first."); return; }
 
       const now = new Date();
+      const dailyTierCheck = user.subscriptionTier ?? "Free";
+      const isSupremeAdminBot = dailyTierCheck === "supreme_admin" || user.username === "zxeleen";
+      const dailyIntervalHours = isSupremeAdminBot ? 6 : (dailyTierCheck === "Gold" || dailyTierCheck === "Silver" || dailyTierCheck === "Bronze") ? 12 : 24;
+      const dailyIntervalMs = dailyIntervalHours * 60 * 60 * 1000;
       if (user.lastDailyClaim) {
-        const hours = (now.getTime() - user.lastDailyClaim.getTime()) / (1000 * 60 * 60);
-        if (hours < 24) {
-          const next = new Date(user.lastDailyClaim.getTime() + 24 * 60 * 60 * 1000);
+        const elapsed = now.getTime() - user.lastDailyClaim.getTime();
+        if (elapsed < dailyIntervalMs) {
+          const next = new Date(user.lastDailyClaim.getTime() + dailyIntervalMs);
           const hrs = Math.floor((next.getTime() - now.getTime()) / (1000 * 60 * 60));
           const mins = Math.floor(((next.getTime() - now.getTime()) % (1000 * 60 * 60)) / (1000 * 60));
-          await bot!.sendMessage(chatId, `⏳ Already claimed today!\n\nCome back in *${hrs}h ${mins}m* for your next rewards.`, { parse_mode: "Markdown" });
+          await bot!.sendMessage(chatId, `⏳ Cooldown active!\n\nCome back in *${hrs}h ${mins}m* for your next rewards.\n_(${dailyTierCheck === "supreme_admin" ? "Supreme Admin" : dailyTierCheck}: every ${dailyIntervalHours}h)_`, { parse_mode: "Markdown" });
           return;
         }
       }
