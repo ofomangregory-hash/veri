@@ -22,9 +22,6 @@ declare global {
 const SUPREME_ADMIN_USERNAME = "zxeleen";
 const SUPREME_ADMIN_ID = "8704633862";
 
-// Cache users already granted supreme_admin so we skip re-running every request
-const promotedSupremeAdmins = new Set<string>();
-
 function generateReferralCode(): string {
   return crypto.randomBytes(6).toString("hex");
 }
@@ -119,6 +116,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
 
     // ── STEP 1: Core login upsert — must succeed for login to work ────────────
     // Only update safe fields on conflict; NEVER block login on privilege logic.
+    // NEVER overwrite subscription_tier or staff_privileges on login.
     const referralCode = generateReferralCode();
     const startParam = validated.start_param;
     let referredBy: string | undefined;
@@ -153,15 +151,19 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
           .maybeSingle();
 
         if (restriction?.is_banned) {
-          res.status(403).json({ error: "You have been banned. Contact support.", banned: true });
+          res.status(403).json({ error: "You have been banned from Z-Fantasy. Contact support.", banned: true });
           return;
         }
 
         if (restriction?.is_blocked && restriction.block_expires_at) {
           const expiresAt = new Date(restriction.block_expires_at as string);
           if (expiresAt > new Date()) {
+            const diffMs = expiresAt.getTime() - Date.now();
+            const diffHours = Math.ceil(diffMs / 3600000);
+            const diffDays = Math.ceil(diffMs / 86400000);
+            const timeLeft = diffDays > 1 ? `${diffDays} days` : `${diffHours} hours`;
             res.status(403).json({
-              error: `You are temporarily blocked until ${expiresAt.toLocaleString()}.`,
+              error: `You are temporarily blocked. Try again in ${timeLeft}.`,
               blocked: true,
               expiresAt: expiresAt.toISOString(),
             });
@@ -173,56 +175,44 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       }
     }
 
-    // ── STEP 2: Grant supreme admin tier — non-blocking, never fails login ────
-    // Only runs once per server process per user (cached in promotedSupremeAdmins)
-    if ((isUsernameSupreme || isIdSupreme) && !promotedSupremeAdmins.has(userId)) {
-      // Update local Postgres
-      try {
-        await db.update(usersTable)
-          .set({ subscriptionTier: "supreme_admin", staffPrivileges: "full_admin" })
-          .where(eq(usersTable.id, userId));
-        promotedSupremeAdmins.add(userId);
-      } catch (err) {
-        logger.warn({ err }, "Failed to grant supreme admin privileges in local DB — login continues");
-      }
-
-      // Update Supabase directly (uses telegram_id column, staff_privileges as boolean)
-      if (supabase) {
-        try {
-          const { error: supErr } = await supabase
-            .from("users")
-            .update({ subscription_tier: "supreme_admin", staff_privileges: true })
-            .eq("telegram_id", userId);
-          if (supErr) {
-            logger.warn({
-              code: supErr.code,
-              message: supErr.message,
-              details: supErr.details,
-              hint: supErr.hint,
-            }, "Failed to grant supreme admin privileges in Supabase — login continues");
-          } else {
-            promotedSupremeAdmins.add(userId);
-          }
-        } catch (err) {
-          logger.warn({ err }, "Supabase unreachable when granting supreme admin — login continues");
-        }
-      }
+    // ── STEP 2: Load staffPrivileges and subscription tier from DB (non-blocking, best-effort) ──
+    // Read existing values — never overwrite subscription_tier or staff_privileges during login.
+    try {
+      const [existingUser] = await db
+        .select({ staffPrivileges: usersTable.staffPrivileges, subscriptionTier: usersTable.subscriptionTier })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId));
+      req.staffPrivileges = existingUser?.staffPrivileges ?? null;
+      if (req.staffPrivileges === "full_admin") req.isAdmin = true;
+      // If the stored tier is supreme_admin, honour it
+      if (existingUser?.subscriptionTier === "supreme_admin") req.isAdmin = true;
+    } catch {
+      req.staffPrivileges = null;
     }
 
-    // ── STEP 3: Load staffPrivileges from DB (non-blocking, best-effort) ──────
-    if (!isUsernameSupreme) {
+    // ── STEP 3: Load supplemental data from Supabase (non-blocking) ──────────
+    // Read subscription_tier and staff_privileges from Supabase, use as-is.
+    if (supabase && !req.isAdmin) {
       try {
-        const [existingUser] = await db
-          .select({ staffPrivileges: usersTable.staffPrivileges })
-          .from(usersTable)
-          .where(eq(usersTable.id, userId));
-        req.staffPrivileges = existingUser?.staffPrivileges ?? null;
-        if (req.staffPrivileges === "full_admin") req.isAdmin = true;
-      } catch {
-        req.staffPrivileges = null;
+        const { data: supUser } = await supabase
+          .from("users")
+          .select("subscription_tier, staff_privileges")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (supUser) {
+          const supTier = supUser.subscription_tier as string | null;
+          const supPriv = supUser.staff_privileges;
+          if (supTier === "supreme_admin" || supPriv === true || supPriv === "full_admin") {
+            req.isAdmin = true;
+          }
+          if (!req.staffPrivileges && (supPriv === "limited_admin" || supPriv === true)) {
+            req.staffPrivileges = supPriv === true ? "full_admin" : String(supPriv);
+          }
+        }
+      } catch (err) {
+        logger.warn({ err }, "Supabase supplemental read failed — login continues");
       }
-    } else {
-      req.staffPrivileges = "full_admin";
     }
 
     // ── STEP 4: Handle referral bonus (non-blocking) ───────────────────────────

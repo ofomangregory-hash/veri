@@ -265,4 +265,23 @@ router.get("/config/premium-tiers", async (_req, res): Promise<void> => {
   res.json(result);
 });
 
+// GET /economy-config — public, returns daily claim rewards per tier for frontend display
+router.get("/economy-config", async (_req, res): Promise<void> => {
+  const eco = await getEconomyConfig();
+  res.json({
+    daily: {
+      Free:   { tickets: eco.dailyClaimFreeTickets,   nc: eco.dailyClaimFreeNc },
+      Bronze: { tickets: eco.dailyClaimBronzeTickets, nc: eco.dailyClaimBronzeNc },
+      Silver: { tickets: eco.dailyClaimSilverTickets, nc: eco.dailyClaimSilverNc },
+      Gold:   { tickets: eco.dailyClaimGoldTickets,   nc: eco.dailyClaimGoldNc },
+    },
+    msgCost:      eco.msgCostTickets,
+    selfieCost:   eco.selfieCostNc,
+    creationCost: eco.creationCostNc,
+    giftSmall:    eco.giftSmallNc,
+    giftMedium:   eco.giftMediumNc,
+    giftLarge:    eco.giftLargeNc,
+  });
+});
+
 export default router;

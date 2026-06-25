@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, User as UserIcon, Ticket, Copy, Settings, ShieldAlert, Headphones,
@@ -68,6 +68,31 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
   const [nsfwOptimistic, setNsfwOptimistic] = useState<boolean | null>(null);
   const [editingNickname, setEditingNickname] = useState(false);
   const [nicknameInput, setNicknameInput] = useState("");
+
+  interface DailyReward { tickets: number; nc: number }
+  const [dailyRewards, setDailyRewards] = useState<Record<string, DailyReward>>({
+    Free:   { tickets: 30, nc: 15 },
+    Bronze: { tickets: 50, nc: 25 },
+    Silver: { tickets: 75, nc: 37 },
+    Gold:   { tickets: 100, nc: 56 },
+  });
+
+  const fetchEcoConfig = useCallback(async () => {
+    try {
+      const auth = window.Telegram?.WebApp?.initData
+        ? `Bearer ${window.Telegram.WebApp.initData}`
+        : "Bearer mock_init_data_for_dev";
+      const res = await fetch("/api/economy-config", { headers: { Authorization: auth } });
+      if (res.ok) {
+        const data = await res.json() as { daily?: Record<string, DailyReward> };
+        if (data.daily) setDailyRewards(data.daily);
+      }
+    } catch { /* keep defaults */ }
+  }, []);
+
+  useEffect(() => {
+    fetchEcoConfig();
+  }, [fetchEcoConfig]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -335,7 +360,10 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
                   <Ticket className="text-accent" />
                   <span className="flex-1 font-medium">Claim Daily Tickets</span>
                   <span className="text-xs text-muted-foreground">
-                    {tier === "Gold" ? "+100 🎟️ +56 🃏" : tier === "Silver" ? "+75 🎟️ +37 🃏" : tier === "Bronze" ? "+50 🎟️ +25 🃏" : "+30 🎟️ +15 🃏"}
+                    {(() => {
+                      const r = dailyRewards[tier] ?? dailyRewards.Free;
+                      return `+${r?.tickets ?? 30} 🎟️ +${r?.nc ?? 15} 🃏`;
+                    })()}
                   </span>
                 </button>
                 <button

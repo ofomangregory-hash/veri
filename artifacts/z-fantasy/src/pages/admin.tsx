@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { CharacterWizard } from "@/components/CharacterWizard";
 
-type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "blb";
+type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb";
 
 interface SysConfig { key: string; value: unknown; updatedAt: string }
 
@@ -75,7 +75,7 @@ export function Admin() {
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
-    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "earnings", "blb"]
+    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb"]
     : ["stats", "users", "characters"];
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
@@ -438,7 +438,7 @@ export function Admin() {
   }, [earningsFilter]);
 
   useEffect(() => {
-    if (activeTab === "earnings") fetchEarnings();
+    if (activeTab === "earnings" || activeTab === "transactions") fetchEarnings();
   }, [activeTab]);
 
   const fetchBlbUsers = useCallback(async (search = "") => {
@@ -502,7 +502,8 @@ export function Admin() {
     pricing: "💰 Pricing",
     premium: "⭐ Premium",
     broadcast: "📢 Broadcast",
-    earnings: "💵 Earnings",
+    transactions: "📋 Transactions",
+    earnings: "⭐ Earnings",
     blb: "🚫 B.L.B",
   };
 
@@ -580,17 +581,23 @@ export function Admin() {
             )}
           </div>
 
-          {/* Extra stat boxes — Earnings + BLB */}
+          {/* Extra stat boxes — Earnings + Transactions + BLB */}
           {isGodMode && (
             <div className="grid grid-cols-2 gap-4">
               <button onClick={() => setActiveTab("earnings")}
+                className="p-4 rounded-xl bg-card border border-border hover:border-yellow-500/60 transition-all text-left w-full cursor-pointer active:scale-95">
+                <TrendingUp className="text-yellow-400 mb-2" size={20} />
+                <div className="text-lg font-bold text-yellow-400">⭐ Earnings</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Stars Revenue →</div>
+              </button>
+              <button onClick={() => setActiveTab("transactions")}
                 className="p-4 rounded-xl bg-card border border-border hover:border-green-500/60 transition-all text-left w-full cursor-pointer active:scale-95">
-                <TrendingUp className="text-green-400 mb-2" size={20} />
-                <div className="text-lg font-bold text-green-400">💵 Earnings</div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Transaction Log →</div>
+                <CreditCard className="text-green-400 mb-2" size={20} />
+                <div className="text-lg font-bold text-green-400">📋 Transactions</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Full Log →</div>
               </button>
               <button onClick={() => setActiveTab("blb")}
-                className="p-4 rounded-xl bg-card border border-border hover:border-red-500/60 transition-all text-left w-full cursor-pointer active:scale-95">
+                className="p-4 rounded-xl bg-card border border-border hover:border-red-500/60 transition-all text-left w-full cursor-pointer active:scale-95 col-span-2">
                 <Ban className="text-red-400 mb-2" size={20} />
                 <div className="text-lg font-bold text-red-400">🚫 B.L.B</div>
                 <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Ban · Block · Limit →</div>
@@ -1110,30 +1117,120 @@ export function Admin() {
         </div>
       )}
 
-      {/* ── Earnings ── */}
+      {/* ── Earnings (Stars Only) ── */}
       {activeTab === "earnings" && isGodMode && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="text-green-400" size={20} />
-            <h2 className="font-bold uppercase tracking-wider text-green-400">Earnings</h2>
+            <TrendingUp className="text-yellow-400" size={20} />
+            <h2 className="font-bold uppercase tracking-wider text-yellow-400">⭐ Earnings — Stars Revenue</h2>
+          </div>
+
+          {earningsData && (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-3 rounded-xl bg-card border border-yellow-500/30 text-center">
+                  <div className="text-base font-bold text-yellow-400">⭐ {earningsData.totals.allTime.stars}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase mt-0.5">All-Time Stars</div>
+                  <div className="text-[10px] text-muted-foreground">{earningsData.totals.allTime.txCount} payments</div>
+                </div>
+                <div className="p-3 rounded-xl bg-card border border-accent/30 text-center">
+                  <div className="text-base font-bold text-accent">⭐ {earningsData.totals.month.stars}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase mt-0.5">This Month</div>
+                  <div className="text-[10px] text-muted-foreground">{earningsData.totals.month.txCount} payments</div>
+                </div>
+                <div className="p-3 rounded-xl bg-card border border-primary/30 text-center">
+                  <div className="text-base font-bold text-primary">⭐ {earningsData.totals.today.stars}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase mt-0.5">Today</div>
+                  <div className="text-[10px] text-muted-foreground">{earningsData.totals.today.txCount} payments</div>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              placeholder="User ID filter"
+              value={earningsFilter.userId}
+              onChange={e => setEarningsFilter(f => ({ ...f, userId: e.target.value }))}
+              className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground"
+            />
+            <select
+              value={earningsFilter.type}
+              onChange={e => setEarningsFilter(f => ({ ...f, type: e.target.value }))}
+              className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground bg-card"
+            >
+              <option value="">All Star Types</option>
+              <option value="subscription">Subscription</option>
+              <option value="neon_card_purchase">Neon Card Purchase</option>
+              <option value="ticket_purchase">Ticket Purchase</option>
+            </select>
+            <input type="date" value={earningsFilter.dateFrom}
+              onChange={e => setEarningsFilter(f => ({ ...f, dateFrom: e.target.value }))}
+              className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground"
+            />
+            <input type="date" value={earningsFilter.dateTo}
+              onChange={e => setEarningsFilter(f => ({ ...f, dateTo: e.target.value }))}
+              className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground"
+            />
+          </div>
+          <button onClick={fetchEarnings} disabled={earningsLoading}
+            className="w-full py-2 rounded-xl bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 text-xs font-bold uppercase disabled:opacity-50">
+            {earningsLoading ? "Loading…" : "🔍 Apply Filters"}
+          </button>
+
+          <div className="space-y-2 max-h-[55vh] overflow-y-auto">
+            {earningsLoading && <div className="text-center text-xs text-muted-foreground py-8">Loading…</div>}
+            {earningsData?.items.filter(t => (t.starAmount ?? 0) > 0).map(t => (
+              <div key={t.transactionId} className="p-3 rounded-xl bg-card border border-yellow-500/20 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold truncate">
+                    {t.username ? `@${t.username}` : `ID: ${t.telegramId}`}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                    {t.actionType.replace(/_/g, " ")}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {new Date(t.timestamp).toLocaleString()}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-bold text-yellow-400">⭐ {t.starAmount}</div>
+                  {t.ticketAmount > 0 && <div className="text-[10px] text-accent mt-0.5">+{t.ticketAmount} 🎟</div>}
+                  {(t.neonCardAmount ?? 0) > 0 && <div className="text-[10px] text-primary mt-0.5">+{t.neonCardAmount} 🃏</div>}
+                </div>
+              </div>
+            ))}
+            {earningsData && earningsData.items.filter(t => (t.starAmount ?? 0) > 0).length === 0 && !earningsLoading && (
+              <div className="text-center text-xs text-muted-foreground py-8">No Stars earnings found</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Transactions (All) ── */}
+      {activeTab === "transactions" && isGodMode && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <CreditCard className="text-green-400" size={20} />
+            <h2 className="font-bold uppercase tracking-wider text-green-400">📋 Transactions — Full Log</h2>
           </div>
 
           {earningsData && (
             <div className="grid grid-cols-3 gap-2">
               <div className="p-3 rounded-xl bg-card border border-green-500/30 text-center">
-                <div className="text-base font-bold text-green-400">⭐ {earningsData.totals.allTime.stars}</div>
+                <div className="text-base font-bold text-green-400">{earningsData.totals.allTime.txCount}</div>
                 <div className="text-[10px] text-muted-foreground uppercase mt-0.5">All-Time</div>
-                <div className="text-[10px] text-muted-foreground">{earningsData.totals.allTime.txCount} txns</div>
+                <div className="text-[10px] text-muted-foreground">⭐ {earningsData.totals.allTime.stars}</div>
               </div>
               <div className="p-3 rounded-xl bg-card border border-accent/30 text-center">
-                <div className="text-base font-bold text-accent">⭐ {earningsData.totals.month.stars}</div>
+                <div className="text-base font-bold text-accent">{earningsData.totals.month.txCount}</div>
                 <div className="text-[10px] text-muted-foreground uppercase mt-0.5">This Month</div>
-                <div className="text-[10px] text-muted-foreground">{earningsData.totals.month.txCount} txns</div>
+                <div className="text-[10px] text-muted-foreground">⭐ {earningsData.totals.month.stars}</div>
               </div>
               <div className="p-3 rounded-xl bg-card border border-primary/30 text-center">
-                <div className="text-base font-bold text-primary">⭐ {earningsData.totals.today.stars}</div>
+                <div className="text-base font-bold text-primary">{earningsData.totals.today.txCount}</div>
                 <div className="text-[10px] text-muted-foreground uppercase mt-0.5">Today</div>
-                <div className="text-[10px] text-muted-foreground">{earningsData.totals.today.txCount} txns</div>
+                <div className="text-[10px] text-muted-foreground">⭐ {earningsData.totals.today.stars}</div>
               </div>
             </div>
           )}

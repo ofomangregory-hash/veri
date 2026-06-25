@@ -353,7 +353,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     });
     matched = true;
   } catch (err) {
-    logger.warn({ err }, "Perchance generation failed — using avatar fallback");
+    logger.warn({ err }, "Image generation failed — using avatar fallback");
     imageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre ?? "Fantasy");
     matched = false;
   }
@@ -368,6 +368,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     telegramId: req.telegramUserId,
     actionType: "selfie_request",
     ticketAmount: 0,
+    neonCardAmount: SELFIE_NEON_COST > 0 ? -SELFIE_NEON_COST : 0,
   });
 
   const [refreshedUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
@@ -453,7 +454,8 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
   await db.insert(transactionsTable).values({
     telegramId: req.telegramUserId,
     actionType: `gift_${parsed.data.giftType}`,
-    ticketAmount: -cost,
+    ticketAmount: 0,
+    neonCardAmount: cost > 0 ? -cost : 0,
   });
 
   const [refreshedUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));

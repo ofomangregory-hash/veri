@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams, Link } from "wouter";
-import { useGetConversation, useSendMessage, useSendGift, useRequestSelfie, GiftInputGiftType } from "@workspace/api-client-react";
+import { useGetConversation, useSendMessage, useSendGift, useRequestSelfie, useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
 import { Send, Gift, Camera, ChevronLeft, Heart, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +18,7 @@ export function ChatDetail() {
   const { data: conv, isLoading, refetch } = useGetConversation(id!, {
     query: { enabled: !!id, queryKey: ['chat', id] }
   });
+  const { data: me } = useGetMe();
 
   const sendMsg = useSendMessage();
   const sendGift = useSendGift();
@@ -48,7 +49,15 @@ export function ChatDetail() {
         toast({ title: "Gift Sent!", description: `+${res.affectionPoints} AP. ${res.aiReaction}` });
         refetch();
       },
-      onError: () => toast({ title: "Gift Failed", description: "Not enough tickets", variant: "destructive" })
+      onError: (err: unknown) => {
+        const msg = (err as { message?: string })?.message ?? "";
+        const isLowBalance = msg.toLowerCase().includes("insufficient") || msg.toLowerCase().includes("neon");
+        toast({
+          title: "Gift Failed",
+          description: isLowBalance ? "Not enough Neon Cards" : "Gift could not be sent",
+          variant: "destructive"
+        });
+      }
     });
   };
 
@@ -70,6 +79,9 @@ export function ChatDetail() {
       onError: () => toast({ title: "Request Failed", variant: "destructive" })
     });
   };
+
+  const tier = me?.subscriptionTier ?? "Free";
+  const isGold = tier === "Gold";
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
@@ -215,23 +227,30 @@ export function ChatDetail() {
             exit={{ y: "100%" }}
             className="absolute bottom-20 left-0 right-0 bg-card/95 backdrop-blur-xl border-t border-primary/30 p-4 z-50 rounded-t-2xl shadow-[0_-10px_30px_rgba(255,0,127,0.15)]"
           >
-            <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4 text-center">Send a Gift</h3>
+            <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-1 text-center">Send a Gift</h3>
+            <p className="text-[10px] text-muted-foreground text-center mb-4">
+              {isGold ? "Gold tier: 50% off all gifts!" : "Costs Neon Cards (🃏)"}
+            </p>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { type: GiftInputGiftType.cyber_cocktail, name: "Cocktail", cost: 10, ap: 5, icon: "🍸" },
-                { type: GiftInputGiftType.neon_bracelet, name: "Bracelet", cost: 25, ap: 15, icon: "⭕" },
-                { type: GiftInputGiftType.secret_key, name: "Secret Key", cost: 50, ap: 35, icon: "🔑" },
-              ].map(gift => (
-                <button
-                  key={gift.type}
-                  onClick={() => handleGift(gift.type)}
-                  className="flex flex-col items-center p-3 rounded-xl border border-border bg-background hover:border-primary hover:box-glow-pink transition-all"
-                >
-                  <span className="text-3xl mb-2 drop-shadow-[0_0_10px_rgba(255,0,127,0.8)]">{gift.icon}</span>
-                  <span className="text-xs font-bold text-white mb-1">{gift.name}</span>
-                  <span className="text-[10px] text-primary">{gift.cost} 🎟️</span>
-                </button>
-              ))}
+                { type: GiftInputGiftType.cyber_cocktail, name: "Cyber Cocktail", cost: 10, costGold: 5, ap: 5, icon: "🍹" },
+                { type: GiftInputGiftType.neon_bracelet, name: "Neon Bracelet", cost: 25, costGold: 12, ap: 15, icon: "💎" },
+                { type: GiftInputGiftType.secret_key, name: "Secret Key", cost: 50, costGold: 25, ap: 35, icon: "🔑" },
+              ].map(gift => {
+                const displayCost = isGold ? gift.costGold : gift.cost;
+                return (
+                  <button
+                    key={gift.type}
+                    onClick={() => handleGift(gift.type)}
+                    className="flex flex-col items-center p-3 rounded-xl border border-border bg-background hover:border-primary hover:box-glow-pink transition-all"
+                  >
+                    <span className="text-3xl mb-2 drop-shadow-[0_0_10px_rgba(255,0,127,0.8)]">{gift.icon}</span>
+                    <span className="text-xs font-bold text-white mb-1">{gift.name}</span>
+                    <span className="text-[10px] text-secondary font-semibold">{displayCost} 🃏</span>
+                    <span className="text-[10px] text-muted-foreground">+{gift.ap} AP</span>
+                  </button>
+                );
+              })}
             </div>
           </motion.div>
         )}

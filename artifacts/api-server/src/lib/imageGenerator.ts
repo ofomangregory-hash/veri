@@ -1,21 +1,20 @@
 import axios from "axios";
-import FormData from "form-data";
 import { logger } from "./logger";
 
 const GENRE_VISUAL_PREFIXES: Record<string, string> = {
-  "Dark Goth":   "gothic cinematic lighting, dark background, pale skin, dark eye makeup, detailed face, highly detailed, 8k uhd,",
+  "Dark Goth":   "gothic cinematic lighting, dark background, pale skin, dark eye makeup, detailed face, highly detailed,",
   "Gothic":      "gothic cinematic lighting, dark atmosphere, detailed face, dramatic shadows, highly detailed,",
   "Anime":       "anime art style, cel shading, detailed anime face, vibrant colors, soft studio lighting, highly detailed,",
   "Vampire":     "dramatic cinematic lighting, pale skin, dark atmosphere, red eyes, detailed face, gothic aesthetic, highly detailed,",
   "Elf":         "fantasy soft lighting, pointed ears, ethereal glow, detailed face, elven features, highly detailed,",
   "Succubus":    "smoldering infernal glow, seductive cinematic lighting, demonic wings, detailed face, dark fantasy atmosphere, highly detailed,",
-  "Sci-Fi":      "futuristic neon lighting, cyberpunk aesthetic, detailed face, high tech environment, 8k uhd,",
-  "Modern":      "natural studio lighting, photorealistic, detailed face, sharp focus, professional photography, 8k uhd,",
+  "Sci-Fi":      "futuristic neon lighting, cyberpunk aesthetic, detailed face, high tech environment,",
+  "Modern":      "natural studio lighting, photorealistic, detailed face, sharp focus, professional photography,",
   "Fantasy":     "magical fantasy lighting, ethereal atmosphere, detailed face, mystical background, highly detailed,",
-  "Cyberpunk":   "neon-drenched cyberpunk lighting, futuristic cityscape, glowing implants, detailed face, 8k uhd,",
+  "Cyberpunk":   "neon-drenched cyberpunk lighting, futuristic cityscape, glowing implants, detailed face,",
 };
 
-const DEFAULT_VISUAL_PREFIX = "cinematic studio lighting, detailed face, sharp focus, highly detailed, 8k uhd,";
+const DEFAULT_VISUAL_PREFIX = "cinematic studio lighting, detailed face, sharp focus, highly detailed,";
 
 export interface GenerateSelfieOptions {
   characterName: string;
@@ -25,6 +24,7 @@ export interface GenerateSelfieOptions {
   imageSeed: string;
   sceneDescription: string;
   avatarUrl?: string | null;
+  nsfwEnabled?: boolean;
 }
 
 export interface GenerateAvatarOptions {
@@ -32,20 +32,10 @@ export interface GenerateAvatarOptions {
   genre: string;
   teaserDescription: string | null | undefined;
   imageSeed: string;
+  nsfwEnabled?: boolean;
 }
 
-export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Promise<string> {
-  return generateCharacterSelfie({
-    characterName: opts.characterName,
-    genre: opts.genre,
-    systemPrompt: "",
-    teaserDescription: opts.teaserDescription,
-    imageSeed: opts.imageSeed,
-    sceneDescription: "close-up portrait, looking at camera, soft studio lighting, high detail",
-  });
-}
-
-function buildPrompt(opts: GenerateSelfieOptions): { fullPrompt: string; negativePrompt: string } {
+function buildPrompt(opts: GenerateSelfieOptions): string {
   const { characterName, genre, teaserDescription, sceneDescription } = opts;
 
   const visualPrefix = GENRE_VISUAL_PREFIXES[genre] ?? DEFAULT_VISUAL_PREFIX;
@@ -62,116 +52,69 @@ function buildPrompt(opts: GenerateSelfieOptions): { fullPrompt: string; negativ
     "portrait, solo, looking at viewer, masterpiece, best quality, ultra-detailed",
   ];
 
-  const fullPrompt = promptParts.join(" ").replace(/\s{2,}/g, " ").trim();
-
-  const negativePrompt = [
-    "blurry, low quality, bad anatomy, extra limbs, mutated hands, poorly drawn face",
-    "bad proportions, deformed, watermark, signature, text, logo, ugly, disfigured",
-    "out of frame, duplicate, cropped, worst quality, jpeg artifacts",
-  ].join(", ");
-
-  return { fullPrompt, negativePrompt };
+  return promptParts.join(" ").replace(/\s{2,}/g, " ").trim();
 }
 
-async function tryHuggingFaceImg2Img(opts: GenerateSelfieOptions & { avatarUrl: string }): Promise<Buffer | null> {
-  const hfToken = process.env.HF_API_TOKEN;
-  if (!hfToken) return null;
-
-  logger.info({ characterName: opts.characterName }, "Attempting HF img2img generation");
-
-  let avatarBuffer: Buffer;
+async function tryPollinations(prompt: string, seed: string, nsfwEnabled: boolean): Promise<string | null> {
   try {
-    const imgRes = await axios.get(opts.avatarUrl, { responseType: "arraybuffer", timeout: 15000 });
-    avatarBuffer = Buffer.from(imgRes.data as ArrayBuffer);
-  } catch (err) {
-    logger.warn({ err }, "HF img2img: failed to download avatar — skipping");
-    return null;
-  }
+    const encodedPrompt = encodeURIComponent(prompt);
+    const seedNum = parseInt(seed, 10) || Math.floor(Math.random() * 9999999);
 
-  const { fullPrompt, negativePrompt } = buildPrompt(opts);
-  const avatarBase64 = avatarBuffer.toString("base64");
+    let url: string;
+    if (nsfwEnabled) {
+      url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seedNum}&nologo=true&safe=false`;
+    } else {
+      url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seedNum}&nologo=true`;
+    }
 
-  try {
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/stablediffusionapi/pony-diffusion-v6-xl",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${hfToken}`,
-          "Content-Type": "application/json",
-          "X-Use-Cache": "false",
-        },
-        body: JSON.stringify({
-          inputs: avatarBase64,
-          parameters: {
-            prompt: fullPrompt,
-            negative_prompt: negativePrompt,
-            strength: 0.65,
-            num_inference_steps: 30,
-            guidance_scale: 7,
-          },
-        }),
-        signal: AbortSignal.timeout(120000),
+    logger.info({ prompt: prompt.slice(0, 80), nsfwEnabled }, "Attempting Pollinations image generation");
+
+    const response = await axios.get(url, {
+      responseType: "arraybuffer",
+      timeout: 45000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Z-Fantasy/1.0)",
+        "Accept": "image/jpeg,image/png,image/*",
       },
-    );
+      validateStatus: (status) => status === 200,
+    });
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      logger.warn({ status: response.status, body: errText.slice(0, 200) }, "HF img2img HTTP error — falling back");
+    if (!response.data || response.data.byteLength < 1000) {
+      logger.warn({ bytes: response.data?.byteLength }, "Pollinations returned too-small image — skipping");
       return null;
     }
 
-    const imageBuffer = Buffer.from(await response.arrayBuffer());
-    logger.info({ characterName: opts.characterName, bytes: imageBuffer.length }, "HF img2img succeeded");
-    return imageBuffer;
+    const buffer = Buffer.from(response.data as ArrayBuffer);
+    const telegraphUrl = await uploadToTelegraph(buffer, `img_${Date.now()}.jpg`);
+    logger.info({ telegraphUrl }, "Pollinations image uploaded to Telegra.ph");
+    return telegraphUrl;
   } catch (err) {
-    logger.warn({ err }, "HF img2img request failed — falling back to Perchance");
+    logger.warn({ err }, "Pollinations generation failed — falling back to Perchance");
     return null;
   }
 }
 
-export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Promise<string> {
-  const { imageSeed } = opts;
-
-  // If avatar URL is provided, try HF img2img first for character consistency
-  if (opts.avatarUrl) {
-    try {
-      const hfBuffer = await tryHuggingFaceImg2Img({ ...opts, avatarUrl: opts.avatarUrl });
-      if (hfBuffer) {
-        const requestId = Math.random().toString(36).slice(2, 16);
-        const telegraphUrl = await uploadToTelegraph(hfBuffer, `selfie_${requestId}.jpg`);
-        logger.info({ telegraphUrl }, "HF img2img selfie uploaded to Telegra.ph");
-        return telegraphUrl;
-      }
-    } catch (err) {
-      logger.warn({ err }, "HF img2img pipeline failed — falling back to Perchance");
-    }
-  }
-
-  // Fallback: Perchance text-to-image
-  const { fullPrompt, negativePrompt } = buildPrompt(opts);
-
-  const requestId = Math.random().toString(36).slice(2, 16);
-
-  const params = new URLSearchParams();
-  params.set("prompt",             encodeURIComponent(fullPrompt));
-  params.set("negativePrompt",     encodeURIComponent(negativePrompt));
-  params.set("seed",               imageSeed);
-  params.set("resolution",         "512x768");
-  params.set("guidanceScale",      "7");
-  params.set("numInferenceSteps",  "25");
-  params.set("imageFormat",        "jpeg");
-  params.set("channel",            "ai-text-to-image-generator");
-  params.set("subChannel",         "public");
-  params.set("requestId",          requestId);
-
-  const apiUrl = `https://image-generation.perchance.org/api/generateImage?${params.toString()}`;
-
-  logger.info({ characterName: opts.characterName, genre: opts.genre, imageSeed }, "Requesting Perchance image generation");
-
-  let perchanceImageUrl: string;
-
+async function tryPerchance(prompt: string, seed: string): Promise<string | null> {
   try {
+    const negativePrompt = "blurry, low quality, bad anatomy, extra limbs, mutated hands, poorly drawn face, bad proportions, deformed, watermark, signature, text, logo, ugly, disfigured, out of frame, duplicate, cropped, worst quality, jpeg artifacts";
+
+    const requestId = Math.random().toString(36).slice(2, 16);
+    const params = new URLSearchParams();
+    params.set("prompt",            encodeURIComponent(prompt));
+    params.set("negativePrompt",    encodeURIComponent(negativePrompt));
+    params.set("seed",              seed);
+    params.set("resolution",        "512x768");
+    params.set("guidanceScale",     "7");
+    params.set("numInferenceSteps", "25");
+    params.set("imageFormat",       "jpeg");
+    params.set("channel",           "ai-text-to-image-generator");
+    params.set("subChannel",        "public");
+    params.set("requestId",         requestId);
+
+    const apiUrl = `https://image-generation.perchance.org/api/generateImage?${params.toString()}`;
+
+    logger.info({ prompt: prompt.slice(0, 80), seed }, "Attempting Perchance image generation");
+
     const genResponse = await axios.get<{ imageUrl?: string }>(apiUrl, {
       timeout: 90000,
       headers: {
@@ -181,35 +124,26 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
     });
 
     if (!genResponse.data?.imageUrl) {
-      throw new Error("Perchance API did not return imageUrl");
+      logger.warn("Perchance API did not return imageUrl");
+      return null;
     }
 
-    perchanceImageUrl = genResponse.data.imageUrl;
-  } catch (err) {
-    logger.error({ err }, "Perchance generation failed");
-    throw new Error("AI image generation failed — Perchance API unavailable");
-  }
-
-  logger.info({ perchanceImageUrl }, "Perchance returned image, downloading...");
-
-  let imageBuffer: Buffer;
-  try {
-    const imgResponse = await axios.get(perchanceImageUrl, {
+    const imgResponse = await axios.get(genResponse.data.imageUrl, {
       responseType: "arraybuffer",
       timeout: 30000,
     });
-    imageBuffer = Buffer.from(imgResponse.data as ArrayBuffer);
+    const buffer = Buffer.from(imgResponse.data as ArrayBuffer);
+    const telegraphUrl = await uploadToTelegraph(buffer, `selfie_${requestId}.jpg`);
+    logger.info({ telegraphUrl }, "Perchance image uploaded to Telegra.ph");
+    return telegraphUrl;
   } catch (err) {
-    logger.error({ err, perchanceImageUrl }, "Failed to download Perchance image");
-    throw new Error("Failed to download generated image");
+    logger.warn({ err }, "Perchance generation failed");
+    return null;
   }
-
-  const telegraphUrl = await uploadToTelegraph(imageBuffer, `selfie_${requestId}.jpg`);
-  logger.info({ telegraphUrl }, "Selfie uploaded to Telegra.ph");
-  return telegraphUrl;
 }
 
 async function uploadToTelegraph(imageBuffer: Buffer, filename: string): Promise<string> {
+  const FormData = (await import("form-data")).default;
   const form = new FormData();
   form.append("file", imageBuffer, {
     filename,
@@ -230,4 +164,32 @@ async function uploadToTelegraph(imageBuffer: Buffer, filename: string): Promise
   }
 
   return `https://telegra.ph${response.data[0].src}`;
+}
+
+export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Promise<string> {
+  return generateCharacterSelfie({
+    characterName: opts.characterName,
+    genre: opts.genre,
+    systemPrompt: "",
+    teaserDescription: opts.teaserDescription,
+    imageSeed: opts.imageSeed,
+    sceneDescription: "close-up portrait, looking at camera, soft studio lighting, high detail",
+    nsfwEnabled: opts.nsfwEnabled ?? false,
+  });
+}
+
+export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Promise<string> {
+  const { imageSeed, nsfwEnabled = false } = opts;
+  const prompt = buildPrompt(opts);
+
+  // Primary: Pollinations.ai
+  const pollinationsUrl = await tryPollinations(prompt, imageSeed, nsfwEnabled);
+  if (pollinationsUrl) return pollinationsUrl;
+
+  // Fallback: Perchance text-to-image
+  const perchanceUrl = await tryPerchance(prompt, imageSeed);
+  if (perchanceUrl) return perchanceUrl;
+
+  // Last resort: throw so callers can use their own fallback (e.g. avatar_url)
+  throw new Error("All image generation methods failed");
 }
