@@ -6,6 +6,7 @@ import { generateAIReply } from "./openrouter";
 import { generateCharacterAvatar } from "./imageGenerator";
 import { createSupabaseCharacter } from "./supabaseCharacters";
 import { getPrice } from "./supabasePrices";
+import { checkFeatureBlocked } from "./featureRestrictions";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Trait { type: string; name: string; description: string }
@@ -787,6 +788,12 @@ export function startTelegramBot(): TelegramBot | null {
       const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
       if (!user) { await bot!.sendMessage(chatId, "❌ Try /start first."); return; }
 
+      const dailyClaimBlocked = await checkFeatureBlocked(userId, "daily_claim");
+      if (dailyClaimBlocked) {
+        await bot!.sendMessage(chatId, "⛔ Daily claim has been restricted on your account. Contact support.");
+        return;
+      }
+
       const now = new Date();
       const dailyTierCheck = user.subscriptionTier ?? "Free";
       const isSupremeAdminBot = dailyTierCheck === "supreme_admin" || user.username === "zxeleen";
@@ -960,6 +967,12 @@ export function startTelegramBot(): TelegramBot | null {
       if (!isAdminUser) {
         const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
         if (!user) { await bot!.sendMessage(chatId, "❌ Try /start first."); return; }
+
+        const creationBlocked = await checkFeatureBlocked(userId, "character_creation");
+        if (creationBlocked) {
+          await bot!.sendMessage(chatId, "⛔ Character creation has been restricted on your account. Contact support.");
+          return;
+        }
 
         const [slotRow] = await db.select({ c: count() }).from(charactersTable)
           .where(eq(charactersTable.creatorId, userId));

@@ -7,6 +7,7 @@ import {
   UnlockMediaResponse,
 } from "@workspace/api-zod";
 import { authMiddleware } from "../middlewares/auth";
+import { checkFeatureBlocked, RESTRICTION_ERROR } from "../lib/featureRestrictions";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
@@ -48,6 +49,11 @@ router.post("/media/unlock", async (req, res): Promise<void> => {
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
+  }
+
+  if (!req.isAdmin) {
+    const vaultBlocked = await checkFeatureBlocked(req.telegramUserId, "vault_unlock");
+    if (vaultBlocked) { res.status(403).json({ error: RESTRICTION_ERROR }); return; }
   }
 
   if (!req.isAdmin && user.neonCardBalance < VAULT_UNLOCK_NEON_COST) {
