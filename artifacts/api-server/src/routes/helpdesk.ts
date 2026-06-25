@@ -14,6 +14,7 @@ router.use(authMiddleware);
 const CreateTicketBody = z.object({
   subject: z.string().min(1).max(200),
   message: z.string().min(1).max(2000),
+  type: z.enum(["dispute", "complaint", "support"]).optional().default("support"),
 });
 
 const UpdateTicketBody = z.object({
@@ -28,7 +29,13 @@ router.post("/helpdesk/tickets", async (req, res): Promise<void> => {
   const userId = String(req.telegramUserId);
   const username = (req as typeof req & { telegramUsername?: string }).telegramUsername ?? null;
 
-  const ticket = await createHelpdeskTicket(userId, username, parsed.data.subject, parsed.data.message);
+  const ticket = await createHelpdeskTicket(
+    userId,
+    username,
+    parsed.data.subject,
+    parsed.data.message,
+    parsed.data.type,
+  );
   if (!ticket) {
     res.status(503).json({ error: "Failed to create ticket. Please try again." });
     return;

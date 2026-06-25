@@ -1,0 +1,71 @@
+Update the customer support and HelpDesk system with the following changes. Do not touch any other files.
+1. Update Customer Support Telegram routing
+
+In HamburgerDrawer.tsx, replace the existing phone numbers with these Telegram usernames:
+
+@zxeelen
+@Zeelen020
+@zeele
+
+Each should open as a Telegram deep link: https://t.me/zxeelen, https://t.me/Zeelen020, https://t.me/zeele
+2. Messages compiled in-app before sending
+
+When a user initiates customer support or submits a ticket/complaint, show an in-app message composer first. The user types their message inside the app before anything is sent externally. Do not open Telegram directly without composing first.
+3. Message format — sent with full user details
+
+When the message is submitted, format it like this before sending to Telegram and saving to Supabase:
+━━━━━━━━━━━━━━━━━━━━━━
+📩 Z-FANTASY Sweet Dreams
+━━━━━━━━━━━━━━━━━━━━━━
+🆔 User ID: {telegram_id}
+👤 Username: {username}
+📧 Ticket Type: {type}
+📅 Submitted: {timestamp}
+━━━━━━━━━━━━━━━━━━━━━━
+💬 Message:
+{user_message}
+━━━━━━━━━━━━━━━━━━━━━━
+4. Duplicate to admin Customer Support panel
+
+Every message submitted through the customer support flow must:
+
+Save to the customer_support_messages table in Supabase with user_id, message (full formatted text), direction: 'inbound', read: false, created_at
+Also save to customer_service_threads — create or update the thread for that user
+Send the formatted message to the selected Telegram account via deep link with the text pre-filled using https://t.me/{username}?text={encodedMessage}
+
+5. All tickets and complaints must include issuer details
+
+In every ticket created in the tickets table, ensure these fields are always populated:
+
+user_id — the telegram_id of the issuer
+type — dispute, complaint, or support
+subject — summary from the user
+status — defaults to 'open'
+opened_by — always 'user'
+
+In the HelpDesk admin view, display the issuer ID and username on every ticket card.
+6. Admin panel tab labels still missing
+
+Fix the admin tab bar so these 3 tabs show their labels visibly:
+
+"Quest Hub"
+"Referrals"
+"HelpDesk"
+
+7. Fix Start Fresh — conversations.ts lines 229 and 806
+
+Immediately before the insert at both lines, add:
+typescriptawait db.update(conversations)
+  .set({ archived: true, updated_at: new Date() })
+  .where(
+    and(
+      eq(conversations.telegram_id, telegramId),
+      eq(conversations.character_id, characterId)
+    )
+  );
+8. Fix getAllQuests, getAllTickets, getPremiumTiers failing
+
+In supabaseQuests.ts, supabaseHelpDesk.ts, supabasePremiumTiers.ts — confirm table names are exactly quests, tickets, premium_tiers. Fix any mismatches.
+9. Fix Start Fresh modal cut off
+
+The "Yes, Fresh Start" button is hidden behind the bottom nav bar. Add enough bottom padding to the modal so both buttons are fully visible on all screen sizes.

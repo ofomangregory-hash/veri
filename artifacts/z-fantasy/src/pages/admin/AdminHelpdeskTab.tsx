@@ -49,8 +49,9 @@ export function AdminHelpdeskTab() {
     setError(null);
     try {
       const qs = filterStatus !== "all" ? `?status=${filterStatus}` : "";
-      const data = await adminApi<Ticket[]>("GET", `/admin/helpdesk/tickets${qs}`);
-      setTickets(Array.isArray(data) ? data : []);
+      const data = await adminApi<{ tickets: Ticket[]; total: number } | Ticket[]>("GET", `/admin/helpdesk/tickets${qs}`);
+      const arr = Array.isArray(data) ? data : ((data as { tickets: Ticket[] }).tickets ?? []);
+      setTickets(arr);
     } catch (e) { setError(String(e)); }
     setLoading(false);
   };
@@ -100,8 +101,9 @@ export function AdminHelpdeskTab() {
                     <span className="font-bold text-sm truncate">{ticket.subject}</span>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_COLOR[ticket.status]}`}>{ticket.status}</span>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    @{ticket.username ?? ticket.userId} · {new Date(ticket.createdAt).toLocaleDateString()}
+                  <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                    <span className="block">🆔 {ticket.userId} · @{ticket.username ?? "—"}</span>
+                    <span className="block">{new Date(ticket.createdAt).toLocaleDateString()}</span>
                   </div>
                 </div>
               </button>

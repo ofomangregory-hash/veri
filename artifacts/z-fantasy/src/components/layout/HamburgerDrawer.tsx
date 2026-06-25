@@ -84,6 +84,11 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
   const [nsfwOptimistic, setNsfwOptimistic] = useState<boolean | null>(null);
   const [editingNickname, setEditingNickname] = useState(false);
   const [nicknameInput, setNicknameInput] = useState("");
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [supportAgent, setSupportAgent] = useState<string>("");
+  const [supportMessage, setSupportMessage] = useState("");
+  const [supportType, setSupportType] = useState<"support" | "complaint" | "dispute">("support");
+  const [supportSending, setSupportSending] = useState(false);
 
   interface DailyReward { tickets: number; nc: number }
   const [dailyRewards, setDailyRewards] = useState<Record<string, DailyReward>>({
@@ -191,6 +196,58 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
     toast({ title: "Conversation Cache Cleared", description: `${keys.length} local entries wiped.` });
   };
 
+  const openSupportModal = (agentUsername: string) => {
+    setSupportAgent(agentUsername);
+    setSupportMessage("");
+    setSupportType("support");
+    setShowSupportModal(true);
+  };
+
+  const handleSupportSubmit = async () => {
+    if (!supportMessage.trim()) return;
+    setSupportSending(true);
+    try {
+      const auth = window.Telegram?.WebApp?.initData
+        ? `Bearer ${window.Telegram.WebApp.initData}`
+        : "Bearer mock_init_data_for_dev";
+      const telegramId = user?.id ?? "unknown";
+      const username = user?.username ?? "—";
+      const timestamp = new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+      const typeLabel = supportType.charAt(0).toUpperCase() + supportType.slice(1);
+
+      const formatted =
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📩 Z-FANTASY Sweet Dreams\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🆔 User ID: ${telegramId}\n` +
+        `👤 Username: @${username}\n` +
+        `📧 Ticket Type: ${typeLabel}\n` +
+        `📅 Submitted: ${timestamp}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💬 Message:\n${supportMessage.trim()}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━`;
+
+      await fetch("/api/cs/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: auth },
+        body: JSON.stringify({ title: `${typeLabel} from @${username}`, initialMessage: formatted }),
+      }).catch(() => {});
+
+      const deepLink = `https://t.me/${supportAgent}?text=${encodeURIComponent(formatted)}`;
+      if (typeof window !== "undefined" && (window as { Telegram?: { WebApp?: { openLink?: (u: string) => void } } }).Telegram?.WebApp?.openLink) {
+        (window as { Telegram?: { WebApp?: { openLink?: (u: string) => void } } }).Telegram!.WebApp!.openLink!(deepLink);
+      } else {
+        window.open(deepLink, "_blank");
+      }
+
+      setShowSupportModal(false);
+      toast({ title: "Message sent!", description: `Connecting you to @${supportAgent}` });
+    } catch {
+      toast({ title: "Failed to send", variant: "destructive" });
+    }
+    setSupportSending(false);
+  };
+
   const unlockedItems = (Array.isArray(vaultItems) ? vaultItems : []).filter(v => v.unlocked);
   const tier = user?.subscriptionTier ?? "Free";
   const claimIntervalMs = (tier === "supreme_admin" ? 6 : (tier === "Bronze" || tier === "Silver" || tier === "Gold") ? 12 : 24) * 3600000;
@@ -231,6 +288,7 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
   );
 
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <>
@@ -621,24 +679,18 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
                     <span className="text-xs text-muted-foreground">Chat with agent →</span>
                   </button>
                   {[
-                    { url: "https://t.me/+2347044291107", label: "Telegram Support 1" },
-                    { url: "https://t.me/+2348012345678", label: "Telegram Support 2" },
-                    { url: "https://t.me/+2349012345678", label: "Telegram Support 3" },
-                  ].map(({ url, label }) => (
+                    { username: "zxeelen",   label: "Agent Zeelen" },
+                    { username: "Zeelen020", label: "Agent Zeelen 020" },
+                    { username: "zeele",     label: "Agent Zeele" },
+                  ].map(({ username, label }) => (
                     <button
-                      key={url}
-                      onClick={() => {
-                        if (typeof window !== "undefined" && (window as { Telegram?: { WebApp?: { openTelegramLink?: (u: string) => void } } }).Telegram?.WebApp?.openTelegramLink) {
-                          (window as { Telegram?: { WebApp?: { openTelegramLink?: (u: string) => void } } }).Telegram!.WebApp!.openTelegramLink!(url);
-                        } else {
-                          window.open(url, "_blank");
-                        }
-                      }}
+                      key={username}
+                      onClick={() => openSupportModal(username)}
                       className="w-full flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-muted transition-colors text-left"
                     >
                       <LifeBuoy className="text-primary" size={18} />
                       <span className="flex-1 font-medium text-sm">{label}</span>
-                      <span className="text-xs text-muted-foreground">Instant support →</span>
+                      <span className="text-xs text-muted-foreground">@{username} →</span>
                     </button>
                   ))}
                 </div>
@@ -648,6 +700,76 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
         </>
       )}
     </AnimatePresence>
+
+    {/* ── Support Message Composer Modal ── */}
+    <AnimatePresence>
+      {showSupportModal && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]"
+            onClick={() => !supportSending && setShowSupportModal(false)}
+          />
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+            className="fixed bottom-0 left-0 right-0 z-[61] bg-card border-t border-border rounded-t-2xl p-6 pb-10 space-y-4 max-h-[85vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-base">📩 Contact @{supportAgent}</h3>
+              <button onClick={() => setShowSupportModal(false)} className="p-1 text-muted-foreground hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex gap-2">
+              {(["support", "complaint", "dispute"] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setSupportType(t)}
+                  className={`flex-1 py-1.5 rounded-lg border text-xs font-bold uppercase tracking-wide transition-all ${
+                    supportType === t
+                      ? "bg-primary/20 border-primary text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/50"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={supportMessage}
+              onChange={e => setSupportMessage(e.target.value)}
+              placeholder="Describe your issue in detail..."
+              rows={5}
+              maxLength={1500}
+              className="w-full rounded-xl bg-background border border-border px-4 py-3 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 resize-none"
+            />
+            <div className="text-[10px] text-muted-foreground text-right">{supportMessage.length}/1500</div>
+
+            <div className="p-3 rounded-lg bg-muted/30 border border-border text-[10px] text-muted-foreground space-y-0.5">
+              <p>🆔 User ID: {user?.id ?? "—"}</p>
+              <p>👤 Username: @{user?.username ?? "—"}</p>
+              <p>This will be included in your message automatically.</p>
+            </div>
+
+            <button
+              onClick={handleSupportSubmit}
+              disabled={supportSending || !supportMessage.trim()}
+              className="w-full h-12 rounded-xl bg-primary text-white font-bold text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {supportSending ? "Sending…" : `Send to @${supportAgent} →`}
+            </button>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+    </>
   );
 }
 

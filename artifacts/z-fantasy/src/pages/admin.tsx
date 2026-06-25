@@ -659,6 +659,9 @@ export function Admin() {
     trigger_words: "🔥 Triggers",
     affection: "💝 Affection",
     active_chats: "💬 Active Chats",
+    quests: "🎯 Quest Hub",
+    referrals: "👥 Referrals",
+    helpdesk: "🎫 HelpDesk",
   };
 
   const filteredUsers = (usersData?.items ?? []).filter(u => {

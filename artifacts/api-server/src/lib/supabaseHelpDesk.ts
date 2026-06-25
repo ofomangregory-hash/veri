@@ -7,7 +7,9 @@ export interface HelpdeskTicket {
   username: string | null;
   subject: string;
   message: string;
+  type: "dispute" | "complaint" | "support";
   status: "open" | "in_progress" | "resolved" | "closed";
+  openedBy: string;
   adminReply: string | null;
   createdAt: string;
   updatedAt: string;
@@ -18,12 +20,21 @@ export async function createHelpdeskTicket(
   username: string | null,
   subject: string,
   message: string,
+  type: "dispute" | "complaint" | "support" = "support",
 ): Promise<HelpdeskTicket | null> {
   if (!supabase) return null;
   try {
     const { data, error } = await supabase
-      .from("helpdesk_messages")
-      .insert({ user_id: userId, username, subject, message, status: "open" })
+      .from("tickets")
+      .insert({
+        user_id: userId,
+        username,
+        subject,
+        message,
+        status: "open",
+        type,
+        opened_by: "user",
+      })
       .select()
       .single();
 
@@ -43,7 +54,7 @@ export async function getUserTickets(userId: string): Promise<HelpdeskTicket[]> 
   if (!supabase) return [];
   try {
     const { data, error } = await supabase
-      .from("helpdesk_messages")
+      .from("tickets")
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
@@ -68,7 +79,7 @@ export async function getAllTickets(
   if (!supabase) return { tickets: [], total: 0 };
   try {
     let query = supabase
-      .from("helpdesk_messages")
+      .from("tickets")
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
@@ -99,7 +110,7 @@ export async function updateTicket(
     if (updates.status !== undefined) payload.status = updates.status;
     if (updates.adminReply !== undefined) payload.admin_reply = updates.adminReply;
 
-    const { error } = await supabase.from("helpdesk_messages").update(payload).eq("id", id);
+    const { error } = await supabase.from("tickets").update(payload).eq("id", id);
     return !error;
   } catch (err) {
     logger.warn({ err }, "updateTicket: failed");
@@ -114,7 +125,9 @@ function mapTicket(row: Record<string, unknown>): HelpdeskTicket {
     username: row.username ? String(row.username) : null,
     subject: String(row.subject ?? ""),
     message: String(row.message ?? ""),
+    type: (row.type ?? "support") as HelpdeskTicket["type"],
     status: (row.status ?? "open") as HelpdeskTicket["status"],
+    openedBy: String(row.opened_by ?? "user"),
     adminReply: row.admin_reply ? String(row.admin_reply) : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at ?? row.created_at),

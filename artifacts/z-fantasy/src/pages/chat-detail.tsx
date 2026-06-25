@@ -367,7 +367,7 @@ export function ChatDetail() {
       {/* New Chat Confirmation Modal */}
       {showNewChatModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-sm mx-auto bg-background rounded-t-2xl border-t border-border p-6 space-y-4 pb-10">
+          <div className="w-full max-w-sm mx-auto bg-background rounded-t-2xl border-t border-border p-6 space-y-4 pb-28">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-lg">🔄 New Chat</h3>
               <button onClick={() => setShowNewChatModal(false)} className="p-1 text-muted-foreground hover:text-white">
