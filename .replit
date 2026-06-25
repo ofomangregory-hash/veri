@@ -29,7 +29,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "API_PORT=8080 PORT=8080 pnpm --filter @workspace/api-server run dev & sleep 3 && API_PORT=8080 PORT=5000 pnpm --filter @workspace/z-fantasy run dev"
+args = "API_PORT=8080 PORT=8080 pnpm --filter @workspace/api-server run dev & sleep 5 && API_PORT=8080 PORT=5000 pnpm --filter @workspace/z-fantasy run dev"
 waitForPort = 5000
 
 [agent]
@@ -51,10 +51,6 @@ externalPort = 4200
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
 
 [[ports]]
 localPort = 8081
