@@ -74,9 +74,9 @@ async function tryPollinations(prompt: string, seed: string, nsfwEnabled: boolea
 
     const response = await axios.get(url, {
       responseType: "arraybuffer",
-      timeout: 45000,
+      timeout: 15000,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Z-Fantasy/1.0)",
+        "User-Agent": "Mozilla/5.0",
         "Accept": "image/jpeg,image/png,image/*",
       },
       validateStatus: (status) => status === 200,
@@ -92,7 +92,7 @@ async function tryPollinations(prompt: string, seed: string, nsfwEnabled: boolea
     logger.info({ telegraphUrl }, "Pollinations image uploaded to Telegra.ph");
     return telegraphUrl;
   } catch (err) {
-    logger.warn({ err }, "Pollinations generation failed — falling back to Perchance");
+    logger.warn({ message: (err as Error).message }, "Pollinations generation failed — falling back to Perchance");
     return null;
   }
 }
@@ -119,9 +119,9 @@ async function tryPerchance(prompt: string, seed: string): Promise<string | null
     logger.info({ prompt: prompt.slice(0, 80), seed }, "Attempting Perchance image generation");
 
     const genResponse = await axios.get<{ imageUrl?: string }>(apiUrl, {
-      timeout: 90000,
+      timeout: 15000,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Z-Fantasy/1.0)",
+        "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
       },
     });
@@ -140,7 +140,7 @@ async function tryPerchance(prompt: string, seed: string): Promise<string | null
     logger.info({ telegraphUrl }, "Perchance image uploaded to Telegra.ph");
     return telegraphUrl;
   } catch (err) {
-    logger.warn({ err }, "Perchance generation failed");
+    logger.warn({ message: (err as Error).message }, "Perchance generation failed");
     return null;
   }
 }
