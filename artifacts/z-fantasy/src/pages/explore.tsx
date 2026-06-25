@@ -133,7 +133,7 @@ export function Explore() {
           <Link href="/create" className="aspect-[3/4] rounded-xl bg-card border border-primary border-dashed flex flex-col items-center justify-center p-4 text-center hover:bg-primary/5 transition-colors box-glow-pink">
             <Sparkles className="text-primary mb-2" size={32} />
             <h3 className="font-bold text-sm">Design Custom</h3>
-            <p className="text-[10px] text-muted-foreground mt-1">Starts at 25 🎟️</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Starts at 25 🃏</p>
           </Link>
 
           {isLoading ? (

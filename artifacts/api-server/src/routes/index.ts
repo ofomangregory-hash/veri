@@ -9,6 +9,11 @@ import adminRouter from "./admin";
 import bannersRouter from "./banners";
 import adminMediaRouter from "./adminMedia";
 import leaderboardRouter from "./leaderboard";
+import helpdeskRouter from "./helpdesk";
+import customerServiceRouter from "./customer-service";
+import questsRouter from "./quests";
+import referralsRouter from "./referrals";
+import eventsRouter from "./events";
 
 const router: IRouter = Router();
 
@@ -22,5 +27,10 @@ router.use(mediaRouter);
 router.use(paymentsRouter);
 router.use(adminRouter);
 router.use(adminMediaRouter);
+router.use(helpdeskRouter);
+router.use(customerServiceRouter);
+router.use(questsRouter);
+router.use(referralsRouter);
+router.use(eventsRouter);
 
 export default router;

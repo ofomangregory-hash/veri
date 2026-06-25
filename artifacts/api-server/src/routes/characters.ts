@@ -28,6 +28,7 @@ import {
   deleteSupabaseCharacter,
   type NormalizedCharacter,
 } from "../lib/supabaseCharacters";
+import { getCharacterAvatars } from "../lib/supabaseAvatars";
 import { getEconomyConfig } from "../lib/economyConfig";
 import { checkFeatureBlocked, checkLimitExceeded, RESTRICTION_ERROR } from "../lib/featureRestrictions";
 
@@ -142,6 +143,13 @@ router.get("/characters/:characterId", async (req, res): Promise<void> => {
   }
 
   res.json(GetCharacterResponse.parse(serializeCharacter(character)));
+});
+
+router.get("/characters/:characterId/avatars", async (req, res): Promise<void> => {
+  const characterId = req.params.characterId;
+  if (!characterId) { res.status(400).json({ error: "Missing characterId" }); return; }
+  const avatars = await getCharacterAvatars(characterId);
+  res.json(avatars.map(a => ({ id: a.id, avatarUrl: a.avatarUrl, isPrimary: a.isPrimary })));
 });
 
 router.post("/characters", async (req, res): Promise<void> => {

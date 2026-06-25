@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type Period = "weekly" | "monthly" | "yearly";
 
-const PRICES: Record<string, Record<Period, number>> = {
+const DEFAULT_PRICES: Record<string, Record<Period, number>> = {
   Bronze: { weekly: 100,  monthly: 300,  yearly: 3000  },
   Silver: { weekly: 200,  monthly: 600,  yearly: 6000  },
   Gold:   { weekly: 350,  monthly: 1050, yearly: 10500 },
@@ -49,6 +49,7 @@ export function Premium() {
   const [buyingPack, setBuyingPack] = useState<string | null>(null);
   const [buyingTickets, setBuyingTickets] = useState<string | null>(null);
   const [tierConfigs, setTierConfigs] = useState<Record<string, { features: string[]; featured: boolean }>>(DEFAULT_TIER_CONFIGS);
+  const [prices, setPrices] = useState<Record<string, Record<Period, number>>>(DEFAULT_PRICES);
   const createInvoice = useCreateInvoice();
   const { toast } = useToast();
 
@@ -56,8 +57,25 @@ export function Premium() {
     const token = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData || "mock_init_data_for_dev";
     fetch("/api/config/premium-tiers", { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : null)
-      .then((data: Record<string, { features: string[]; featured: boolean }> | null) => {
-        if (data) setTierConfigs({ ...DEFAULT_TIER_CONFIGS, ...data });
+      .then((data: Record<string, { features: string[]; featured: boolean; prices?: Record<string, number> }> | null) => {
+        if (data) {
+          setTierConfigs(prev => {
+            const next = { ...prev };
+            for (const [tier, cfg] of Object.entries(data)) {
+              next[tier] = { features: cfg.features, featured: cfg.featured };
+            }
+            return next;
+          });
+          setPrices(prev => {
+            const next = { ...prev };
+            for (const [tier, cfg] of Object.entries(data)) {
+              if (cfg.prices && Object.keys(cfg.prices).length > 0) {
+                next[tier] = { ...DEFAULT_PRICES[tier], ...cfg.prices } as Record<Period, number>;
+              }
+            }
+            return next;
+          });
+        }
       })
       .catch(() => {});
   }, []);
@@ -253,7 +271,7 @@ export function Premium() {
       <div className="space-y-6 mb-10">
         {tiers.map(tier => {
           const Icon = tier.icon;
-          const stars = PRICES[tier.name]?.[period] ?? 0;
+          const stars = prices[tier.name]?.[period] ?? 0;
 
           return (
             <div key={tier.id} className={`p-6 rounded-2xl bg-card border ${tier.border} ${tier.glow} transition-all relative overflow-hidden group`}>

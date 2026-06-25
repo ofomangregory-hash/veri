@@ -4,8 +4,11 @@ import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Sav
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { CharacterWizard } from "@/components/CharacterWizard";
+import { AdminHelpdeskTab } from "./admin/AdminHelpdeskTab";
+import { AdminQuestsTab } from "./admin/AdminQuestsTab";
+import { AdminReferralsTab } from "./admin/AdminReferralsTab";
 
-type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words" | "affection" | "active_chats";
+type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words" | "affection" | "active_chats" | "quests" | "referrals" | "helpdesk";
 
 interface SysConfig { key: string; value: unknown; updatedAt: string }
 
@@ -75,7 +78,7 @@ export function Admin() {
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
-    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words", "affection", "active_chats"]
+    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words", "affection", "active_chats", "quests", "referrals", "helpdesk"]
     : ["stats", "users", "characters"];
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
@@ -1676,6 +1679,21 @@ export function Admin() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Quests ── */}
+      {activeTab === "quests" && isGodMode && (
+        <AdminQuestsTab />
+      )}
+
+      {/* ── Referrals ── */}
+      {activeTab === "referrals" && isGodMode && (
+        <AdminReferralsTab />
+      )}
+
+      {/* ── Helpdesk ── */}
+      {activeTab === "helpdesk" && isGodMode && (
+        <AdminHelpdeskTab />
       )}
 
       {/* ── Transactions (All) ── */}

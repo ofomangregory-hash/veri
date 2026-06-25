@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLocation } from "wouter";
 import {
   X, User as UserIcon, Ticket, Copy, Settings, ShieldAlert, Headphones,
   HelpCircle, LifeBuoy, Image, ChevronDown, ChevronRight, Trophy, RotateCcw,
   BarChart2, MessageCircle, Sparkles, CreditCard, Star, Zap, Users, Edit2, Check,
+  Headset, FileText,
 } from "lucide-react";
 import {
   useGetMe,
@@ -25,13 +27,18 @@ interface HamburgerDrawerProps {
   onClose: () => void;
 }
 
-const QUEST_TASKS = [
-  { id: 1, label: "Share a character link",   reward: "+5 🎟️",  done: false },
-  { id: 2, label: "Send 10 messages today",   reward: "+10 🎟️", done: false },
-  { id: 3, label: "Invite a friend",          reward: "+15 🎟️", done: false },
-  { id: 4, label: "Reach Affection Level 3",  reward: "+20 🎟️", done: false },
-  { id: 5, label: "Unlock a Vault item",      reward: "+8 🎟️",  done: false },
-];
+interface LiveQuest {
+  id: string;
+  title: string;
+  description: string;
+  rewardTickets: number;
+  rewardNc: number;
+  questType: string;
+  targetCount: number;
+  progress: number;
+  completed: boolean;
+  claimed: boolean;
+}
 
 const TIER_COLOR: Record<string, string> = {
   Free:          "text-muted-foreground border-border",
@@ -66,9 +73,12 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
     return () => clearInterval(id);
   }, []);
 
+  const [, setLocation] = useLocation();
   const [expandProfile, setExpandProfile] = useState(false);
   const [expandMedia, setExpandMedia] = useState(false);
   const [expandQuest, setExpandQuest] = useState(false);
+  const [liveQuests, setLiveQuests] = useState<LiveQuest[]>([]);
+  const [questsLoading, setQuestsLoading] = useState(false);
   const [expandCache, setExpandCache] = useState(false);
   const [expandFaq, setExpandFaq] = useState<number | null>(null);
   const [nsfwOptimistic, setNsfwOptimistic] = useState<boolean | null>(null);
@@ -160,6 +170,18 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
       },
     });
   };
+
+  const fetchLiveQuests = useCallback(async () => {
+    setQuestsLoading(true);
+    try {
+      const auth = window.Telegram?.WebApp?.initData
+        ? `Bearer ${window.Telegram.WebApp.initData}`
+        : "Bearer mock_init_data_for_dev";
+      const res = await fetch("/api/quests", { headers: { Authorization: auth } });
+      if (res.ok) setLiveQuests(await res.json() as LiveQuest[]);
+    } catch { /* silent */ }
+    setQuestsLoading(false);
+  }, []);
 
   const handleClearCache = () => {
     const keys = Object.keys(localStorage).filter(k =>
@@ -435,7 +457,7 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
                   label="Quest Hub"
                   color="text-yellow-400"
                   expanded={expandQuest}
-                  onToggle={() => setExpandQuest(p => !p)}
+                  onToggle={() => setExpandQuest(p => { if (!p) fetchLiveQuests(); return !p; })}
                 />
                 <AnimatePresence>
                   {expandQuest && (
@@ -447,20 +469,36 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
                       className="overflow-hidden"
                     >
                       <div className="space-y-2 px-1 pt-1">
-                        {QUEST_TASKS.map(task => (
-                          <div
-                            key={task.id}
-                            className="flex items-center justify-between p-3 rounded-lg bg-background border border-border"
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${task.done ? 'bg-green-400' : 'bg-yellow-400'} shrink-0`} />
-                              <span className={`text-sm ${task.done ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                                {task.label}
-                              </span>
-                            </div>
-                            <span className="text-xs font-bold text-accent shrink-0">{task.reward}</span>
-                          </div>
-                        ))}
+                        {questsLoading ? (
+                          Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="h-12 bg-muted rounded-lg animate-pulse" />
+                          ))
+                        ) : liveQuests.length === 0 ? (
+                          <p className="text-xs text-muted-foreground text-center py-4">No active quests right now.</p>
+                        ) : (
+                          liveQuests.map(quest => {
+                            const reward = [
+                              quest.rewardTickets > 0 ? `+${quest.rewardTickets} 🎟️` : "",
+                              quest.rewardNc > 0 ? `+${quest.rewardNc} 🃏` : "",
+                            ].filter(Boolean).join(" ");
+                            return (
+                              <div key={quest.id} className="flex items-center justify-between p-3 rounded-lg bg-background border border-border">
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <div className={`w-2 h-2 rounded-full shrink-0 ${quest.completed ? "bg-green-400" : "bg-yellow-400"}`} />
+                                  <div className="min-w-0">
+                                    <span className={`text-sm block truncate ${quest.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                                      {quest.title}
+                                    </span>
+                                    {quest.targetCount > 1 && (
+                                      <span className="text-[10px] text-muted-foreground">{quest.progress}/{quest.targetCount}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <span className="text-xs font-bold text-accent shrink-0 ml-2">{reward}</span>
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     </motion.div>
                   )}
@@ -565,20 +603,39 @@ export function HamburgerDrawer({ isOpen, onClose }: HamburgerDrawerProps) {
                   </div>
                 ))}
 
-                <button
-                  onClick={() => {
-                    if (typeof window !== "undefined" && (window as { Telegram?: { WebApp?: { openTelegramLink?: (url: string) => void } } }).Telegram?.WebApp?.openTelegramLink) {
-                      (window as { Telegram?: { WebApp?: { openTelegramLink?: (url: string) => void } } }).Telegram!.WebApp!.openTelegramLink!("https://t.me/zfantasy_support");
-                    } else {
-                      window.open("https://t.me/zfantasy_support", "_blank");
-                    }
-                  }}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-muted transition-colors text-left"
-                >
-                  <LifeBuoy className="text-accent" size={20} />
-                  <span className="flex-1 font-medium">Customer Support</span>
-                  <span className="text-xs text-muted-foreground">Open Telegram →</span>
-                </button>
+                <div className="space-y-1.5">
+                  <button
+                    onClick={() => { onClose(); setLocation("/helpdesk"); }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-muted transition-colors text-left"
+                  >
+                    <FileText className="text-yellow-400" size={18} />
+                    <span className="flex-1 font-medium text-sm">Help Desk</span>
+                    <span className="text-xs text-muted-foreground">Submit ticket →</span>
+                  </button>
+                  <button
+                    onClick={() => { onClose(); setLocation("/customer-service"); }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-muted transition-colors text-left"
+                  >
+                    <Headset className="text-accent" size={18} />
+                    <span className="flex-1 font-medium text-sm">Live Chat</span>
+                    <span className="text-xs text-muted-foreground">Chat with agent →</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const url = "https://t.me/+2347044291107";
+                      if (typeof window !== "undefined" && (window as { Telegram?: { WebApp?: { openTelegramLink?: (url: string) => void } } }).Telegram?.WebApp?.openTelegramLink) {
+                        (window as { Telegram?: { WebApp?: { openTelegramLink?: (url: string) => void } } }).Telegram!.WebApp!.openTelegramLink!(url);
+                      } else {
+                        window.open(url, "_blank");
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:bg-muted transition-colors text-left"
+                  >
+                    <LifeBuoy className="text-primary" size={18} />
+                    <span className="flex-1 font-medium text-sm">Telegram Direct</span>
+                    <span className="text-xs text-muted-foreground">Instant support →</span>
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>

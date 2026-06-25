@@ -14,6 +14,8 @@ import { ChatDetail } from "@/pages/chat-detail";
 import { Premium } from "@/pages/premium";
 import { Admin } from "@/pages/admin";
 import { CharacterBio } from "@/pages/CharacterBio";
+import { HelpDesk } from "@/pages/HelpDesk";
+import { CustomerService } from "@/pages/CustomerService";
 
 const queryClient = new QueryClient();
 
@@ -84,6 +86,8 @@ function Router() {
         <Route path="/premium" component={Premium} />
         <Route path="/character/:id" component={CharacterBio} />
         <Route path="/admin" component={Admin} />
+        <Route path="/helpdesk" component={HelpDesk} />
+        <Route path="/customer-service" component={CustomerService} />
         <Route component={NotFound} />
       </Switch>
     </Shell>

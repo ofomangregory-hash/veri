@@ -28,6 +28,7 @@ import { getIntimacyLevel, updateIntimacyLevel, getContentLevel, CONTENT_LEVEL_W
 import { checkTriggerWord } from "../lib/supabaseTriggerWords";
 import { checkAffectionWord, recordAffectionTrigger } from "../lib/supabaseAffection";
 import { getRandomCharacterAvatar } from "../lib/supabaseAvatars";
+import { addVaultItem } from "../lib/supabaseVault";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
@@ -274,15 +275,18 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     if (user.dailyMessageCount >= dailyLimit) {
       res.status(402).json({ error: `Daily message limit of ${dailyLimit} reached for ${tier} tier.` }); return;
     }
-    const eco = await getEconomyConfig();
-    const msgCost = eco.msgCostTickets ?? MSG_COST_DEFAULT;
-    if (user.ticketBalance < msgCost) {
-      res.status(402).json({ error: `Insufficient tickets. Messages cost ${msgCost} ticket(s) each.` }); return;
+    // Only Free tier users pay per-message tickets; premium tiers send for free
+    if (tier === "Free") {
+      const ecoFree = await getEconomyConfig();
+      const freeMsgCost = ecoFree.msgCostTickets ?? MSG_COST_DEFAULT;
+      if (user.ticketBalance < freeMsgCost) {
+        res.status(402).json({ error: `Insufficient tickets. Messages cost ${freeMsgCost} ticket(s) each.` }); return;
+      }
     }
   }
 
   const eco = await getEconomyConfig();
-  const msgCost = isAdminUser ? 0 : (eco.msgCostTickets ?? MSG_COST_DEFAULT);
+  const msgCost = (isAdminUser || tier !== "Free") ? 0 : (eco.msgCostTickets ?? MSG_COST_DEFAULT);
 
   const character = await getSupabaseCharacterById(params.data.characterId);
   if (!character) { res.status(404).json({ error: "Character not found" }); return; }
@@ -352,6 +356,7 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
         contentLevelWords: contentWords,
       });
       incrementHourlyImageCount(req.telegramUserId);
+      if (autoImageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, autoImageUrl, "trigger", false);
       logger.info({ triggeredWord, characterId: params.data.characterId }, "Trigger word image generated");
     } catch (err) {
       logger.warn({ err, triggeredWord }, "Trigger word image generation failed");
@@ -389,6 +394,7 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
       autoIsLocked = isBlurred;
       // Only count non-blurred images against hourly limit
       if (!isBlurred) incrementHourlyImageCount(req.telegramUserId);
+      if (autoImageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, autoImageUrl, "auto", isBlurred);
     } catch (err) {
       logger.warn({ err }, "Auto-image generation failed — using avatar fallback");
       const fallbackAvatar = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
@@ -416,7 +422,7 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
       messageHistory: newHistory,
       messageCount: newMsgCount,
       dailyAutoImageCount: (shouldAutoImage || !!triggeredWord) && !autoIsLocked ? sql`daily_auto_image_count + 1` : conv.dailyAutoImageCount,
-      affectionPoints: affectionDelta !== 0 ? Math.max(0, conv.affectionPoints + affectionDelta) : undefined,
+      affectionPoints: affectionDelta !== 0 ? Math.min(1000, Math.max(0, conv.affectionPoints + affectionDelta)) : undefined,
       updatedAt: new Date(),
     })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
@@ -546,6 +552,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     await db.update(conversationsTable)
       .set({ messageHistory: [...messages, selfieMsg], updatedAt: new Date() })
       .where(eq(conversationsTable.conversationId, conv.conversationId));
+    if (imageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, imageUrl, "selfie", false);
   }
 
   // Deduct neon cards and increment daily trigger count

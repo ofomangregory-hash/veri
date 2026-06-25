@@ -15,6 +15,7 @@ import {
 } from "@workspace/api-zod";
 import { authMiddleware } from "../middlewares/auth";
 import { logger } from "../lib/logger";
+import { getPremiumTiers } from "../lib/supabasePremiumTiers";
 
 const router: IRouter = Router();
 
@@ -240,7 +241,12 @@ const DEFAULT_PREMIUM_TIER_FEATURES: Record<string, { features: string[]; featur
 
 router.get("/config/premium-tiers", async (_req, res): Promise<void> => {
   const rows = await db.select().from(systemConfigurationsTable);
-  const result: Record<string, { features: string[]; featured: boolean }> = { ...DEFAULT_PREMIUM_TIER_FEATURES };
+  const supabaseTiers = await getPremiumTiers();
+
+  const result: Record<string, { features: string[]; featured: boolean; prices: Record<string, number> }> = {};
+  for (const [tier, defaults] of Object.entries(DEFAULT_PREMIUM_TIER_FEATURES)) {
+    result[tier] = { ...defaults, prices: {} };
+  }
 
   for (const row of rows) {
     const tierMap: Record<string, string> = {
@@ -249,13 +255,20 @@ router.get("/config/premium-tiers", async (_req, res): Promise<void> => {
       premium_tier_gold:   "Gold",
     };
     const tierName = tierMap[row.key];
-    if (tierName) {
+    if (tierName && result[tierName]) {
       const v = row.value as Record<string, unknown>;
-      result[tierName] = {
-        features: Array.isArray(v.features) ? (v.features as string[]) : DEFAULT_PREMIUM_TIER_FEATURES[tierName]!.features,
-        featured: typeof v.featured === "boolean" ? v.featured : DEFAULT_PREMIUM_TIER_FEATURES[tierName]!.featured,
-      };
+      result[tierName]!.features = Array.isArray(v.features) ? (v.features as string[]) : result[tierName]!.features;
+      result[tierName]!.featured = typeof v.featured === "boolean" ? v.featured : result[tierName]!.featured;
     }
+  }
+
+  // Merge Supabase prices (overrides hardcoded defaults)
+  for (const t of supabaseTiers) {
+    const tier = t.tierName;
+    if (!result[tier]) result[tier] = { features: [], featured: false, prices: {} };
+    result[tier]!.prices[t.period] = t.priceStars;
+    if (t.features.length > 0) result[tier]!.features = t.features;
+    if (t.isFeatured) result[tier]!.featured = t.isFeatured;
   }
 
   res.json(result);

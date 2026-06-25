@@ -61,8 +61,11 @@ export function Create() {
   const [isNsfw, setIsNsfw] = useState(false);
   const [nsfwPrivate, setNsfwPrivate] = useState(true);
   const [visibility, setVisibility] = useState<"public" | "private">("private");
+  const [usingCustomGenre, setUsingCustomGenre] = useState(false);
+  const [customGenreInput, setCustomGenreInput] = useState("");
 
   const resolvedName = usingCustomName ? customNameInput.trim() : name;
+  const resolvedGenre = usingCustomGenre ? (customGenreInput.trim() || "Custom") : genre;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -133,7 +136,7 @@ export function Create() {
         },
         body: JSON.stringify({
           name: resolvedName,
-          genre,
+          genre: resolvedGenre,
           age: age || undefined,
           bio: bio || undefined,
           initialGreeting: greeting || undefined,
@@ -304,21 +307,48 @@ export function Create() {
 
         {/* ── Step 3: Genre ── */}
         {step === 3 && (
-          <div className="grid grid-cols-2 gap-3">
-            {GENRES.map(g => (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              {GENRES.map(g => (
+                <button
+                  key={g}
+                  onClick={() => { setGenre(g); setUsingCustomGenre(false); }}
+                  className={`py-4 px-4 rounded-xl border font-bold text-sm transition-all flex items-center gap-2 ${
+                    !usingCustomGenre && genre === g
+                      ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
+                      : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                  }`}
+                >
+                  <span className="text-xl">{GENRE_ICONS[g] ?? "✨"}</span>
+                  {g}
+                </button>
+              ))}
+            </div>
+            {!usingCustomGenre ? (
               <button
-                key={g}
-                onClick={() => setGenre(g)}
-                className={`py-4 px-4 rounded-xl border font-bold text-sm transition-all flex items-center gap-2 ${
-                  genre === g
-                    ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/30"
-                }`}
+                onClick={() => setUsingCustomGenre(true)}
+                className="w-full py-3 rounded-xl border border-dashed border-secondary/50 text-secondary font-bold text-sm hover:border-secondary hover:bg-secondary/10 transition-all"
               >
-                <span className="text-xl">{GENRE_ICONS[g] ?? "✨"}</span>
-                {g}
+                ✏️ Enter Custom Genre
               </button>
-            ))}
+            ) : (
+              <div className="space-y-2">
+                <input
+                  autoFocus
+                  value={customGenreInput}
+                  onChange={e => setCustomGenreInput(e.target.value)}
+                  placeholder="e.g. Cyberpunk, Mythology, Steampunk..."
+                  maxLength={48}
+                  className="w-full h-12 rounded-xl border border-secondary/50 bg-card px-4 text-sm font-bold text-white placeholder:text-muted-foreground outline-none focus:border-secondary focus:shadow-[0_0_16px_rgba(157,0,255,0.2)] transition-all"
+                />
+                <button
+                  onClick={() => { setUsingCustomGenre(false); setCustomGenreInput(""); }}
+                  className="text-xs text-muted-foreground hover:text-white transition-colors"
+                >
+                  ← Back to presets
+                </button>
+              </div>
+            )}
           </div>
         )}
 
