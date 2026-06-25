@@ -1,11 +1,24 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import { useGetConversation, useSendMessage, useSendGift, useRequestSelfie, useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
-import { useQuery } from "@tanstack/react-query";
-import { Send, Gift, Camera, ChevronLeft, Heart, X } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Send, Gift, Camera, ChevronLeft, Heart, X, Lock, Unlock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
+
+function getToken() {
+  return (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } })
+    .Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
+}
+
+type ChatMsg = {
+  role: string;
+  content: string;
+  imageUrl?: string | null;
+  isLocked?: boolean;
+  timestamp?: string | null;
+};
 
 export function ChatDetail() {
   const { id } = useParams<{ id: string }>();
@@ -15,6 +28,7 @@ export function ChatDetail() {
   const [selfieDesc, setSelfieDesc] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: conv, isLoading, refetch } = useGetConversation(id!, {
     query: { enabled: !!id, queryKey: ['chat', id] }
@@ -31,6 +45,32 @@ export function ChatDetail() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Unlock mutation
+  const unlockMutation = useMutation({
+    mutationFn: async (messageTimestamp: string) => {
+      const res = await fetch(`/api/conversations/${id}/unlock`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ messageTimestamp }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to unlock" }));
+        throw new Error(err.error ?? "Failed to unlock");
+      }
+      return res.json() as Promise<{ ok: boolean; imageUrl: string | null; neonCardBalance: number }>;
+    },
+    onSuccess: () => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Unlock Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -41,7 +81,6 @@ export function ChatDetail() {
     if (!input.trim() || !id) return;
     const text = input;
     setInput("");
-    
     sendMsg.mutate({ characterId: id, data: { content: text } }, {
       onSuccess: () => refetch(),
       onError: () => toast({ title: "Failed to send", variant: "destructive" })
@@ -68,11 +107,6 @@ export function ChatDetail() {
     });
   };
 
-  const handleSelfie = () => {
-    if (!id) return;
-    setShowSelfieModal(true);
-  };
-
   const submitSelfie = () => {
     if (!id) return;
     const description = selfieDesc.trim() || "Show me yourself";
@@ -87,10 +121,18 @@ export function ChatDetail() {
     });
   };
 
+  const handleUnlock = useCallback((msg: ChatMsg) => {
+    if (!msg.timestamp) return;
+    unlockMutation.mutate(msg.timestamp);
+  }, [unlockMutation]);
+
   const tier = me?.subscriptionTier ?? "Free";
   const isGold = tier === "Gold";
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+
+  // Cast messages from API since the generated type doesn't include isLocked
+  const messages = (conv?.messages ?? []) as ChatMsg[];
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background">
@@ -113,20 +155,47 @@ export function ChatDetail() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
-        {conv?.messages?.map((msg, i) => {
+        {messages.map((msg, i) => {
           const isUser = msg.role === 'user';
+          const isLocked = msg.isLocked === true && !isUser;
           return (
             <div key={i} className={`flex flex-col max-w-[85%] ${isUser ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
               <div className={`p-3 rounded-2xl ${
-                isUser 
-                  ? 'bg-primary text-primary-foreground rounded-tr-sm box-glow-pink' 
+                isUser
+                  ? 'bg-primary text-primary-foreground rounded-tr-sm box-glow-pink'
                   : 'bg-card text-card-foreground border border-border rounded-tl-sm'
               }`}>
                 {msg.content}
               </div>
               {msg.imageUrl && (
-                <div className="mt-2 rounded-xl overflow-hidden border border-border max-w-xs">
-                  <img src={msg.imageUrl} alt="Attachment" className="w-full h-auto" />
+                <div className="mt-2 rounded-xl overflow-hidden border border-border max-w-xs relative">
+                  {isLocked ? (
+                    /* Blurred locked image with unlock CTA */
+                    <div className="relative">
+                      <img
+                        src={msg.imageUrl}
+                        alt="Locked"
+                        className="w-full h-auto blur-xl scale-110 brightness-50 select-none pointer-events-none"
+                        draggable={false}
+                      />
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/20">
+                        <div className="p-3 rounded-full bg-black/60 border border-primary/50 box-glow-pink">
+                          <Lock size={22} className="text-primary" />
+                        </div>
+                        <p className="text-white text-xs font-semibold drop-shadow-lg">Locked Image</p>
+                        <button
+                          onClick={() => handleUnlock(msg)}
+                          disabled={unlockMutation.isPending}
+                          className="mt-1 px-4 py-1.5 rounded-full bg-primary text-white text-xs font-bold box-glow-pink hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-60"
+                        >
+                          <Unlock size={12} />
+                          {unlockMutation.isPending ? "Unlocking…" : "Unlock"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <img src={msg.imageUrl} alt="Attachment" className="w-full h-auto" />
+                  )}
                 </div>
               )}
             </div>
@@ -141,27 +210,27 @@ export function ChatDetail() {
 
       {/* Input */}
       <div className="shrink-0 p-3 bg-background border-t border-border flex items-center gap-2 pb-safe">
-        <button 
+        <button
           onClick={() => setShowGiftTray(!showGiftTray)}
           className="p-2.5 rounded-full bg-card border border-border text-primary hover:box-glow-pink hover:border-primary transition-all shrink-0"
         >
           <Gift size={20} />
         </button>
-        <button 
-          onClick={handleSelfie}
+        <button
+          onClick={() => setShowSelfieModal(true)}
           disabled={reqSelfie.isPending}
           className="p-2.5 rounded-full bg-card border border-border text-accent hover:box-glow-blue hover:border-accent transition-all shrink-0 disabled:opacity-50"
         >
           <Camera size={20} />
         </button>
-        <Input 
+        <Input
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSend()}
           placeholder="Message..."
           className="flex-1 bg-card border-secondary/50 rounded-full h-11 focus-visible:ring-primary"
         />
-        <button 
+        <button
           onClick={handleSend}
           disabled={!input.trim() || sendMsg.isPending}
           className="p-2.5 rounded-full bg-primary text-white box-glow-pink shrink-0 disabled:opacity-50"
@@ -228,7 +297,7 @@ export function ChatDetail() {
       {/* Gift Tray */}
       <AnimatePresence>
         {showGiftTray && (
-          <motion.div 
+          <motion.div
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
@@ -240,9 +309,9 @@ export function ChatDetail() {
             </p>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { type: GiftInputGiftType.cyber_cocktail, name: "Cyber Cocktail", cost: ecoConfig?.giftSmall ?? 10, ap: 5, icon: "🍹" },
-                { type: GiftInputGiftType.neon_bracelet, name: "Neon Bracelet", cost: ecoConfig?.giftMedium ?? 25, ap: 15, icon: "💎" },
-                { type: GiftInputGiftType.secret_key, name: "Secret Key", cost: ecoConfig?.giftLarge ?? 50, ap: 35, icon: "🔑" },
+                { type: GiftInputGiftType.cyber_cocktail, name: "Cyber Cocktail", cost: ecoConfig?.giftSmall ?? 10, ap: 5, intimacy: "+1%", icon: "🍹" },
+                { type: GiftInputGiftType.neon_bracelet,  name: "Neon Bracelet",  cost: ecoConfig?.giftMedium ?? 25, ap: 15, intimacy: "+2%", icon: "💎" },
+                { type: GiftInputGiftType.secret_key,     name: "Secret Key",     cost: ecoConfig?.giftLarge ?? 50, ap: 35, intimacy: "+5%", icon: "🔑" },
               ].map(gift => {
                 const displayCost = isGold ? Math.floor(gift.cost / 2) : gift.cost;
                 return (
@@ -254,7 +323,7 @@ export function ChatDetail() {
                     <span className="text-3xl mb-2 drop-shadow-[0_0_10px_rgba(255,0,127,0.8)]">{gift.icon}</span>
                     <span className="text-xs font-bold text-white mb-1">{gift.name}</span>
                     <span className="text-[10px] text-secondary font-semibold">{displayCost} 🃏</span>
-                    <span className="text-[10px] text-muted-foreground">+{gift.ap} AP</span>
+                    <span className="text-[10px] text-muted-foreground">+{gift.ap} AP · {gift.intimacy} 💜</span>
                   </button>
                 );
               })}

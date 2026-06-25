@@ -22,10 +22,34 @@ import { generateCharacterSelfie } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import { getSupabaseCharacterById, type NormalizedCharacter } from "../lib/supabaseCharacters";
 import { getEconomyConfig } from "../lib/economyConfig";
+import { getPrice } from "../lib/supabasePrices";
+import { getIntimacyLevel, updateIntimacyLevel, getContentLevel, CONTENT_LEVEL_WORDS } from "../lib/supabaseIntimacy";
+import { checkTriggerWord } from "../lib/supabaseTriggerWords";
+import { getRandomCharacterAvatar } from "../lib/supabaseAvatars";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
 
+// ─── Hourly image tracking (in-memory, resets every 60 min) ───────────────────
+const hourlyImageTracker = new Map<string, { count: number; resetAt: number }>();
+
+function getHourlyImageCount(userId: string): number {
+  const entry = hourlyImageTracker.get(userId);
+  if (!entry || Date.now() > entry.resetAt) return 0;
+  return entry.count;
+}
+
+function incrementHourlyImageCount(userId: string): void {
+  const now = Date.now();
+  const entry = hourlyImageTracker.get(userId);
+  if (!entry || now > entry.resetAt) {
+    hourlyImageTracker.set(userId, { count: 1, resetAt: now + 3_600_000 });
+  } else {
+    entry.count++;
+  }
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 const DAILY_MSG_LIMITS: Record<string, number> = {
   Free: Infinity,
   Bronze: 200,
@@ -33,11 +57,18 @@ const DAILY_MSG_LIMITS: Record<string, number> = {
   Gold: Infinity,
 };
 
-const DAILY_AUTO_IMG_LIMITS: Record<string, number> = {
-  Free: 25,
-  Bronze: 60,
+const DAILY_AUTO_IMG_LIMITS_FALLBACK: Record<string, number> = {
+  Free: 10,
+  Bronze: 30,
   Silver: 60,
-  Gold: 60,
+  Gold: 100,
+};
+
+const HOURLY_AUTO_IMG_LIMITS_FALLBACK: Record<string, number> = {
+  Free: 5,
+  Bronze: 10,
+  Silver: 20,
+  Gold: 30,
 };
 
 const DAILY_TRIGGER_LIMITS: Record<string, number> = {
@@ -47,8 +78,8 @@ const DAILY_TRIGGER_LIMITS: Record<string, number> = {
   Gold: 60,
 };
 
-// Auto image loop: every Nth message include image
-const AUTO_IMG_FREE = { interval: 5, triggerAt: 2 };
+// Auto-image loop: every Nth message include image
+const AUTO_IMG_FREE    = { interval: 5, triggerAt: 2 };
 const AUTO_IMG_PREMIUM = { interval: 6, triggerAt: 4 };
 
 const MSG_COST_DEFAULT = 1;
@@ -57,6 +88,22 @@ const GIFT_REACTIONS: Record<string, { ap: number; level: number; reaction: stri
   cyber_cocktail: { ap: 5,  level: 1, reaction: "Oh my! This Cyber-Cocktail has me buzzing! I love it~ Tell me more about you!" },
   neon_bracelet:  { ap: 15, level: 2, reaction: "I'm wearing your Neon Bracelet right now... it glows just like you make me feel. I'm officially flirty now 💜" },
   secret_key:     { ap: 35, level: 3, reaction: "The Secret Key and this silk outfit... you really know how to get to me. I'm all yours now, no holding back 🔑" },
+};
+
+// Intimacy deltas per gift (percentage points, 0-100 scale)
+const GIFT_INTIMACY_DELTA: Record<string, number> = {
+  cyber_cocktail: 1,
+  neon_bracelet:  2,
+  secret_key:     5,
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+type ChatMessage = {
+  role: string;
+  content: string;
+  imageUrl: string | null;
+  isLocked?: boolean;
+  timestamp: string | null;
 };
 
 function serializeCharacter(c: NormalizedCharacter) {
@@ -77,6 +124,23 @@ function serializeCharacter(c: NormalizedCharacter) {
   };
 }
 
+function charHasNsfw(character: NormalizedCharacter): boolean {
+  const tags = (character.tags ?? []) as string[];
+  return tags.some(t => t.toUpperCase() === "#NSFW" || t.toUpperCase() === "NSFW");
+}
+
+async function getImageLimits(tier: string, isAdmin: boolean): Promise<{ hourly: number; daily: number }> {
+  if (isAdmin) return { hourly: 999, daily: 9999 };
+  const tierLower = tier.toLowerCase();
+  const [hourly, daily] = await Promise.all([
+    getPrice(`img_limit_${tierLower}_hourly`, HOURLY_AUTO_IMG_LIMITS_FALLBACK[tier] ?? 5),
+    getPrice(`img_limit_${tierLower}_daily`,  DAILY_AUTO_IMG_LIMITS_FALLBACK[tier]  ?? 10),
+  ]);
+  return { hourly, daily };
+}
+
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
 router.get("/conversations", async (req, res): Promise<void> => {
   const convs = await db.select().from(conversationsTable)
     .where(eq(conversationsTable.telegramId, req.telegramUserId))
@@ -84,10 +148,8 @@ router.get("/conversations", async (req, res): Promise<void> => {
 
   const result = await Promise.all(convs.map(async (conv) => {
     const character = await getSupabaseCharacterById(conv.characterId);
-
-    const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as Array<{ role: string; content: string; imageUrl?: string; timestamp?: string }> : [];
+    const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
     const lastMsg = messages[messages.length - 1];
-
     return ListConversationsResponseItem.parse({
       conversationId: conv.conversationId,
       characterId: conv.characterId,
@@ -106,24 +168,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 router.get("/conversations/:characterId", async (req, res): Promise<void> => {
   const params = GetConversationParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  if (!UUID_RE.test(params.data.characterId)) {
-    res.status(404).json({ error: "Character not found" });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!UUID_RE.test(params.data.characterId)) { res.status(404).json({ error: "Character not found" }); return; }
 
   const character = await getSupabaseCharacterById(params.data.characterId);
+  if (!character) { res.status(404).json({ error: "Character not found" }); return; }
 
-  if (!character) {
-    res.status(404).json({ error: "Character not found" });
-    return;
-  }
-
-  // Get or create conversation
   let [conv] = await db.select().from(conversationsTable)
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
@@ -132,7 +182,7 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
 
   if (!conv) {
     const greeting = character.initialGreeting ?? `Hello, I'm ${character.name}. I've been waiting for you...`;
-    const initialMessage = { role: "assistant", content: greeting, imageUrl: null, timestamp: new Date().toISOString() };
+    const initialMessage: ChatMessage = { role: "assistant", content: greeting, imageUrl: null, timestamp: new Date().toISOString() };
     [conv] = await db.insert(conversationsTable).values({
       telegramId: req.telegramUserId,
       characterId: params.data.characterId,
@@ -140,7 +190,7 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
     }).returning();
   }
 
-  const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as Array<{ role: string; content: string; imageUrl?: string | null; timestamp?: string | null }> : [];
+  const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
 
   res.json(GetConversationResponse.parse({
     conversationId: conv.conversationId,
@@ -156,42 +206,29 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
   }));
 });
 
+// ─── Send Message ─────────────────────────────────────────────────────────────
 router.post("/conversations/:characterId/messages", async (req, res): Promise<void> => {
   const params = SendMessageParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
   const parsed = SendMessageBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
   const tier = user.subscriptionTier;
   const isAdminUser = req.isAdmin;
 
   if (!isAdminUser) {
-    // Daily message limit check
     const dailyLimit = DAILY_MSG_LIMITS[tier] ?? Infinity;
     if (user.dailyMessageCount >= dailyLimit) {
-      res.status(402).json({ error: `Daily message limit of ${dailyLimit} reached for ${tier} tier.` });
-      return;
+      res.status(402).json({ error: `Daily message limit of ${dailyLimit} reached for ${tier} tier.` }); return;
     }
-
-    // Ticket cost check — reads live from Supabase (cached 5 min)
     const eco = await getEconomyConfig();
     const msgCost = eco.msgCostTickets ?? MSG_COST_DEFAULT;
     if (user.ticketBalance < msgCost) {
-      res.status(402).json({ error: `Insufficient tickets. Messages cost ${msgCost} ticket(s) each.` });
-      return;
+      res.status(402).json({ error: `Insufficient tickets. Messages cost ${msgCost} ticket(s) each.` }); return;
     }
   }
 
@@ -199,13 +236,8 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
   const msgCost = isAdminUser ? 0 : (eco.msgCostTickets ?? MSG_COST_DEFAULT);
 
   const character = await getSupabaseCharacterById(params.data.characterId);
+  if (!character) { res.status(404).json({ error: "Character not found" }); return; }
 
-  if (!character) {
-    res.status(404).json({ error: "Character not found" });
-    return;
-  }
-
-  // Get or create conversation
   let [conv] = await db.select().from(conversationsTable)
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
@@ -220,9 +252,15 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     }).returning();
   }
 
-  const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as Array<{ role: string; content: string; imageUrl?: string | null; timestamp?: string | null }> : [];
+  const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
 
-  // Generate AI reply
+  // ── Intimacy + content level ──────────────────────────────────────────────
+  const intimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
+  const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
+  const contentLevel = getContentLevel(intimacy, charNsfw);
+  const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
+
+  // ── Generate AI reply ─────────────────────────────────────────────────────
   const systemPrompt = character.systemPrompt ?? `You are ${character.name}, a captivating AI companion.`;
   const historyForAI = messages.map(m => ({ role: m.role, content: m.content }));
 
@@ -233,40 +271,91 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     character.name,
     user.customNickname,
     user.userTraits,
-    user.nsfwEnabled,
+    charNsfw,
   );
 
-  // Auto-image loop logic
+  // ── Image limits ──────────────────────────────────────────────────────────
+  const imgLimits = await getImageLimits(tier, isAdminUser);
+  const hourlyCount = getHourlyImageCount(req.telegramUserId);
+  const canSendImage = hourlyCount < imgLimits.hourly && conv.dailyAutoImageCount < imgLimits.daily;
+
+  const imageSeed = character.imageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
+
+  // ── Trigger word check ────────────────────────────────────────────────────
+  let autoImageUrl: string | null = null;
+  let autoIsLocked = false;
+
+  const triggeredWord = await checkTriggerWord(params.data.characterId, parsed.data.content);
+  if (triggeredWord && canSendImage) {
+    try {
+      const triggerScene = `${triggeredWord} themed intimate scene, ${contentWords}`;
+      autoImageUrl = await generateCharacterSelfie({
+        characterName: character.name,
+        genre: character.genre ?? "Fantasy",
+        systemPrompt,
+        teaserDescription: character.teaserDescription,
+        imageSeed,
+        sceneDescription: triggerScene,
+        nsfwEnabled: charNsfw,
+        contentLevelWords: contentWords,
+      });
+      incrementHourlyImageCount(req.telegramUserId);
+      logger.info({ triggeredWord, characterId: params.data.characterId }, "Trigger word image generated");
+    } catch (err) {
+      logger.warn({ err, triggeredWord }, "Trigger word image generation failed");
+    }
+  }
+
+  // ── Auto-image loop (only if no trigger image) ────────────────────────────
   const newMsgCount = conv.messageCount + 1;
   const isFreeTier = tier === "Free";
   const loop = isFreeTier ? AUTO_IMG_FREE : AUTO_IMG_PREMIUM;
-  const dailyAutoLimit = DAILY_AUTO_IMG_LIMITS[tier] ?? 25;
-
-  let autoImageUrl: string | null = null;
   const positionInLoop = newMsgCount % loop.interval;
-  const shouldIncludeImage = positionInLoop === loop.triggerAt && conv.dailyAutoImageCount < dailyAutoLimit;
+  const shouldAutoImage = !autoImageUrl && positionInLoop === loop.triggerAt && canSendImage;
 
-  if (shouldIncludeImage) {
-    autoImageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre ?? "Fantasy");
+  if (shouldAutoImage) {
+    const isBlurred = Math.random() < 0.2;
+    try {
+      const loopScene = isBlurred
+        ? `teaser preview, blurred suggestive scene, ${contentWords}`
+        : `casual portrait, ${contentWords}`;
+      const loopAvatarUrl = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
+      autoImageUrl = await generateCharacterSelfie({
+        characterName: character.name,
+        genre: character.genre ?? "Fantasy",
+        systemPrompt,
+        teaserDescription: character.teaserDescription,
+        imageSeed,
+        sceneDescription: loopScene,
+        avatarUrl: loopAvatarUrl || undefined,
+        nsfwEnabled: charNsfw && !isBlurred,
+        contentLevelWords: contentWords,
+      });
+      autoIsLocked = isBlurred;
+      incrementHourlyImageCount(req.telegramUserId);
+    } catch (err) {
+      logger.warn({ err }, "Auto-image generation failed — using avatar fallback");
+      const fallbackAvatar = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
+      autoImageUrl = fallbackAvatar || getGenreDefaultAvatar(character.genre ?? "Fantasy");
+      autoIsLocked = false;
+    }
   }
 
   const timestamp = new Date().toISOString();
-  const userMsg = { role: "user", content: parsed.data.content, imageUrl: null, timestamp };
-  const assistantMsg = { role: "assistant", content: aiText, imageUrl: autoImageUrl, timestamp };
+  const userMsg: ChatMessage  = { role: "user",      content: parsed.data.content, imageUrl: null,          timestamp };
+  const assistantMsg: ChatMessage = { role: "assistant", content: aiText,               imageUrl: autoImageUrl,  timestamp, ...(autoIsLocked ? { isLocked: true } : {}) };
 
   const newHistory = [...messages, userMsg, assistantMsg];
 
-  // Atomic update
   await db.update(conversationsTable)
     .set({
       messageHistory: newHistory,
       messageCount: newMsgCount,
-      dailyAutoImageCount: shouldIncludeImage ? sql`daily_auto_image_count + 1` : conv.dailyAutoImageCount,
+      dailyAutoImageCount: shouldAutoImage || triggeredWord ? sql`daily_auto_image_count + 1` : conv.dailyAutoImageCount,
       updatedAt: new Date(),
     })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
 
-  // Deduct tickets and increment daily message count
   await db.update(usersTable).set({
     ticketBalance: msgCost > 0 ? sql`ticket_balance - ${msgCost}` : undefined,
     dailyMessageCount: sql`daily_message_count + 1`,
@@ -290,24 +379,16 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
   }));
 });
 
+// ─── Selfie ───────────────────────────────────────────────────────────────────
 router.post("/conversations/:characterId/selfie", async (req, res): Promise<void> => {
   const params = RequestSelfieParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
   const parsed = RequestSelfieBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
   const tier = user.subscriptionTier;
   const isSelfieAdmin = req.isAdmin;
@@ -318,24 +399,24 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   if (!isSelfieAdmin) {
     const dailyTriggerLimit = DAILY_TRIGGER_LIMITS[tier] ?? 3;
     if (user.dailyTriggerRequestsCount >= dailyTriggerLimit) {
-      res.status(402).json({ error: `Daily selfie limit of ${dailyTriggerLimit} reached for ${tier} tier.` });
-      return;
+      res.status(402).json({ error: `Daily selfie limit of ${dailyTriggerLimit} reached for ${tier} tier.` }); return;
     }
-
     if (user.neonCardBalance < SELFIE_NEON_COST) {
-      res.status(402).json({ error: `Insufficient Neon Cards. Selfie requests cost ${SELFIE_NEON_COST} Neon Cards.` });
-      return;
+      res.status(402).json({ error: `Insufficient Neon Cards. Selfie requests cost ${SELFIE_NEON_COST} Neon Cards.` }); return;
     }
   }
 
   const character = await getSupabaseCharacterById(params.data.characterId);
+  if (!character) { res.status(404).json({ error: "Character not found" }); return; }
 
-  if (!character) {
-    res.status(404).json({ error: "Character not found" });
-    return;
-  }
+  // Use nsfwEnabled from character tags and user preference
+  const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
 
-  // Generate AI selfie via Perchance using the character's locked seed for facial consistency
+  // Intimacy-gated content level for selfie
+  const intimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
+  const contentLevel = getContentLevel(intimacy, charNsfw);
+  const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
+
   const imageSeed = character.imageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
 
   let imageUrl: string;
@@ -350,12 +431,53 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
       imageSeed,
       sceneDescription: parsed.data.description,
       avatarUrl: character.avatarUrl ?? null,
+      nsfwEnabled: charNsfw,
+      contentLevelWords: contentWords,
     });
     matched = true;
   } catch (err) {
-    logger.warn({ err }, "Image generation failed — using avatar fallback");
+    logger.warn({ err }, "Selfie image generation failed — using avatar fallback");
     imageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre ?? "Fantasy");
     matched = false;
+  }
+
+  // Generate AI reaction text for the selfie
+  const systemPrompt = character.systemPrompt ?? `You are ${character.name}, a captivating AI companion.`;
+
+  let selfieText = "Here you go~ 📸";
+  try {
+    selfieText = await generateAIReply(
+      systemPrompt + "\n\nYou just took a selfie for the user as requested. React briefly in character (1-2 sentences, seductive and personal).",
+      [],
+      `[User requested selfie: ${parsed.data.description}]`,
+      character.name,
+      user.customNickname,
+      user.userTraits,
+      charNsfw,
+    );
+  } catch (err) {
+    logger.warn({ err }, "Selfie AI reaction failed, using fallback text");
+  }
+
+  // Save selfie to conversation history
+  const [conv] = await db.select().from(conversationsTable)
+    .where(and(
+      eq(conversationsTable.telegramId, req.telegramUserId),
+      eq(conversationsTable.characterId, params.data.characterId),
+    ));
+
+  if (conv) {
+    const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
+    const selfieMsg: ChatMessage = {
+      role: "assistant",
+      content: selfieText,
+      imageUrl,
+      isLocked: false,
+      timestamp: new Date().toISOString(),
+    };
+    await db.update(conversationsTable)
+      .set({ messageHistory: [...messages, selfieMsg], updatedAt: new Date() })
+      .where(eq(conversationsTable.conversationId, conv.conversationId));
   }
 
   // Deduct neon cards and increment daily trigger count
@@ -364,12 +486,14 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     dailyTriggerRequestsCount: sql`daily_trigger_requests_count + 1`,
   }).where(eq(usersTable.id, req.telegramUserId));
 
-  await db.insert(transactionsTable).values({
-    telegramId: req.telegramUserId,
-    actionType: "selfie_request",
-    ticketAmount: 0,
-    neonCardAmount: SELFIE_NEON_COST > 0 ? -SELFIE_NEON_COST : 0,
-  });
+  if (SELFIE_NEON_COST > 0) {
+    await db.insert(transactionsTable).values({
+      telegramId: req.telegramUserId,
+      actionType: "selfie_request",
+      ticketAmount: 0,
+      neonCardAmount: -SELFIE_NEON_COST,
+    });
+  }
 
   const [refreshedUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
 
@@ -380,31 +504,77 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   }));
 });
 
-router.post("/conversations/:characterId/gift", async (req, res): Promise<void> => {
-  const params = SendGiftParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+// ─── Unlock Locked Image ──────────────────────────────────────────────────────
+router.post("/conversations/:characterId/unlock", async (req, res): Promise<void> => {
+  const { characterId } = req.params;
+  const { messageTimestamp } = req.body as { messageTimestamp?: string };
 
-  const parsed = SendGiftBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!messageTimestamp) { res.status(400).json({ error: "messageTimestamp required" }); return; }
+  if (!UUID_RE.test(characterId)) { res.status(400).json({ error: "Invalid characterId" }); return; }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
-    return;
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  const unlockCost = req.isAdmin ? 0 : await getPrice("image_unlock_nc", 5);
+
+  if (!req.isAdmin && user.neonCardBalance < unlockCost) {
+    res.status(402).json({ error: `Insufficient Neon Cards. Unlocking costs ${unlockCost} NC.` }); return;
   }
+
+  const [conv] = await db.select().from(conversationsTable)
+    .where(and(
+      eq(conversationsTable.telegramId, req.telegramUserId),
+      eq(conversationsTable.characterId, characterId),
+    ));
+
+  if (!conv) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+  const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
+  const idx = messages.findIndex(m => m.timestamp === messageTimestamp && m.isLocked === true);
+
+  if (idx === -1) { res.status(404).json({ error: "Locked message not found" }); return; }
+
+  messages[idx] = { ...messages[idx], isLocked: false };
+
+  await db.update(conversationsTable)
+    .set({ messageHistory: messages })
+    .where(eq(conversationsTable.conversationId, conv.conversationId));
+
+  if (!req.isAdmin && unlockCost > 0) {
+    await db.update(usersTable)
+      .set({ neonCardBalance: sql`neon_card_balance - ${unlockCost}` })
+      .where(eq(usersTable.id, req.telegramUserId));
+    await db.insert(transactionsTable).values({
+      telegramId: req.telegramUserId,
+      actionType: "image_unlock",
+      ticketAmount: 0,
+      neonCardAmount: -unlockCost,
+    });
+  }
+
+  const [refreshedUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
+
+  res.json({
+    ok: true,
+    imageUrl: messages[idx].imageUrl,
+    neonCardBalance: refreshedUser?.neonCardBalance ?? 0,
+  });
+});
+
+// ─── Gift ─────────────────────────────────────────────────────────────────────
+router.post("/conversations/:characterId/gift", async (req, res): Promise<void> => {
+  const params = SendGiftParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const parsed = SendGiftBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
   const tier = user.subscriptionTier;
   const giftReaction = GIFT_REACTIONS[parsed.data.giftType];
-  if (!giftReaction) {
-    res.status(400).json({ error: "Invalid gift type" });
-    return;
-  }
+  if (!giftReaction) { res.status(400).json({ error: "Invalid gift type" }); return; }
 
   const giftEco = await getEconomyConfig();
   const GIFT_COSTS: Record<string, { cost: number; costGold: number }> = {
@@ -417,19 +587,14 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
   const isGiftAdmin = req.isAdmin;
   const cost = isGiftAdmin ? 0 : (tier === "Gold" ? giftCosts.costGold : giftCosts.cost);
 
-  // Fetch conversation first (needed for affection update later)
   const [conv] = await db.select().from(conversationsTable)
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
       eq(conversationsTable.characterId, params.data.characterId),
     ));
 
-  if (!conv) {
-    res.status(404).json({ error: "No conversation found" });
-    return;
-  }
+  if (!conv) { res.status(404).json({ error: "No conversation found" }); return; }
 
-  // Atomically deduct NC (single SQL WHERE neon_card_balance >= cost guarantees no race)
   if (!isGiftAdmin && cost > 0) {
     const [deducted] = await db.update(usersTable)
       .set({ neonCardBalance: sql`neon_card_balance - ${cost}` })
@@ -437,20 +602,15 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
       .returning({ neonCardBalance: usersTable.neonCardBalance });
 
     if (!deducted) {
-      res.status(402).json({ error: `Insufficient Neon Cards. This gift costs ${cost} 🃏.` });
-      return;
+      res.status(402).json({ error: `Insufficient Neon Cards. This gift costs ${cost} 🃏.` }); return;
     }
   }
 
-  // NC deducted — now update affection (both succeed or NC deduction failed before this)
   const newAP = conv.affectionPoints + giftReaction.ap;
   const newLevel = newAP >= 100 ? 3 : newAP >= 40 ? 2 : 1;
 
   await db.update(conversationsTable)
-    .set({
-      affectionPoints: newAP,
-      affectionLevel: newLevel,
-    })
+    .set({ affectionPoints: newAP, affectionLevel: newLevel })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
 
   await db.insert(transactionsTable).values({
@@ -460,12 +620,38 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     neonCardAmount: cost > 0 ? -cost : 0,
   });
 
+  // Update intimacy level in Supabase
+  const intimacyDelta = GIFT_INTIMACY_DELTA[parsed.data.giftType] ?? 0;
+  if (intimacyDelta > 0) {
+    await updateIntimacyLevel(req.telegramUserId, params.data.characterId, intimacyDelta)
+      .catch(err => logger.warn({ err }, "Gift intimacy update failed"));
+  }
+
+  const character = await getSupabaseCharacterById(params.data.characterId);
   const [refreshedUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
 
-  // Scenario image for secret_key gift
+  // Scenario image for secret_key gift (use real generation based on intimacy)
   let scenarioImageUrl: string | null = null;
-  if (parsed.data.giftType === "secret_key") {
-    scenarioImageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre ?? "Fantasy");
+  if (parsed.data.giftType === "secret_key" && character) {
+    const newIntimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
+    const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
+    const contentLevel = getContentLevel(newIntimacy, charNsfw);
+    const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
+    const imageSeed = character.imageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
+    try {
+      scenarioImageUrl = await generateCharacterSelfie({
+        characterName: character.name,
+        genre: character.genre ?? "Fantasy",
+        systemPrompt: character.systemPrompt ?? "",
+        teaserDescription: character.teaserDescription,
+        imageSeed,
+        sceneDescription: "intimate gift scene, secret revealed, close and personal",
+        nsfwEnabled: charNsfw,
+        contentLevelWords: contentWords,
+      });
+    } catch {
+      scenarioImageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre ?? "Fantasy");
+    }
   }
 
   res.json(SendGiftResponse.parse({

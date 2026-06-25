@@ -1,0 +1,205 @@
+Before implementing anything, first check the current state of these items that were partially completed in a previous session:
+
+Point 11 (Character Bio routing) — The CharacterBio page exists but check if character cards in explore.tsx, home.tsx, and any other screens already route to it or still go directly to chat. Fix any that bypass the bio screen.
+Point 16 (Intimacy) — Check if any intimacy functions were started in the codebase (look for user_character_intimacy table reads/writes, intimacy update functions, or gift intimacy handlers). If partially done, complete what's missing without duplicating what exists.
+
+After checking both, report what was found before proceeding with the full implementation. Then continue with all remaining points 7 through 16.
+
+Points 5, 6, 14, 15 are already done. CharacterBio page exists. Continue from here without touching what's already done.
+7. Character Selfie/Image Request in Chat
+Selfie cost: read from getPrice('selfie_cost_nc') — currently 20 NC. No hardcoded values.
+
+Read user's selfie request text for image type direction
+Fetch active character's saved details from Supabase
+Combine character details + user request into image prompt
+Example: "anime girl, silver hair, cyberpunk, smiling, rooftop, portrait, selfie"
+
+NSFW/SFW logic based on character's nsfw_enabled tag only:
+
+Character nsfw_enabled = true → &safe=false&nologo=true
+Character nsfw_enabled = false → default safe mode
+
+Primary: Pollinations.ai
+https://image.pollinations.ai/prompt/{encoded_prompt}&width=512&height=512
+Fallback: Perchance.org
+https://image.perchance.org/generate?prompt={encoded_prompt}&resolution=512x512
+If both fail, return character's existing avatar_url — never break chat flow.
+Show loading indicator while generating. Selfie images count toward hourly and daily limits.
+All images must be sent as one combined message with the character's reply — never separate.
+Apply to both Mini App and Telegram bot.
+
+8. In-Chat Automatic Image Messages
+Image limits — all read from Supabase prices table via getPrice(). No hardcoded values:
+
+Free → getPrice('img_limit_free_hourly') per hour, getPrice('img_limit_free_daily') per day
+Bronze → getPrice('img_limit_bronze_hourly') per hour, getPrice('img_limit_bronze_daily') per day
+Silver → getPrice('img_limit_silver_hourly') per hour, getPrice('img_limit_silver_daily') per day
+Gold → getPrice('img_limit_gold_hourly') per hour, getPrice('img_limit_gold_daily') per day
+Supreme admin → getPrice('img_limit_supreme_hourly') per hour, getPrice('img_limit_supreme_daily') per day
+
+Build a new image counter per user that tracks:
+
+Images sent this hour (reset every 60 minutes)
+Images sent today (reset at midnight)
+
+Before sending any automatic chat image, check both hourly and daily counts against the user's tier limits. If either limit is hit, skip the image silently for that message.
+Image content is determined by BOTH character NSFW tag AND current intimacy level:
+
+0–25% intimacy → always mild regardless of character tag
+26–50% intimacy → SFW mild, NSFW moderate
+51–75% intimacy → SFW moderate explicit, NSFW explicit
+76–100% intimacy → SFW explicit, NSFW fully explicit
+
+NSFW/SFW logic based on character's nsfw_enabled tag only:
+
+Character nsfw_enabled = true → &safe=false&nologo=true
+Character nsfw_enabled = false → default safe mode
+
+Primary: Pollinations.ai
+https://image.pollinations.ai/prompt/{encoded_prompt}&width=512&height=512
+Fallback: Perchance.org
+https://image.perchance.org/generate?prompt={encoded_prompt}&resolution=512x512
+If both fail, send message without image — never break chat flow.
+All images must come as one combined message with the character's reply — never separate.
+Apply to both Mini App and Telegram bot.
+Admin Panel — Pricing Section:
+
+Add an Image Limits subsection showing a table of hourly and daily limits per tier. All values editable and saved to Supabase prices table via upsert. Changes take effect immediately via cache invalidation. No hardcoded values anywhere — always read from getPrice().
+
+9. Blurred Locked Images in Chat
+Blurred images are exempt from hourly and daily image limits — always appear regardless of limit status.
+Unlock cost: read from getPrice('image_unlock_nc') — currently 15 NC. No hardcoded values.
+
+Display blurred image with lock icon: "🔓 Unlock for [cost] 🃏 Neon Cards"
+On unlock: deduct NC, reveal image
+If insufficient NC: "Not enough Neon Cards. Visit the shop to get more."
+Log in transaction_logs as action_type = 'image_unlock'
+
+Image content gated by intimacy level:
+
+SFW characters → moderate explicit at 51%+ intimacy
+NSFW characters → explicit at 51%+ intimacy
+Below 51% intimacy → follow same intimacy content gates as automatic images
+
+NSFW/SFW logic based on character's nsfw_enabled tag only:
+
+Character nsfw_enabled = true → &safe=false&nologo=true
+Character nsfw_enabled = false → default safe mode
+
+Primary: Pollinations.ai
+https://image.pollinations.ai/prompt/{encoded_prompt}&width=512&height=512
+Fallback: Perchance.org
+https://image.perchance.org/generate?prompt={encoded_prompt}&resolution=512x512
+If both fail, do not send blurred image — never break chat flow.
+All images must come as one combined message with the character's reply — never separate.
+Apply to both Mini App and Telegram bot.
+
+10. Trigger Word Images
+Add a dedicated Trigger Words section in the admin panel. Also add a "🔥 Trigger Words" box on the Stats page routing to this section.
+Trigger words are managed per individual character:
+
+Show searchable list of all characters
+Admin selects a character and sees that character's trigger words
+Admin can add or remove trigger words per character
+All changes save immediately to Supabase trigger_words table
+
+The trigger_words table already exists in Supabase with columns: id, character_id, word, created_at. Do not create it — just read and write to it.
+How trigger words work in chat:
+
+On every user message, check if it contains any trigger word belonging to the active character
+If matched, character's next reply includes an AI-generated image
+Build image prompt from character details + trigger word context
+Fires independently of image loop — does not consume or advance loop counter
+
+Collision handling:
+
+If loop image and trigger image fall on same message, send trigger image and push loop image to next message
+
+Image delivery:
+
+All images must come as one combined message with character's reply — never separate
+
+Content gated by intimacy level AND character tag:
+
+NSFW/SFW logic based on character's nsfw_enabled tag only
+Character nsfw_enabled = true → &safe=false&nologo=true
+Character nsfw_enabled = false → default safe mode
+
+Primary: Pollinations.ai
+https://image.pollinations.ai/prompt/{encoded_prompt}&width=512&height=512
+Fallback: Perchance.org
+https://image.perchance.org/generate?prompt={encoded_prompt}&resolution=512x512
+If both fail, send reply without image — never break chat flow.
+Trigger images count toward hourly and daily limits. If user has hit their limit, skip trigger image silently.
+Apply to both Mini App and Telegram bot.
+
+11. Character Bio Screen Before Chat (routing fix only)
+The CharacterBio page already exists. Fix the navigation so that clicking any character card anywhere in the app (Explore, Browse, search results, home page trending) routes to the CharacterBio page first instead of going directly to chat. Do not auto-enter chat on character click anywhere — always show bio first.
+Apply the same to the Telegram bot — show bio as a message with inline buttons before entering chat.
+
+12. Multiple Avatars Per Character
+Allow admin to set multiple avatars per character in the admin panel character management section.
+
+Admin can upload or generate (via Pollinations/Perchance) multiple avatar images for a single character
+All avatars saved to Supabase character_avatars table
+The character_avatars table already exists in Supabase with columns: id, character_id, avatar_url, is_primary, created_at. Do not create it — just read and write to it.
+Admin can set one avatar as primary (shown by default everywhere)
+Admin can delete any avatar
+During chat, the app cycles through the character's avatars randomly when sending images — not always the same one
+If a character has only one avatar, use that one always
+
+
+13. Character Browse in Bot — One by One with Navigation
+When any bot command shows a list of characters (e.g. /browse, /explore, /characters, /search or any similar command), display characters one at a time instead of as a list.
+Each character card shows:
+
+Character avatar image
+Character name, genre, personality summary
+NSFW/SFW tag
+
+Inline buttons below each character:
+
+⬅️ Previous — go to previous character
+➡️ Next — go to next character
+💬 Chat Now — starts chat with this character immediately
+🔗 Share Link — generates and sends a shareable deep link for this character
+📱 Open in App — sends a link that opens this character directly in the Mini App
+
+Navigation:
+
+Track position per user per session (first character shown is position 1)
+Previous/Next update the same message (edit in place) — do not send a new message each time
+Show position indicator: "Character 3 of 12"
+If at first character, disable Previous button
+If at last character, disable Next button
+
+Fix Share Character button/link:
+
+Share link format: https://t.me/{botusername}?start=character_{character_id}
+When a user clicks this link, the bot handles the start=character_{character_id} parameter, fetches that character from Supabase, and shows its bio card with the same navigation buttons
+Fix whatever is currently broken with the share character flow end to end
+
+Open in App button:
+
+Link format: https://t.me/{botusername}/app?startapp=character_{character_id}
+Opens the Mini App directly on that character's bio screen
+
+
+16. Intimacy-Based Image Content Gating
+Intimacy level per user per character determines image content across all image types (automatic, selfie, trigger, blurred).
+Intimacy gates:
+
+0–25% → always mild regardless of character NSFW tag
+26–50% → SFW mild, NSFW moderate
+51–75% → SFW moderate explicit, NSFW explicit
+76–100% → SFW explicit, NSFW fully explicit
+
+Intimacy contribution per gift:
+
+🍹 Cyber Cocktail → +1% intimacy
+💎 Neon Bracelet → +2% intimacy
+🔑 Secret Key → +5% intimacy
+
+The user_character_intimacy table exists in Supabase with columns: id, user_id (text), character_id (uuid), intimacy_level (numeric 0–100), updated_at, unique on (user_id, character_id). Do not create it — just read and write to it.
+Apply intimacy gating to all image types — content level is always determined by the lower of the character's NSFW tag and the current intimacy level.
+Do not change any other logic or UI.

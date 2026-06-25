@@ -406,7 +406,7 @@ export function Home() {
               return (
                 <Link 
                   key={char.characterId} 
-                  href={`/chat/${char.characterId}`}
+                  href={`/character/${char.characterId}`}
                   className="group relative aspect-[3/4] rounded-xl overflow-hidden bg-card border border-border hover:border-primary transition-all hover:box-glow-pink flex flex-col justify-end"
                 >
                   <img 

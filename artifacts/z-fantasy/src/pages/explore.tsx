@@ -79,7 +79,7 @@ export function Explore() {
   const handleSurprise = async () => {
     const { data } = await surpriseQuery.refetch();
     if (data) {
-      setLocation(`/chat/${data.characterId}`);
+      setLocation(`/character/${data.characterId}`);
     } else {
       toast({ title: "No surprise character found", variant: "destructive" });
     }
@@ -263,7 +263,7 @@ export function Explore() {
                   🔗 Share
                 </button>
                 <button
-                  onClick={() => { setSelectedChar(null); setLocation(`/chat/${selectedChar.characterId}`); }}
+                  onClick={() => { setSelectedChar(null); setLocation(`/character/${selectedChar.characterId}`); }}
                   className="flex-[2] py-3 rounded-xl bg-primary text-white font-bold text-sm flex items-center justify-center gap-2 box-glow-pink hover:bg-primary/90 active:scale-95 transition-all"
                 >
                   <MessageCircle size={16} />

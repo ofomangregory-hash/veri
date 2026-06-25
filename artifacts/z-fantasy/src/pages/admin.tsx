@@ -1482,6 +1482,7 @@ export function Admin() {
     {/* ── Character Edit Drawer ─────────────────────────────────────────────── */}
     {charDrawerOpen && (
       <CharDrawerPanel
+        characterId={charDrawerCharId}
         charDrawerName={charDrawerName} setCharDrawerName={setCharDrawerName}
         charDrawerBio={charDrawerBio} setCharDrawerBio={setCharDrawerBio}
         charDrawerGreeting={charDrawerGreeting} setCharDrawerGreeting={setCharDrawerGreeting}
@@ -1684,6 +1685,7 @@ function UserDrawerContent({ drawerUser, drawerTxns, editTickets, setEditTickets
 }
 
 interface CharDrawerPanelProps {
+  characterId?: string | null;
   charDrawerName: string; setCharDrawerName: (v: string) => void;
   charDrawerBio: string; setCharDrawerBio: (v: string) => void;
   charDrawerGreeting: string; setCharDrawerGreeting: (v: string) => void;
@@ -1697,7 +1699,145 @@ interface CharDrawerPanelProps {
   onClose: () => void;
 }
 
-function CharDrawerPanel({ charDrawerName, setCharDrawerName, charDrawerBio, setCharDrawerBio, charDrawerGreeting, setCharDrawerGreeting, charDrawerAvatar, setCharDrawerAvatar, charDrawerPrompt, setCharDrawerPrompt, charDrawerTags, setCharDrawerTags, charDrawerVisibility, setCharDrawerVisibility, charDrawerNsfw, setCharDrawerNsfw, savingChar, saveCharChanges, onClose }: CharDrawerPanelProps) {
+function TriggerWordsSection({ characterId, token }: { characterId: string; token: string }) {
+  const [words, setWords] = useState<{ id: string; word: string }[]>([]);
+  const [newWord, setNewWord] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/admin/characters/${characterId}/trigger-words`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(setWords).catch(() => {});
+  }, [characterId, token]);
+
+  const addWord = async () => {
+    if (!newWord.trim()) return;
+    setLoading(true);
+    const res = await fetch(`/api/admin/characters/${characterId}/trigger-words`, {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ word: newWord.trim() }),
+    }).catch(() => null);
+    if (res?.ok) {
+      const created = await res.json();
+      setWords(w => [...w, created]);
+      setNewWord("");
+    }
+    setLoading(false);
+  };
+
+  const deleteWord = async (id: string) => {
+    await fetch(`/api/admin/trigger-words/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    setWords(w => w.filter(x => x.id !== id));
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Trigger Words</p>
+      <p className="text-[10px] text-muted-foreground">When user message contains these words, an image is auto-generated.</p>
+      <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+        {words.map(w => (
+          <span key={w.id} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[10px]">
+            {w.word}
+            <button onClick={() => deleteWord(w.id)} className="ml-0.5 text-accent/60 hover:text-red-400"><X size={10} /></button>
+          </span>
+        ))}
+        {words.length === 0 && <span className="text-[10px] text-muted-foreground italic">No trigger words yet</span>}
+      </div>
+      <div className="flex gap-1.5">
+        <Input value={newWord} onChange={e => setNewWord(e.target.value)} onKeyDown={e => e.key === "Enter" && addWord()}
+          placeholder="e.g. kiss, hug" className="bg-background border-border h-8 text-xs flex-1" />
+        <button onClick={addWord} disabled={loading || !newWord.trim()}
+          className="px-3 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 disabled:opacity-50 shrink-0">
+          {loading ? "…" : <Plus size={12} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AvatarsSection({ characterId, token }: { characterId: string; token: string }) {
+  const [avatars, setAvatars] = useState<{ id: string; avatarUrl: string; isPrimary: boolean }[]>([]);
+  const [newUrl, setNewUrl] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/admin/characters/${characterId}/avatars`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(setAvatars).catch(() => {});
+  }, [characterId, token]);
+
+  const addUrl = async () => {
+    if (!newUrl.trim()) return;
+    setSaving(true);
+    const res = await fetch(`/api/admin/characters/${characterId}/avatars`, {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ avatarUrl: newUrl.trim() }),
+    }).catch(() => null);
+    if (res?.ok) { const av = await res.json(); setAvatars(a => [...a, av]); setNewUrl(""); }
+    setSaving(false);
+  };
+
+  const generate = async () => {
+    setGenerating(true);
+    const res = await fetch(`/api/admin/characters/${characterId}/avatars/generate`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => null);
+    if (res?.ok) { const d = await res.json(); if (d.avatar) setAvatars(a => [...a, d.avatar]); }
+    setGenerating(false);
+  };
+
+  const setPrimary = async (avatarId: string) => {
+    await fetch(`/api/admin/avatars/${avatarId}/primary`, {
+      method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ characterId }),
+    }).catch(() => {});
+    setAvatars(a => a.map(av => ({ ...av, isPrimary: av.id === avatarId })));
+  };
+
+  const deleteAvatar = async (avatarId: string) => {
+    await fetch(`/api/admin/avatars/${avatarId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    setAvatars(a => a.filter(av => av.id !== avatarId));
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Avatar Pool</p>
+      <p className="text-[10px] text-muted-foreground">Multiple avatars cycle randomly during auto-image generation.</p>
+      <div className="flex flex-wrap gap-2">
+        {avatars.map(av => (
+          <div key={av.id} className={`relative group w-14 h-14 rounded-lg overflow-hidden border-2 ${av.isPrimary ? "border-primary" : "border-border"}`}>
+            <img src={av.avatarUrl} className="w-full h-full object-cover" alt="" />
+            <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-0.5">
+              {!av.isPrimary && (
+                <button onClick={() => setPrimary(av.id)} title="Set Primary" className="text-[8px] text-yellow-400 font-bold leading-tight">★ Primary</button>
+              )}
+              <button onClick={() => deleteAvatar(av.id)} className="text-red-400"><X size={10} /></button>
+            </div>
+            {av.isPrimary && <div className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-primary" />}
+          </div>
+        ))}
+        {avatars.length === 0 && <span className="text-[10px] text-muted-foreground italic">No avatars yet</span>}
+      </div>
+      <div className="flex gap-1.5">
+        <Input value={newUrl} onChange={e => setNewUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && addUrl()}
+          placeholder="https://... avatar URL" className="bg-background border-border h-8 text-xs flex-1" />
+        <button onClick={addUrl} disabled={saving || !newUrl.trim()}
+          className="px-3 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 disabled:opacity-50 shrink-0">
+          {saving ? "…" : <Plus size={12} />}
+        </button>
+      </div>
+      <button onClick={generate} disabled={generating}
+        className="w-full h-8 rounded-lg bg-primary/10 border border-primary/30 text-primary text-[10px] font-bold hover:bg-primary/20 disabled:opacity-50 flex items-center justify-center gap-1 transition-all">
+        {generating ? <RefreshCw size={11} className="animate-spin" /> : <Sparkles size={11} />}
+        {generating ? "Generating…" : "✨ AI Generate Avatar"}
+      </button>
+    </div>
+  );
+}
+
+function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charDrawerBio, setCharDrawerBio, charDrawerGreeting, setCharDrawerGreeting, charDrawerAvatar, setCharDrawerAvatar, charDrawerPrompt, setCharDrawerPrompt, charDrawerTags, setCharDrawerTags, charDrawerVisibility, setCharDrawerVisibility, charDrawerNsfw, setCharDrawerNsfw, savingChar, saveCharChanges, onClose }: CharDrawerPanelProps) {
+  const token = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -1776,6 +1916,16 @@ function CharDrawerPanel({ charDrawerName, setCharDrawerName, charDrawerBio, set
               <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${charDrawerNsfw ? "left-5" : "left-1"}`} />
             </button>
           </div>
+          {characterId && (
+            <div className="p-3 rounded-xl bg-card border border-border space-y-3">
+              <TriggerWordsSection characterId={characterId} token={token} />
+            </div>
+          )}
+          {characterId && (
+            <div className="p-3 rounded-xl bg-card border border-border space-y-3">
+              <AvatarsSection characterId={characterId} token={token} />
+            </div>
+          )}
         </div>
         <div className="p-4 border-t border-border shrink-0 space-y-2">
           <button onClick={saveCharChanges} disabled={savingChar}
@@ -2106,9 +2256,90 @@ function PricingTab({
               </table>
             </div>
           </div>
+
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Auto-Image Limits (per Tier)</p>
+            <p className="text-[10px] text-muted-foreground">Controls how many auto-images each tier receives per hour and per day. Set via Supabase price keys.</p>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left p-2 text-muted-foreground font-semibold">Tier</th>
+                    <th className="text-center p-2 text-muted-foreground font-semibold">Hourly</th>
+                    <th className="text-center p-2 text-muted-foreground font-semibold">Daily</th>
+                    <th className="text-center p-2 text-muted-foreground font-semibold">Save</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(["free","bronze","silver","gold","supreme"] as const).map(tier => (
+                    <ImageLimitRow key={tier} tier={tier} priceOverrides={priceOverrides} setPriceOverrides={setPriceOverrides} savePriceOverride={savePriceOverride} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Keys: <code className="bg-muted px-1 rounded">img_limit_free_hourly</code>, <code className="bg-muted px-1 rounded">img_limit_free_daily</code>, etc. Default: hourly=3, daily=15.</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-card border border-border space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Image Unlock Cost</p>
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Unlock blurred image (🃏 Neon Cards)</label>
+                <div className="flex gap-1.5">
+                  <Input
+                    value={priceOverrides["image_unlock_nc"] ?? ""}
+                    onChange={e => setPriceOverrides(p => ({ ...p, image_unlock_nc: e.target.value }))}
+                    placeholder="e.g. 5"
+                    className="bg-background border-border h-8 text-xs text-center" />
+                  <button
+                    onClick={() => savePriceOverride("image_unlock_nc", Number(priceOverrides["image_unlock_nc"] ?? 5))}
+                    className="px-3 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
+                    <Save size={12} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function ImageLimitRow({ tier, priceOverrides, setPriceOverrides, savePriceOverride }: {
+  tier: string;
+  priceOverrides: Record<string, string>;
+  setPriceOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  savePriceOverride: (key: string, val: number) => void;
+}) {
+  const hourlyKey = `img_limit_${tier}_hourly`;
+  const dailyKey = `img_limit_${tier}_daily`;
+  const [saving, setSaving] = useState<string | null>(null);
+  const doSave = async (key: string, val: number) => {
+    setSaving(key);
+    await savePriceOverride(key, val);
+    setSaving(null);
+  };
+  return (
+    <tr className="border-t border-border">
+      <td className="p-2 font-bold capitalize">{tier}</td>
+      <td className="p-1.5">
+        <Input value={priceOverrides[hourlyKey] ?? ""} onChange={e => setPriceOverrides(p => ({ ...p, [hourlyKey]: e.target.value }))}
+          placeholder="3" className="bg-background border-border h-7 text-[11px] text-center" />
+      </td>
+      <td className="p-1.5">
+        <Input value={priceOverrides[dailyKey] ?? ""} onChange={e => setPriceOverrides(p => ({ ...p, [dailyKey]: e.target.value }))}
+          placeholder="15" className="bg-background border-border h-7 text-[11px] text-center" />
+      </td>
+      <td className="p-1.5 text-center">
+        <button
+          onClick={() => { doSave(hourlyKey, Number(priceOverrides[hourlyKey] ?? 3)); doSave(dailyKey, Number(priceOverrides[dailyKey] ?? 15)); }}
+          disabled={saving !== null}
+          className="px-2 h-7 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 disabled:opacity-50">
+          {saving ? "…" : <Save size={11} />}
+        </button>
+      </td>
+    </tr>
   );
 }
 

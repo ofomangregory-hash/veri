@@ -854,4 +854,88 @@ router.post("/admin/blb/:userId/limit", async (req, res): Promise<void> => {
   res.json({ ok: true, userId, limits });
 });
 
+// ─── Trigger Words ─────────────────────────────────────────────────────────────
+import {
+  getTriggerWordsForCharacter,
+  addTriggerWord,
+  removeTriggerWord,
+} from "../lib/supabaseTriggerWords";
+
+router.get("/admin/characters/:characterId/trigger-words", adminOnly, async (req, res): Promise<void> => {
+  const words = await getTriggerWordsForCharacter(req.params.characterId).catch(() => []);
+  res.json(words);
+});
+
+router.post("/admin/characters/:characterId/trigger-words", adminOnly, async (req, res): Promise<void> => {
+  const { word } = req.body as { word?: string };
+  if (!word || !word.trim()) { res.status(400).json({ error: "word is required" }); return; }
+  const result = await addTriggerWord(req.params.characterId, word.trim());
+  if (!result) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  res.json(result);
+});
+
+router.delete("/admin/trigger-words/:wordId", adminOnly, async (req, res): Promise<void> => {
+  await removeTriggerWord(req.params.wordId).catch(() => {});
+  res.json({ ok: true });
+});
+
+// ─── Character Avatars ─────────────────────────────────────────────────────────
+import {
+  getCharacterAvatars,
+  addCharacterAvatar,
+  setPrimaryAvatar,
+  deleteCharacterAvatar,
+} from "../lib/supabaseAvatars";
+
+router.get("/admin/characters/:characterId/avatars", adminOnly, async (req, res): Promise<void> => {
+  const avatars = await getCharacterAvatars(req.params.characterId).catch(() => []);
+  res.json(avatars);
+});
+
+router.post("/admin/characters/:characterId/avatars", adminOnly, async (req, res): Promise<void> => {
+  const { avatarUrl, isPrimary } = req.body as { avatarUrl?: string; isPrimary?: boolean };
+  if (!avatarUrl) { res.status(400).json({ error: "avatarUrl is required" }); return; }
+  const result = await addCharacterAvatar(req.params.characterId, avatarUrl, isPrimary ?? false);
+  if (!result) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  res.json(result);
+});
+
+router.put("/admin/avatars/:avatarId/primary", adminOnly, async (req, res): Promise<void> => {
+  const { characterId } = req.body as { characterId?: string };
+  if (!characterId) { res.status(400).json({ error: "characterId required" }); return; }
+  await setPrimaryAvatar(req.params.avatarId, characterId).catch(() => {});
+  res.json({ ok: true });
+});
+
+router.delete("/admin/avatars/:avatarId", adminOnly, async (req, res): Promise<void> => {
+  await deleteCharacterAvatar(req.params.avatarId).catch(() => {});
+  res.json({ ok: true });
+});
+
+// ─── Image generation (admin) for avatars ─────────────────────────────────────
+import { generateCharacterAvatar as genAvatar } from "../lib/imageGenerator";
+import { getSupabaseCharacterById as getCharById } from "../lib/supabaseCharacters";
+
+router.post("/admin/characters/:characterId/avatars/generate", adminOnly, async (req, res): Promise<void> => {
+  const char = await getCharById(req.params.characterId);
+  if (!char) { res.status(404).json({ error: "Character not found" }); return; }
+  const tags = (char.tags ?? []) as string[];
+  const nsfwEnabled = tags.some(t => t.toUpperCase() === "#NSFW" || t.toUpperCase() === "NSFW");
+  const imageSeed = char.imageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
+  try {
+    const url = await genAvatar({
+      characterName: char.name,
+      genre: char.genre ?? "Fantasy",
+      teaserDescription: char.teaserDescription,
+      imageSeed,
+      nsfwEnabled,
+    });
+    const result = await addCharacterAvatar(req.params.characterId, url, false);
+    res.json({ ok: true, avatarUrl: url, avatar: result });
+  } catch (err) {
+    logger.warn({ err }, "Admin avatar generation failed");
+    res.status(500).json({ error: "Image generation failed" });
+  }
+});
+
 export default router;

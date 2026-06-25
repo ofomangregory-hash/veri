@@ -42,6 +42,20 @@ const PRICE_DEFAULTS: Record<string, PriceEntry> = {
   nc_starter:             { id: "nc_starter",             label: "Neon Card Starter Pack",  amount: 200   },
   nc_booster:             { id: "nc_booster",             label: "Neon Card Booster Pack",  amount: 450   },
   nc_mega:                { id: "nc_mega",                label: "Neon Card Mega Pack",     amount: 950   },
+  // Image limits (hourly)
+  img_limit_free_hourly:    { id: "img_limit_free_hourly",    label: "Free Hourly Image Limit",    amount: 5  },
+  img_limit_bronze_hourly:  { id: "img_limit_bronze_hourly",  label: "Bronze Hourly Image Limit",  amount: 10 },
+  img_limit_silver_hourly:  { id: "img_limit_silver_hourly",  label: "Silver Hourly Image Limit",  amount: 20 },
+  img_limit_gold_hourly:    { id: "img_limit_gold_hourly",    label: "Gold Hourly Image Limit",    amount: 30 },
+  img_limit_supreme_hourly: { id: "img_limit_supreme_hourly", label: "Supreme Hourly Image Limit", amount: 999},
+  // Image limits (daily)
+  img_limit_free_daily:     { id: "img_limit_free_daily",     label: "Free Daily Image Limit",     amount: 10 },
+  img_limit_bronze_daily:   { id: "img_limit_bronze_daily",   label: "Bronze Daily Image Limit",   amount: 30 },
+  img_limit_silver_daily:   { id: "img_limit_silver_daily",   label: "Silver Daily Image Limit",   amount: 60 },
+  img_limit_gold_daily:     { id: "img_limit_gold_daily",     label: "Gold Daily Image Limit",     amount: 100},
+  img_limit_supreme_daily:  { id: "img_limit_supreme_daily",  label: "Supreme Daily Image Limit",  amount: 9999},
+  // Unlock cost
+  image_unlock_nc:          { id: "image_unlock_nc",          label: "Image Unlock Cost (NC)",     amount: 5  },
 };
 
 // Legacy aliases — old IDs used throughout the codebase, mapped to canonical IDs

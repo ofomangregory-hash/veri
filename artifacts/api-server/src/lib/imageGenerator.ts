@@ -25,6 +25,8 @@ export interface GenerateSelfieOptions {
   sceneDescription: string;
   avatarUrl?: string | null;
   nsfwEnabled?: boolean;
+  /** Extra content-level words appended to the prompt based on intimacy level */
+  contentLevelWords?: string;
 }
 
 export interface GenerateAvatarOptions {
@@ -36,7 +38,7 @@ export interface GenerateAvatarOptions {
 }
 
 function buildPrompt(opts: GenerateSelfieOptions): string {
-  const { characterName, genre, teaserDescription, sceneDescription } = opts;
+  const { characterName, genre, teaserDescription, sceneDescription, contentLevelWords } = opts;
 
   const visualPrefix = GENRE_VISUAL_PREFIXES[genre] ?? DEFAULT_VISUAL_PREFIX;
 
@@ -49,8 +51,9 @@ function buildPrompt(opts: GenerateSelfieOptions): string {
     `${characterName},`,
     subjectHint + ",",
     sceneDescription + ",",
+    contentLevelWords ? contentLevelWords + "," : "",
     "portrait, solo, looking at viewer, masterpiece, best quality, ultra-detailed",
-  ];
+  ].filter(Boolean);
 
   return promptParts.join(" ").replace(/\s{2,}/g, " ").trim();
 }
