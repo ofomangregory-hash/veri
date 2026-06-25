@@ -1,0 +1,22 @@
+Paste this into Replit:
+
+Before doing anything else, audit the entire codebase and confirm each of the following features is fully implemented. For each point, check the actual code — not just what was planned — and report ✅ Done, ⚠️ Partial, or ❌ Missing with a brief explanation of what exists or what's missing.
+1. Earnings page renamed to Transactions. New Earnings page shows only Star transactions with daily/weekly/monthly/custom toggle at the top.
+2. transaction_logs Drizzle schema uses neon_card_amount and star_amount column names everywhere — no references to old names.
+3. Supreme admin bot command uses .eq('id', userId) not .eq('telegram_id', userId). No supreme admin grant runs on every login — only reads existing value from Supabase.
+4. User nickname displays in the side/hamburger panel above Telegram username.
+5. On every login (bot and Mini App), user_restrictions table is checked for ban, block, and feature restrictions before any action proceeds. Limits (messages/day, creations/week, purchases/day) are enforced.
+6. Character avatar generation uses Pollinations.ai as primary and Perchance.org as fallback. Character creation cost reads from getPrice('char_create_nc') — no hardcoded value.
+7. Selfie request reads user's text, builds a prompt from character details + request, generates via Pollinations (Perchance fallback). Cost reads from getPrice('selfie_cost_nc'). Image sent as one combined message with reply.
+8. Auto chat images enforce hourly and daily limits per tier read from getPrice(). Image content level determined by character NSFW tag AND intimacy level. Images sent as one combined message with reply.
+9. Blurred images appear in chat with lock overlay. Unlock costs getPrice('image_unlock_nc') NC. Exempt from hourly/daily limits. Content gated by intimacy. Logged in transaction_logs.
+10. Trigger words managed per individual character in admin panel. "🔥 Trigger Words" box on Stats page. Trigger word matches fire an image with the next reply independently of the image loop. Collision handling pushes loop image to next message.
+11. Clicking any character card in home, explore, browse, or search routes to CharacterBio page first — never directly to chat. Bot shows bio with inline buttons before chat.
+12. Admin can add multiple avatars per character, set primary, delete. During chat, avatars cycle randomly. Reads/writes to character_avatars table.
+13. Bot character browse commands show characters one at a time with ⬅️ Previous, ➡️ Next, 💬 Chat Now, 🔗 Share Link, 📱 Open in App buttons. Navigation edits message in place. Share link and Open in App links are correctly formatted.
+14. Gift balance check and debit are atomic — both use neon_card_balance. If check fails, nothing is debited and intimacy does not increase.
+15. All gift UI shows Neon Cards (🃏) as currency. Prices read from getPrice(). Gold 50% discount displays correctly.
+16. Intimacy reads/writes to user_character_intimacy table. Gifts increase intimacy (Cocktail +1%, Bracelet +2%, Key +5%). Image content gated by intimacy level across all image types (auto, selfie, trigger, blurred).
+17. Daily claim UI shows live reward values from getPrice() based on user's tier — no hardcoded values.
+
+After auditing, list anything that is ⚠️ Partial or ❌ Missing and fix them immediately without waiting for confirmation.
