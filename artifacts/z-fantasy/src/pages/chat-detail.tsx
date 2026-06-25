@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import { useGetConversation, useSendMessage, useSendGift, useRequestSelfie, useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Send, Gift, Camera, ChevronLeft, Heart, X, Lock, Unlock } from "lucide-react";
+import { Send, Gift, Camera, ChevronLeft, Heart, X, Lock, Unlock, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,6 +26,8 @@ export function ChatDetail() {
   const [showGiftTray, setShowGiftTray] = useState(false);
   const [showSelfieModal, setShowSelfieModal] = useState(false);
   const [selfieDesc, setSelfieDesc] = useState("");
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -121,6 +123,29 @@ export function ChatDetail() {
     });
   };
 
+  const handleNewChat = async () => {
+    if (!id) return;
+    setArchiving(true);
+    try {
+      const token = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
+      const res = await fetch(`/api/conversations/${id}/archive`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed" }));
+        throw new Error(err.error ?? "Failed");
+      }
+      await queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      refetch();
+      setShowNewChatModal(false);
+      toast({ title: "🔄 Fresh start!", description: "New conversation started." });
+    } catch (e) {
+      toast({ title: "Failed", description: String(e), variant: "destructive" });
+    }
+    setArchiving(false);
+  };
+
   const handleUnlock = useCallback((msg: ChatMsg) => {
     if (!msg.timestamp) return;
     unlockMutation.mutate(msg.timestamp);
@@ -151,6 +176,11 @@ export function ChatDetail() {
             <Heart size={10} className="fill-primary" /> {conv?.affectionPoints || 0} AP
           </div>
         </div>
+        <button onClick={() => setShowNewChatModal(true)}
+          className="p-2 text-muted-foreground hover:text-white transition-colors"
+          title="New Chat / Fresh Start">
+          <RefreshCw size={18} />
+        </button>
       </header>
 
       {/* Messages */}
@@ -331,6 +361,33 @@ export function ChatDetail() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* New Chat Confirmation Modal */}
+      {showNewChatModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm mx-auto bg-background rounded-t-2xl border-t border-border p-6 space-y-4 pb-10">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-lg">🔄 New Chat</h3>
+              <button onClick={() => setShowNewChatModal(false)} className="p-1 text-muted-foreground hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This archives your current conversation and starts fresh. You can still view archived chats in your Chat Feed.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowNewChatModal(false)}
+                className="flex-1 h-11 rounded-xl border border-border text-muted-foreground text-sm font-bold hover:bg-card transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleNewChat} disabled={archiving}
+                className="flex-1 h-11 rounded-xl bg-primary/20 border border-primary/40 text-primary text-sm font-bold hover:bg-primary/30 transition-colors disabled:opacity-50">
+                {archiving ? "Starting…" : "Start Fresh"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe } from "@workspace/api-client-react";
-import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign, UserCircle, Ticket, CreditCard as CardIcon, Ban, TrendingUp, Filter, Calendar } from "lucide-react";
+import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign, UserCircle, Ticket, CreditCard as CardIcon, Ban, TrendingUp, Filter, Calendar, Heart } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { CharacterWizard } from "@/components/CharacterWizard";
 
-type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words";
+type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words" | "affection";
 
 interface SysConfig { key: string; value: unknown; updatedAt: string }
 
@@ -75,7 +75,7 @@ export function Admin() {
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
-    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words"]
+    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words", "affection"]
     : ["stats", "users", "characters"];
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
@@ -136,6 +136,18 @@ export function Admin() {
   // ── Trigger Words state ─────────────────────────────────────────────────────
   const [twSearch, setTwSearch] = useState("");
   const [twSelectedChar, setTwSelectedChar] = useState<{ id: string; name: string } | null>(null);
+
+  // ── Affection tab state ─────────────────────────────────────────────────────
+  const [affSearch, setAffSearch] = useState("");
+  const [affUsers, setAffUsers] = useState<Array<{ userId: string; characterId: string; intimacyLevel: number }>>([]);
+  const [affLoading, setAffLoading] = useState(false);
+  const [affSelectedChar, setAffSelectedChar] = useState<{ id: string; name: string } | null>(null);
+  const [affWords, setAffWords] = useState<Array<{ id: string; word: string; amount: number; type: "boost" | "reduce" }>>([]);
+  const [affWordsLoading, setAffWordsLoading] = useState(false);
+  const [newAffWord, setNewAffWord] = useState("");
+  const [newAffAmount, setNewAffAmount] = useState("5");
+  const [newAffType, setNewAffType] = useState<"boost" | "reduce">("boost");
+  const [affResetRunning, setAffResetRunning] = useState(false);
 
   // ── BLB state ──────────────────────────────────────────────────────────────
   type BLBUser = { id: string; username: string | null; subscriptionTier: string; ticketBalance: number; status: string; restrictions: Record<string, unknown> | null };
@@ -503,6 +515,71 @@ export function Admin() {
     finally { setBroadcasting(false); }
   };
 
+  // ── Affection tab functions ─────────────────────────────────────────────────
+  const fetchAffUsers = async () => {
+    setAffLoading(true);
+    try {
+      const data = await adminApi<Array<{ userId: string; characterId: string; intimacyLevel: number }>>(
+        "GET", `/admin/affection/users${affSearch.trim() ? `?search=${encodeURIComponent(affSearch.trim())}` : ""}`
+      );
+      setAffUsers(data);
+    } catch { setAffUsers([]); }
+    setAffLoading(false);
+  };
+
+  const handleAdjustAff = async (userId: string, charId: string, delta: number) => {
+    try {
+      await adminApi("POST", `/admin/affection/user/${userId}/character/${charId}/adjust`, { delta });
+      setAffUsers(prev => prev.map(u =>
+        u.userId === userId && u.characterId === charId
+          ? { ...u, intimacyLevel: delta <= -100 ? 0 : Math.min(100, Math.max(0, u.intimacyLevel + delta)) }
+          : u
+      ));
+      toast({ title: delta <= -100 ? "Reset!" : delta > 0 ? `+${delta}% applied` : `${delta}% applied` });
+    } catch (e) { toast({ title: "Failed", description: String(e), variant: "destructive" }); }
+  };
+
+  const fetchAffWords = async (charId: string) => {
+    setAffWordsLoading(true);
+    try {
+      const data = await adminApi<Array<{ id: string; word: string; amount: number; type: "boost" | "reduce" }>>(
+        "GET", `/admin/affection/words/${charId}`
+      );
+      setAffWords(data);
+    } catch { setAffWords([]); }
+    setAffWordsLoading(false);
+  };
+
+  const addAffWord = async () => {
+    if (!affSelectedChar || !newAffWord.trim()) return;
+    setAffWordsLoading(true);
+    try {
+      const data = await adminApi<{ id: string; word: string; amount: number; type: "boost" | "reduce" }>(
+        "POST", "/admin/affection/words",
+        { characterId: affSelectedChar.id, word: newAffWord.trim(), amount: Number(newAffAmount) || 5, type: newAffType }
+      );
+      setAffWords(w => [...w, data]);
+      setNewAffWord("");
+    } catch (e) { toast({ title: "Failed to add word", description: String(e), variant: "destructive" }); }
+    setAffWordsLoading(false);
+  };
+
+  const deleteAffWord = async (id: string) => {
+    try {
+      await adminApi("DELETE", `/admin/affection/words/${id}`);
+      setAffWords(w => w.filter(x => x.id !== id));
+    } catch (e) { toast({ title: "Failed", description: String(e), variant: "destructive" }); }
+  };
+
+  const triggerAffectionReset = async () => {
+    setAffResetRunning(true);
+    try {
+      await adminApi("POST", "/admin/affection/reset-all");
+      toast({ title: "✅ Weekly affection reset complete!" });
+    } catch (e) { toast({ title: "Reset failed", description: String(e), variant: "destructive" }); }
+    setAffResetRunning(false);
+  };
+
   if (!hasAnyAccess && me !== undefined) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center">
@@ -525,6 +602,7 @@ export function Admin() {
     earnings: "⭐ Earnings",
     blb: "🚫 B.L.B",
     trigger_words: "🔥 Triggers",
+    affection: "💝 Affection",
   };
 
   const filteredUsers = (usersData?.items ?? []).filter(u => {
@@ -1303,6 +1381,117 @@ export function Admin() {
         </div>
       )}
 
+      {/* ── Affection ── */}
+      {activeTab === "affection" && isGodMode && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Heart className="text-primary" size={20} />
+            <h2 className="font-bold uppercase tracking-wider text-primary">💝 Affection Management</h2>
+          </div>
+
+          {/* User affection lookup */}
+          <div className="p-4 bg-card rounded-xl border border-border space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-foreground">User Affection Stats</p>
+            <div className="flex gap-2">
+              <input value={affSearch} onChange={e => setAffSearch(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && fetchAffUsers()}
+                placeholder="User ID or username…"
+                className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground" />
+              <button onClick={fetchAffUsers} disabled={affLoading}
+                className="px-3 py-2 rounded-lg bg-accent/10 border border-accent/40 text-accent text-xs font-bold hover:bg-accent/20 disabled:opacity-50">
+                {affLoading ? "…" : "Search"}
+              </button>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {affUsers.map(u => (
+                <div key={`${u.userId}-${u.characterId}`}
+                  className="flex items-center gap-2 p-2 bg-background rounded-lg border border-border text-xs">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold truncate">{u.userId}</div>
+                    <div className="text-[10px] text-muted-foreground">Char: {u.characterId.slice(0, 12)}… · Intimacy: {u.intimacyLevel}%</div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => handleAdjustAff(u.userId, u.characterId, 10)} className="px-1.5 py-0.5 rounded bg-green-500/20 border border-green-500/40 text-green-400 text-[10px] font-bold">+10%</button>
+                    <button onClick={() => handleAdjustAff(u.userId, u.characterId, -10)} className="px-1.5 py-0.5 rounded bg-red-500/20 border border-red-500/40 text-red-400 text-[10px] font-bold">-10%</button>
+                    <button onClick={() => handleAdjustAff(u.userId, u.characterId, -100)} className="px-1.5 py-0.5 rounded bg-muted border border-border text-muted-foreground text-[10px] font-bold">Reset</button>
+                  </div>
+                </div>
+              ))}
+              {affUsers.length === 0 && !affLoading && (
+                <p className="text-xs text-muted-foreground text-center py-4">Search a user to see their affection data</p>
+              )}
+            </div>
+          </div>
+
+          {/* Affection boost words per character */}
+          <div className="p-4 bg-card rounded-xl border border-border space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-foreground">Affection Boost Words</p>
+            <p className="text-[10px] text-muted-foreground">Words in user messages that boost or reduce affection points (once per day per user).</p>
+            {!affSelectedChar ? (
+              <>
+                <input placeholder="Search characters…" value={twSearch} onChange={e => setTwSearch(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground" />
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {(charsData?.items ?? [])
+                    .filter(c => !twSearch.trim() || c.name.toLowerCase().includes(twSearch.toLowerCase()))
+                    .map(c => (
+                      <button key={c.characterId}
+                        onClick={() => { setAffSelectedChar({ id: c.characterId, name: c.name }); fetchAffWords(c.characterId); }}
+                        className="w-full flex items-center gap-3 p-2 rounded-xl bg-background border border-border hover:border-primary/40 text-left text-xs">
+                        <span className="font-bold flex-1 truncate">{c.name}</span>
+                        <ChevronRight className="text-muted-foreground shrink-0" size={14} />
+                      </button>
+                    ))}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { setAffSelectedChar(null); setAffWords([]); }} className="text-xs text-muted-foreground hover:text-foreground">← Back</button>
+                  <span className="font-bold text-sm">{affSelectedChar.name}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 min-h-[24px]">
+                  {affWords.map(w => (
+                    <span key={w.id}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] border ${w.type === "boost" ? "bg-green-500/10 border-green-500/30 text-green-400" : "bg-red-500/10 border-red-500/30 text-red-400"}`}>
+                      {w.type === "boost" ? "+" : "-"}{w.amount} · {w.word}
+                      <button onClick={() => deleteAffWord(w.id)} className="ml-0.5 opacity-60 hover:opacity-100"><X size={10} /></button>
+                    </span>
+                  ))}
+                  {affWords.length === 0 && !affWordsLoading && <span className="text-[10px] text-muted-foreground italic">No words yet</span>}
+                </div>
+                <div className="flex gap-1.5">
+                  <Input value={newAffWord} onChange={e => setNewAffWord(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addAffWord()}
+                    placeholder="e.g. love, darling" className="bg-background border-border h-8 text-xs flex-1" />
+                  <Input value={newAffAmount} onChange={e => setNewAffAmount(e.target.value)}
+                    placeholder="5" className="bg-background border-border h-8 text-xs w-14 text-center" />
+                  <select value={newAffType} onChange={e => setNewAffType(e.target.value as "boost" | "reduce")}
+                    className="h-8 rounded-md border border-border bg-background text-xs px-2 text-foreground">
+                    <option value="boost">Boost</option>
+                    <option value="reduce">Reduce</option>
+                  </select>
+                  <button onClick={addAffWord} disabled={affWordsLoading || !newAffWord.trim()}
+                    className="px-3 h-8 rounded-lg bg-primary/10 border border-primary/30 text-primary text-[10px] font-bold hover:bg-primary/20 disabled:opacity-50 shrink-0">
+                    {affWordsLoading ? "…" : <Plus size={12} />}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Weekly reset */}
+          <div className="p-4 bg-card rounded-xl border border-border space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-foreground">Weekly Affection Reset</p>
+            <p className="text-[10px] text-muted-foreground">Auto-reset runs every Monday midnight UTC. Resets all intimacy levels and affection points.</p>
+            <button onClick={triggerAffectionReset} disabled={affResetRunning}
+              className="w-full h-10 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/20 disabled:opacity-50 flex items-center justify-center gap-2">
+              {affResetRunning ? <><RefreshCw size={14} className="animate-spin" /> Resetting…</> : "⚡ Trigger Weekly Reset Now"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Transactions (All) ── */}
       {activeTab === "transactions" && isGodMode && (
         <div className="space-y-4">
@@ -1934,6 +2123,21 @@ function AvatarsSection({ characterId, token }: { characterId: string; token: st
 
 function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charDrawerBio, setCharDrawerBio, charDrawerGreeting, setCharDrawerGreeting, charDrawerAvatar, setCharDrawerAvatar, charDrawerPrompt, setCharDrawerPrompt, charDrawerTags, setCharDrawerTags, charDrawerVisibility, setCharDrawerVisibility, charDrawerNsfw, setCharDrawerNsfw, savingChar, saveCharChanges, onClose }: CharDrawerPanelProps) {
   const token = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
+  const [avatarGenerating, setAvatarGenerating] = useState(false);
+  const generateAvatarUrl = async () => {
+    if (!characterId) return;
+    setAvatarGenerating(true);
+    try {
+      const res = await fetch(`/api/admin/characters/${characterId}/avatars/generate`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json() as { ok?: boolean; avatarUrl?: string };
+        if (data.avatarUrl) setCharDrawerAvatar(data.avatarUrl);
+      }
+    } catch {}
+    setAvatarGenerating(false);
+  };
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -1971,8 +2175,17 @@ function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charD
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">Avatar URL</label>
-            <Input value={charDrawerAvatar} onChange={e => setCharDrawerAvatar(e.target.value)}
-              className="bg-card border-border h-10 text-sm" placeholder="https://..." />
+            <div className="flex gap-1.5">
+              <Input value={charDrawerAvatar} onChange={e => setCharDrawerAvatar(e.target.value)}
+                className="bg-card border-border h-10 text-sm flex-1" placeholder="https://..." />
+              {characterId && (
+                <button onClick={generateAvatarUrl} disabled={avatarGenerating}
+                  className="shrink-0 h-10 px-3 rounded-md bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 disabled:opacity-50 flex items-center transition-all"
+                  title="Generate with AI">
+                  {avatarGenerating ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                </button>
+              )}
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">Tags (comma-separated)</label>

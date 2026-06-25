@@ -1,18 +1,46 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useListConversations, useGetMediaVault, useUnlockMedia, useListCharacters } from "@workspace/api-client-react";
-import { Heart, Lock, Unlock, Plus, X, Search } from "lucide-react";
+import { Heart, Lock, Unlock, Plus, X, Search, Archive, ChevronDown, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
+
+type ArchivedConv = {
+  conversationId: string;
+  characterId: string;
+  affectionPoints: number;
+  lastMessage: string | null;
+  lastMessageAt: string;
+  messageCount: number;
+  character: { name: string; avatarUrl: string | null } | null;
+};
 
 export function ChatFeed() {
   const [activeTab, setActiveTab] = useState<"chats" | "vault">("chats");
   const [showCharPicker, setShowCharPicker] = useState(false);
   const [charSearch, setCharSearch] = useState("");
   const [, setLocation] = useLocation();
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedConvs, setArchivedConvs] = useState<ArchivedConv[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
 
   const { data: conversations, isLoading: chatsLoading } = useListConversations();
+
+  const fetchArchived = async () => {
+    setArchivedLoading(true);
+    try {
+      const token = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
+      const res = await fetch("/api/conversations/archived", { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setArchivedConvs(await res.json());
+    } catch {}
+    setArchivedLoading(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === "chats") fetchArchived();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
   const { data: vaultItems, isLoading: vaultLoading, refetch: refetchVault } = useGetMediaVault();
   const { data: allChars, isLoading: charsLoading } = useListCharacters({
     search: charSearch || undefined,
@@ -87,6 +115,48 @@ export function ChatFeed() {
                   </div>
                 </Link>
               ))
+            )}
+          </div>
+        )}
+
+        {activeTab === "chats" && (
+          <div className="mt-4">
+            <button onClick={() => setShowArchived(v => !v)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-card/50 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-all">
+              <Archive size={14} />
+              <span className="font-semibold flex-1 text-left">📁 Archived Chats</span>
+              <span className="text-[10px] opacity-60">{archivedConvs.length > 0 ? `${archivedConvs.length}` : ""}</span>
+              {showArchived ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+            {showArchived && (
+              <div className="mt-2 space-y-2">
+                {archivedLoading ? (
+                  Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="h-16 bg-card rounded-xl border border-border animate-pulse" />
+                  ))
+                ) : archivedConvs.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-6 text-xs">No archived conversations.</div>
+                ) : (
+                  archivedConvs.map(conv => (
+                    <div key={conv.conversationId}
+                      className="flex items-center gap-3 p-3 rounded-xl bg-card/40 border border-border/50 opacity-60">
+                      <div className="w-10 h-10 rounded-full overflow-hidden border border-border shrink-0">
+                        <img src={conv.character?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${conv.character?.name}`} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-center">
+                          <h3 className="text-sm font-bold text-muted-foreground truncate">{conv.character?.name ?? "Unknown"}</h3>
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                            <Heart size={9} className="fill-primary/50" /> {conv.affectionPoints}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground/60 truncate">{conv.lastMessage || "No messages"}</p>
+                      </div>
+                      <Archive size={12} className="text-muted-foreground/40 shrink-0" />
+                    </div>
+                  ))
+                )}
+              </div>
             )}
           </div>
         )}

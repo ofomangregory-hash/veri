@@ -915,6 +915,8 @@ router.delete("/admin/avatars/:avatarId", adminOnly, async (req, res): Promise<v
 // ─── Image generation (admin) for avatars ─────────────────────────────────────
 import { generateCharacterAvatar as genAvatar } from "../lib/imageGenerator";
 import { getSupabaseCharacterById as getCharById } from "../lib/supabaseCharacters";
+import { getAffectionWords, addAffectionWord, deleteAffectionWord, getAllUsersAffectionStats, setUserIntimacy, resetAllAffection } from "../lib/supabaseAffection";
+import { getIntimacyLevel } from "../lib/supabaseIntimacy";
 
 router.post("/admin/characters/:characterId/avatars/generate", adminOnly, async (req, res): Promise<void> => {
   const char = await getCharById(req.params.characterId);
@@ -936,6 +938,62 @@ router.post("/admin/characters/:characterId/avatars/generate", adminOnly, async 
     logger.warn({ err }, "Admin avatar generation failed");
     res.status(500).json({ error: "Image generation failed" });
   }
+});
+
+// ─── Affection Admin Routes ───────────────────────────────────────────────────
+router.get("/admin/affection/users", adminOnly, async (req, res): Promise<void> => {
+  const search = typeof req.query.search === "string" ? req.query.search : undefined;
+  const data = await getAllUsersAffectionStats(search);
+  res.json(data);
+});
+
+router.post("/admin/affection/user/:userId/character/:charId/adjust", adminOnly, async (req, res): Promise<void> => {
+  const { userId, charId } = req.params;
+  const { delta } = req.body as { delta?: number };
+  if (delta === undefined) { res.status(400).json({ error: "delta required" }); return; }
+
+  if (delta <= -100) {
+    await setUserIntimacy(userId, charId, 0);
+    await db.update(conversationsTable)
+      .set({ affectionPoints: 0, affectionLevel: 0 })
+      .where(and(eq(conversationsTable.telegramId, userId), eq(conversationsTable.characterId, charId)));
+    res.json({ ok: true, level: 0 });
+    return;
+  }
+
+  const current = await getIntimacyLevel(userId, charId);
+  const newLevel = Math.min(100, Math.max(0, current + delta));
+  await setUserIntimacy(userId, charId, newLevel);
+  res.json({ ok: true, level: newLevel });
+});
+
+router.get("/admin/affection/words/:characterId", adminOnly, async (req, res): Promise<void> => {
+  const words = await getAffectionWords(req.params.characterId);
+  res.json(words);
+});
+
+router.post("/admin/affection/words", adminOnly, async (req, res): Promise<void> => {
+  const { characterId, word, amount, type } = req.body as { characterId?: string; word?: string; amount?: number; type?: string };
+  if (!characterId || !word || amount === undefined) {
+    res.status(400).json({ error: "characterId, word, amount required" }); return;
+  }
+  if (type !== "boost" && type !== "reduce") {
+    res.status(400).json({ error: "type must be boost or reduce" }); return;
+  }
+  const result = await addAffectionWord(characterId, word, Number(amount), type);
+  if (!result) { res.status(500).json({ error: "Failed to add affection word" }); return; }
+  res.json(result);
+});
+
+router.delete("/admin/affection/words/:id", adminOnly, async (req, res): Promise<void> => {
+  await deleteAffectionWord(req.params.id);
+  res.json({ ok: true });
+});
+
+router.post("/admin/affection/reset-all", adminOnly, async (req, res): Promise<void> => {
+  await resetAllAffection();
+  await db.update(conversationsTable).set({ affectionPoints: 0, affectionLevel: 0 });
+  res.json({ ok: true });
 });
 
 export default router;

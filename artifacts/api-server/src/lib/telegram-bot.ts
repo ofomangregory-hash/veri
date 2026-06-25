@@ -4,7 +4,8 @@ import { eq, sql, count, like, ilike } from "drizzle-orm";
 import { logger } from "./logger";
 import { generateAIReply } from "./openrouter";
 import { generateCharacterAvatar } from "./imageGenerator";
-import { createSupabaseCharacter } from "./supabaseCharacters";
+import { createSupabaseCharacter, getSupabaseCharacterById } from "./supabaseCharacters";
+import { getRandomCharacterAvatar } from "./supabaseAvatars";
 import { getPrice } from "./supabasePrices";
 import { checkFeatureBlocked } from "./featureRestrictions";
 
@@ -641,14 +642,15 @@ export function startTelegramBot(): TelegramBot | null {
           ],
           [
             { text: "🔗 Share", url: `https://t.me/${botUsername}?start=char_${char.characterId}` },
-            { text: "✏️ Custom Name", callback_data: `browse_setname_${char.characterId}` },
+            { text: "📋 Bio", callback_data: `browse_bio_${char.characterId}` },
           ],
         ],
       };
 
+      const avatarToSend = await getRandomCharacterAvatar(char.characterId, char.avatarUrl ?? null).catch(() => char.avatarUrl ?? null);
       try {
-        if (char.avatarUrl) {
-          await bot!.sendPhoto(chatId, char.avatarUrl, { caption, parse_mode: "Markdown", reply_markup: markup });
+        if (avatarToSend) {
+          await bot!.sendPhoto(chatId, avatarToSend, { caption, parse_mode: "Markdown", reply_markup: markup });
         } else {
           await bot!.sendMessage(chatId, caption, { parse_mode: "Markdown", reply_markup: markup });
         }
@@ -2027,17 +2029,18 @@ export function startTelegramBot(): TelegramBot | null {
             ],
             [
               { text: "🔗 Share", url: `https://t.me/${botUsername}?start=char_${char.characterId}` },
-              { text: "✏️ Custom Name", callback_data: `browse_setname_${char.characterId}` },
+              { text: "📋 Bio", callback_data: `browse_bio_${char.characterId}` },
             ],
           ],
         };
 
+        const navAvatarUrl = await getRandomCharacterAvatar(char.characterId, char.avatarUrl ?? null).catch(() => char.avatarUrl ?? null);
         try {
-          if (char.avatarUrl && (query.message as Message | undefined)?.photo) {
+          if (navAvatarUrl && (query.message as Message | undefined)?.photo) {
             await (bot as unknown as {
               editMessageMedia: (media: object, options: object) => Promise<unknown>
             }).editMessageMedia(
-              { type: "photo", media: char.avatarUrl, caption, parse_mode: "Markdown" },
+              { type: "photo", media: navAvatarUrl, caption, parse_mode: "Markdown" },
               { chat_id: chatId, message_id: query.message?.message_id, reply_markup: markup }
             );
           } else {
@@ -2055,16 +2058,29 @@ export function startTelegramBot(): TelegramBot | null {
         return;
       }
 
-      // ── Browse: set custom display name ──────────────────────────────────────
-      if (query.data?.startsWith("browse_setname_")) {
-        const charId = query.data.replace("browse_setname_", "");
-        pendingBrowseName.set(chatId, charId);
-        const [char] = await db.select({ name: charactersTable.name })
-          .from(charactersTable).where(eq(charactersTable.characterId, charId));
+      // ── Browse: show character bio ────────────────────────────────────────────
+      if (query.data?.startsWith("browse_bio_")) {
+        const charId = query.data.replace("browse_bio_", "");
+        const supaChar = await getSupabaseCharacterById(charId).catch(() => null);
         await bot!.answerCallbackQuery(query.id);
-        await bot!.sendMessage(chatId,
-          `✏️ Type a custom display name for *${escMd(char?.name ?? "this character")}*:\n_(only visible to you in this browse session — type /cancel to abort)_`,
-          { parse_mode: "Markdown" });
+
+        const bioName = supaChar?.name ?? "Unknown";
+        const bioGenre = supaChar?.genre ?? "";
+        const bioText = supaChar?.teaserDescription ?? "No bio available.";
+        const bioTags = (supaChar?.tags ?? []) as string[];
+        const nsfwTag = bioTags.some(t => t.toUpperCase().includes("NSFW")) ? "🔞 NSFW" : "✅ SFW";
+        const bioCaption = `*${escMd(bioName)}* _(${escMd(bioGenre)})_ ${nsfwTag}\n\n${escMd(bioText)}`;
+
+        const bioAvatarUrl = await getRandomCharacterAvatar(charId, supaChar?.avatarUrl ?? null).catch(() => supaChar?.avatarUrl ?? null);
+        try {
+          if (bioAvatarUrl) {
+            await bot!.sendPhoto(chatId, bioAvatarUrl, { caption: bioCaption, parse_mode: "Markdown" });
+          } else {
+            await bot!.sendMessage(chatId, bioCaption, { parse_mode: "Markdown" });
+          }
+        } catch {
+          await bot!.sendMessage(chatId, bioCaption, { parse_mode: "Markdown" });
+        }
         return;
       }
 

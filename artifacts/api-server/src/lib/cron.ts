@@ -1,7 +1,8 @@
 import cron from "node-cron";
-import { db, usersTable, transactionsTable } from "@workspace/db";
+import { db, usersTable, transactionsTable, conversationsTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { supabase } from "./supabase";
 
 async function runAutoGiftClaim(): Promise<void> {
   try {
@@ -57,8 +58,27 @@ async function runAutoGiftClaim(): Promise<void> {
   }
 }
 
+async function runWeeklyAffectionReset(): Promise<void> {
+  try {
+    await db.update(conversationsTable).set({ affectionPoints: 0, affectionLevel: 0 });
+    logger.info("Weekly affection points reset in conversations table");
+  } catch (err) {
+    logger.error({ err }, "Failed to reset weekly affection points");
+  }
+
+  if (supabase) {
+    try {
+      await supabase
+        .from("user_character_intimacy")
+        .update({ intimacy_level: 0, updated_at: new Date().toISOString() });
+      logger.info("Weekly intimacy reset in Supabase user_character_intimacy");
+    } catch (err) {
+      logger.error({ err }, "Failed to reset Supabase intimacy");
+    }
+  }
+}
+
 export function startCronJobs(): void {
-  // Daily midnight reset: daily_trigger_requests_count and daily_message_count
   cron.schedule("0 0 * * *", async () => {
     try {
       await db.update(usersTable).set({
@@ -71,7 +91,6 @@ export function startCronJobs(): void {
     }
   });
 
-  // Weekly Sunday midnight reset: weekly_creations_count
   cron.schedule("0 0 * * 0", async () => {
     try {
       await db.update(usersTable).set({ weeklyCreationsCount: 0 });
@@ -81,7 +100,6 @@ export function startCronJobs(): void {
     }
   });
 
-  // Also reset daily auto image count in conversations (run at midnight)
   cron.schedule("0 0 * * *", async () => {
     try {
       await db.execute(sql`UPDATE conversations SET daily_auto_image_count = 0`);
@@ -91,7 +109,9 @@ export function startCronJobs(): void {
     }
   });
 
-  // Auto gift claim for Gold and supreme_admin users (every 30 min — respects per-tier cooldowns)
+  // Weekly Monday midnight reset: affection points and intimacy
+  cron.schedule("0 0 * * 1", () => { void runWeeklyAffectionReset(); });
+
   cron.schedule("*/30 * * * *", () => { void runAutoGiftClaim(); });
 
   logger.info("Cron jobs started");

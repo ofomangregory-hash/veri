@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { db, conversationsTable, usersTable, transactionsTable } from "@workspace/db";
 import {
   GetConversationParams,
@@ -26,6 +26,7 @@ import { getPrice } from "../lib/supabasePrices";
 import { checkFeatureBlocked, checkLimitExceeded, RESTRICTION_ERROR } from "../lib/featureRestrictions";
 import { getIntimacyLevel, updateIntimacyLevel, getContentLevel, CONTENT_LEVEL_WORDS } from "../lib/supabaseIntimacy";
 import { checkTriggerWord } from "../lib/supabaseTriggerWords";
+import { checkAffectionWord, recordAffectionTrigger } from "../lib/supabaseAffection";
 import { getRandomCharacterAvatar } from "../lib/supabaseAvatars";
 
 const router: IRouter = Router();
@@ -142,10 +143,39 @@ async function getImageLimits(tier: string, isAdmin: boolean): Promise<{ hourly:
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
+router.get("/conversations/archived", async (req, res): Promise<void> => {
+  const convs = await db.select().from(conversationsTable)
+    .where(and(
+      eq(conversationsTable.telegramId, req.telegramUserId),
+      eq(conversationsTable.archived, true),
+    ))
+    .orderBy(desc(conversationsTable.updatedAt));
+
+  const result = await Promise.all(convs.map(async (conv) => {
+    const character = await getSupabaseCharacterById(conv.characterId);
+    const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
+    const lastMsg = messages[messages.length - 1];
+    return {
+      conversationId: conv.conversationId,
+      characterId: conv.characterId,
+      affectionPoints: conv.affectionPoints,
+      lastMessage: lastMsg?.content ?? null,
+      lastMessageAt: conv.updatedAt.toISOString(),
+      messageCount: conv.messageCount,
+      character: character ? serializeCharacter(character) : null,
+    };
+  }));
+
+  res.json(result);
+});
+
 router.get("/conversations", async (req, res): Promise<void> => {
   const convs = await db.select().from(conversationsTable)
-    .where(eq(conversationsTable.telegramId, req.telegramUserId))
-    .orderBy(conversationsTable.updatedAt);
+    .where(and(
+      eq(conversationsTable.telegramId, req.telegramUserId),
+      eq(conversationsTable.archived, false),
+    ))
+    .orderBy(desc(conversationsTable.updatedAt));
 
   const result = await Promise.all(convs.map(async (conv) => {
     const character = await getSupabaseCharacterById(conv.characterId);
@@ -179,7 +209,10 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
       eq(conversationsTable.characterId, params.data.characterId),
-    ));
+      eq(conversationsTable.archived, false),
+    ))
+    .orderBy(desc(conversationsTable.updatedAt))
+    .limit(1);
 
   if (!conv) {
     const greeting = character.initialGreeting ?? `Hello, I'm ${character.name}. I've been waiting for you...`;
@@ -250,7 +283,10 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
       eq(conversationsTable.characterId, params.data.characterId),
-    ));
+      eq(conversationsTable.archived, false),
+    ))
+    .orderBy(desc(conversationsTable.updatedAt))
+    .limit(1);
 
   if (!conv) {
     [conv] = await db.insert(conversationsTable).values({
@@ -359,11 +395,20 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
 
   const newHistory = [...messages, userMsg, assistantMsg];
 
+  // ── Affection word scanning ───────────────────────────────────────────────
+  let affectionDelta = 0;
+  const matchedAffWord = await checkAffectionWord(params.data.characterId, parsed.data.content, req.telegramUserId).catch(() => null);
+  if (matchedAffWord) {
+    affectionDelta = matchedAffWord.type === "boost" ? matchedAffWord.amount : -matchedAffWord.amount;
+    void recordAffectionTrigger(req.telegramUserId, params.data.characterId, matchedAffWord.word);
+  }
+
   await db.update(conversationsTable)
     .set({
       messageHistory: newHistory,
       messageCount: newMsgCount,
       dailyAutoImageCount: (shouldAutoImage || !!triggeredWord) && !autoIsLocked ? sql`daily_auto_image_count + 1` : conv.dailyAutoImageCount,
+      affectionPoints: affectionDelta !== 0 ? Math.max(0, conv.affectionPoints + affectionDelta) : undefined,
       updatedAt: new Date(),
     })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
@@ -476,7 +521,10 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
       eq(conversationsTable.characterId, params.data.characterId),
-    ));
+      eq(conversationsTable.archived, false),
+    ))
+    .orderBy(desc(conversationsTable.updatedAt))
+    .limit(1);
 
   if (conv) {
     const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
@@ -537,7 +585,10 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
       eq(conversationsTable.characterId, characterId),
-    ));
+      eq(conversationsTable.archived, false),
+    ))
+    .orderBy(desc(conversationsTable.updatedAt))
+    .limit(1);
 
   if (!conv) { res.status(404).json({ error: "Conversation not found" }); return; }
 
@@ -608,7 +659,10 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
       eq(conversationsTable.characterId, params.data.characterId),
-    ));
+      eq(conversationsTable.archived, false),
+    ))
+    .orderBy(desc(conversationsTable.updatedAt))
+    .limit(1);
 
   if (!conv) { res.status(404).json({ error: "No conversation found" }); return; }
 
@@ -678,6 +732,42 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     aiReaction: giftReaction.reaction,
     scenarioImageUrl,
   }));
+});
+
+// ─── Archive Conversation / Fresh Start ───────────────────────────────────────
+router.post("/conversations/:characterId/archive", async (req, res): Promise<void> => {
+  const { characterId } = req.params;
+  if (!UUID_RE.test(characterId)) { res.status(400).json({ error: "Invalid characterId" }); return; }
+
+  const [conv] = await db.select().from(conversationsTable)
+    .where(and(
+      eq(conversationsTable.telegramId, req.telegramUserId),
+      eq(conversationsTable.characterId, characterId),
+      eq(conversationsTable.archived, false),
+    ))
+    .orderBy(desc(conversationsTable.updatedAt))
+    .limit(1);
+
+  if (!conv) { res.status(404).json({ error: "No active conversation found" }); return; }
+
+  await db.update(conversationsTable)
+    .set({ archived: true })
+    .where(eq(conversationsTable.conversationId, conv.conversationId));
+
+  // Reset intimacy to 0
+  await updateIntimacyLevel(req.telegramUserId, characterId, -100).catch(() => {});
+
+  const character = await getSupabaseCharacterById(characterId);
+  const greeting = character?.initialGreeting ?? `Hello, I'm ${character?.name ?? "your companion"}. Nice to start fresh...`;
+  const initialMessage: ChatMessage = { role: "assistant", content: greeting, imageUrl: null, timestamp: new Date().toISOString() };
+
+  const [newConv] = await db.insert(conversationsTable).values({
+    telegramId: req.telegramUserId,
+    characterId,
+    messageHistory: [initialMessage],
+  }).returning();
+
+  res.json({ ok: true, conversationId: newConv.conversationId });
 });
 
 export default router;

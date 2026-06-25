@@ -1,0 +1,115 @@
+Fix Bot Character Browse Cards
+In the bot character browse (triggered by /browse, /explore, /characters, /search or any similar command), fix the character cards:
+
+Remove the "✏️ Custom Name" button entirely
+Add a "📋 Bio" button in its place. When tapped it shows the full character bio including avatar image, name, genre, personality traits, scenes/settings, NSFW/SFW tag. After viewing bio, show the same navigation buttons so user can continue browsing
+Each character card must display the character's avatar image at the top. Use primary avatar from character_avatars table if available, otherwise fall back to avatar_url from characters table
+Each card must show: character name and genre, short personality summary, NSFW/SFW tag, position indicator "Card X of Y"
+
+
+2. Fix Affection Points — Deduct First Then Award
+Affection/intimacy points must only be awarded after a successful NC deduction. Fix the order so affection is only updated if and only if the NC deduction succeeds. If deduction fails for any reason, affection must not change.
+Affection resets weekly — every Monday at midnight, reset all users' affection/intimacy points to 0 in both the user_character_intimacy table and the conversations table (wherever affection is stored). Add this as a cron job.
+
+3. New Chat / Fresh Start + Archived Chats
+Users can choose to start a completely fresh conversation with a character they already have an existing chat history with.
+New Chat flow:
+
+On the character bio screen and in the active chat, add a "🔄 New Chat" button
+When tapped, show a confirmation: "Start a new chat with [character name]? Your current chat history will be archived and everything starts fresh from 0."
+If confirmed:
+
+Mark the current conversation as archived in Supabase (archived = true) — do not delete it
+Create a brand new conversation record for this user + character
+Reset intimacy level to 0 for this user + character in user_character_intimacy
+Reset affection points to 0
+Start chat from the beginning as if it's the first time
+
+
+The user's NC balance, tickets, and premium status are not affected — only the chat history and intimacy reset
+
+Archived Chats section:
+
+In the Chat tab, add a new "📁 Archived" section below the active chats list
+Archived chats appear here — user can tap any archived chat to read the old conversation history (read-only view)
+User can also restore an archived chat — this makes it active again, resumes from where it left off, and restores the intimacy level that was saved at the time of archiving
+Admin can see all archived conversations in the admin panel Users section
+
+Apply to both Mini App and Telegram bot.
+
+4. Affection Admin Section
+Add a new "💝 Affection" section to the admin panel. Add a "💝 Affection" box on the Stats page routing to this section.
+A. User Affection Management
+
+Search users by username or Telegram ID
+View each user's affection level with every character they have interacted with
+Manually set, increase, or decrease affection for any user-character pair
+Reset affection for a specific user-character pair
+Reset affection for all characters for a specific user
+Reset all affection across all users (nuclear reset with confirmation prompt)
+All changes write immediately to user_character_intimacy table
+
+B. Affection Boost Words — Per Character
+
+Admin selects a character from a searchable list first
+Then adds boost words for that specific character with a custom amount (e.g. "love" → +3%, "amazing" → +2%)
+Each word only applies to the character it was set for — not globally
+Each word can only trigger once per user per character per day
+List of all boost words for the selected character shown as editable rows — admin can edit amount or delete
+Save to Supabase affection_words table with columns: id, character_id, word, amount (numeric), type (text: 'boost' or 'reduce'), created_at. Table already exists in Supabase — do not create it. Just read and write to it.
+
+C. Affection Reduce Words — Per Character
+
+Admin selects a character first, then adds reduce words for that character
+Custom reduction amount per word (e.g. "hate" → -3%, "boring" → -2%)
+Each word only triggers once per user per character per day
+Same affection_words table, type = 'reduce', scoped to character_id
+Shown separately from boost words with clear labeling
+
+D. How affection words work in chat (Mini App and bot):
+
+On every user message, scan for any word matching the affection_words table where character_id matches the active character
+If a boost word is found and has not already triggered today for this user + character + word, increase intimacy by the word's amount
+If a reduce word is found and has not already triggered today for this user + character + word, decrease intimacy by the word's amount
+Multiple words can trigger in a single message (each checked independently)
+Track daily triggers in affection_word_triggers table. Table already exists in Supabase — do not create it.
+Never let intimacy go below 0 or above 100
+Apply in both Mini App chat and Telegram bot chat
+
+E. Bot Commands for Affection (supreme admin only)
+
+/setaffection @username [character_id] [amount] — set a specific user's affection with a character to an exact value (0–100)
+/addaffection @username [character_id] [amount] — add to a user's affection with a character
+/resetaffection @username [character_id] — reset a specific user-character affection to 0
+/resetallaffection @username — reset all affection for a user across all characters
+/affectionwords [character_id] — list all boost and reduce words for a character
+/addboostword [character_id] [word] [amount] — add a boost word for a character
+/addreduceword [character_id] [word] [amount] — add a reduce word for a character
+/removeaffectionword [character_id] [word] — remove a boost or reduce word for a character
+
+All commands must confirm success or failure with a clear message.
+F. Weekly Reset Settings
+
+Show the current weekly reset schedule (every Monday midnight)
+Toggle to enable/disable the weekly reset
+Admin can manually trigger a full reset from here with a confirmation prompt
+
+
+5. Fix AI Generate Avatar in Character Edit Panel
+The "✨ AI Generate Avatar" button loads but returns no URL. Fix it:
+
+When clicked, build an image prompt from the character's saved details — name, genre, personality traits, appearance, scenes/settings (same prompt format used everywhere else in the app)
+Send the prompt to Pollinations.ai as primary:
+
+https://image.pollinations.ai/prompt/{encoded_prompt}&width=512&height=512
+
+If character nsfw_enabled = true → add &safe=false&nologo=true
+If Pollinations fails or times out (10 seconds), fall back to Perchance:
+
+https://image.perchance.org/generate?prompt={encoded_prompt}&resolution=512x512
+
+Once the URL is returned, automatically populate the avatar URL input field with it so admin can save it immediately
+Show a loading spinner on the button while generating
+If both fail, show an error message: "Image generation failed. Try again."
+
+Do not change any other logic or UI.
