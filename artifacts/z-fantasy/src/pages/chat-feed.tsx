@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useListConversations, useGetMediaVault, useUnlockMedia, useListCharacters } from "@workspace/api-client-react";
-import { Heart, Lock, Unlock, Plus, X, Search, Archive, ChevronDown, ChevronRight } from "lucide-react";
+import { Heart, Lock, Unlock, Plus, X, Search, Archive, ChevronDown, ChevronRight, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
@@ -16,10 +16,21 @@ type ArchivedConv = {
   character: { name: string; avatarUrl: string | null } | null;
 };
 
+type PickerChar = {
+  characterId: string;
+  name: string;
+  avatarUrl?: string | null;
+  teaserDescription?: string | null;
+  initialGreeting?: string | null;
+  genre?: string | null;
+  tags?: string[];
+};
+
 export function ChatFeed() {
   const [activeTab, setActiveTab] = useState<"chats" | "vault">("chats");
   const [showCharPicker, setShowCharPicker] = useState(false);
   const [charSearch, setCharSearch] = useState("");
+  const [pickerSelectedChar, setPickerSelectedChar] = useState<PickerChar | null>(null);
   const [, setLocation] = useLocation();
   const [showArchived, setShowArchived] = useState(false);
   const [archivedConvs, setArchivedConvs] = useState<ArchivedConv[]>([]);
@@ -62,6 +73,7 @@ export function ChatFeed() {
   };
 
   const handleStartChat = (characterId: string) => {
+    setPickerSelectedChar(null);
     setShowCharPicker(false);
     setLocation(`/chat/${characterId}`);
   };
@@ -286,7 +298,7 @@ export function ChatFeed() {
                   allChars?.items?.map(char => (
                     <button
                       key={char.characterId}
-                      onClick={() => handleStartChat(char.characterId)}
+                      onClick={() => setPickerSelectedChar(char)}
                       className="w-full flex items-center gap-4 p-3 rounded-xl bg-background border border-border hover:border-primary hover:box-glow-pink transition-all text-left group"
                     >
                       <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-secondary shrink-0">
@@ -309,6 +321,96 @@ export function ChatFeed() {
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Character Bio Overlay (from picker) */}
+      <AnimatePresence>
+        {pickerSelectedChar && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-end justify-center"
+            onClick={() => setPickerSelectedChar(null)}
+          >
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+              className="relative w-full max-w-lg rounded-t-3xl overflow-y-auto border border-border border-b-0 shadow-2xl"
+              style={{ background: "linear-gradient(180deg, #0d0d1a 0%, #12121f 100%)", maxHeight: "85vh" }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Hero image */}
+              <div className="relative h-56 w-full overflow-hidden">
+                <img
+                  src={pickerSelectedChar.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${pickerSelectedChar.name}`}
+                  alt={pickerSelectedChar.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d1a] via-[#0d0d1a]/30 to-transparent" />
+                <button
+                  onClick={() => setPickerSelectedChar(null)}
+                  className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+                {pickerSelectedChar.genre && (
+                  <span className="absolute top-4 left-4 px-3 py-1 rounded-full text-xs font-bold bg-primary/80 text-white border border-primary/60 backdrop-blur-sm">
+                    {pickerSelectedChar.genre}
+                  </span>
+                )}
+              </div>
+
+              {/* Content */}
+              <div className="px-5 pt-3 pb-24 space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-white tracking-wide">{pickerSelectedChar.name}</h2>
+                  {pickerSelectedChar.tags && pickerSelectedChar.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {pickerSelectedChar.tags.map(tag => (
+                        <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-secondary/20 border border-secondary/40 text-secondary font-semibold">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {pickerSelectedChar.teaserDescription && (
+                  <p className="text-sm text-muted-foreground leading-relaxed">{pickerSelectedChar.teaserDescription}</p>
+                )}
+                {pickerSelectedChar.initialGreeting && (
+                  <div className="rounded-xl bg-card/60 border border-border px-4 py-3">
+                    <p className="text-xs text-accent font-semibold mb-1 uppercase tracking-wider">Opening line</p>
+                    <p className="text-sm text-white/80 italic leading-relaxed">"{pickerSelectedChar.initialGreeting}"</p>
+                  </div>
+                )}
+                {(() => {
+                  const hasConv = conversations?.some(c => c.characterId === pickerSelectedChar.characterId);
+                  return hasConv ? (
+                    <button
+                      onClick={() => handleStartChat(pickerSelectedChar.characterId)}
+                      className="w-full py-3.5 rounded-xl bg-secondary text-white font-bold text-sm flex items-center justify-center gap-2 box-glow-purple hover:bg-secondary/90 active:scale-95 transition-all"
+                    >
+                      <MessageCircle size={16} />
+                      Continue Chat
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleStartChat(pickerSelectedChar.characterId)}
+                      className="w-full py-3.5 rounded-xl bg-primary text-white font-bold text-sm flex items-center justify-center gap-2 box-glow-pink hover:bg-primary/90 active:scale-95 transition-all"
+                    >
+                      <MessageCircle size={16} />
+                      Start Chat
+                    </button>
+                  );
+                })()}
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

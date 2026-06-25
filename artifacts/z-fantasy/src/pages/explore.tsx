@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListCharacters, useGetSurpriseCharacter, useAdminSecretCheck, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useListCharacters, useGetSurpriseCharacter, useAdminSecretCheck, useListConversations, getGetMeQueryKey } from "@workspace/api-client-react";
 import { Link, useLocation } from "wouter";
 import { Search, Sparkles, Filter, X, MessageCircle, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,8 @@ export function Explore() {
   const [selectedChar, setSelectedChar] = useState<CharacterItem | null>(null);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+
+  const { data: conversations } = useListConversations();
 
   const { data: charactersData, isLoading } = useListCharacters({ 
     search: searchQuery || undefined,
@@ -245,32 +247,48 @@ export function Explore() {
               )}
 
               {/* CTA buttons */}
-              <div className="flex gap-3 pt-1">
-                <button
-                  onClick={() => {
-                    const botUsername = "z_fantasy_bot";
-                    const link = `https://t.me/${botUsername}?start=char_${selectedChar.characterId}`;
-                    const tg = window.Telegram?.WebApp;
-                    if (tg?.openTelegramLink) {
-                      tg.openTelegramLink(link);
-                    } else {
-                      navigator.clipboard?.writeText(link).catch(() => {});
-                      toast({ title: "Link copied!", description: link });
-                    }
-                  }}
-                  className="flex-1 py-3 rounded-xl border border-accent/60 text-accent text-sm font-semibold hover:border-accent hover:bg-accent/10 active:scale-95 transition-all flex items-center justify-center gap-1"
-                >
-                  🔗 Share
-                </button>
-                <button
-                  onClick={() => { setSelectedChar(null); setLocation(`/character/${selectedChar.characterId}`); }}
-                  className="flex-[2] py-3 rounded-xl bg-primary text-white font-bold text-sm flex items-center justify-center gap-2 box-glow-pink hover:bg-primary/90 active:scale-95 transition-all"
-                >
-                  <MessageCircle size={16} />
-                  Start Chat
-                  <ChevronRight size={16} />
-                </button>
-              </div>
+              {(() => {
+                const hasConv = conversations?.some(c => c.characterId === selectedChar.characterId);
+                return (
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      onClick={() => {
+                        const botUsername = "z_fantasy_bot";
+                        const link = `https://t.me/${botUsername}?start=char_${selectedChar.characterId}`;
+                        const tg = window.Telegram?.WebApp;
+                        if (tg?.openTelegramLink) {
+                          tg.openTelegramLink(link);
+                        } else {
+                          navigator.clipboard?.writeText(link).catch(() => {});
+                          toast({ title: "Link copied!", description: link });
+                        }
+                      }}
+                      className="flex-1 py-3 rounded-xl border border-accent/60 text-accent text-sm font-semibold hover:border-accent hover:bg-accent/10 active:scale-95 transition-all flex items-center justify-center gap-1"
+                    >
+                      🔗 Share
+                    </button>
+                    {hasConv ? (
+                      <button
+                        onClick={() => { setSelectedChar(null); setLocation(`/chat/${selectedChar.characterId}`); }}
+                        className="flex-[2] py-3 rounded-xl bg-secondary text-white font-bold text-sm flex items-center justify-center gap-2 box-glow-purple hover:bg-secondary/90 active:scale-95 transition-all"
+                      >
+                        <MessageCircle size={16} />
+                        Continue Chat
+                        <ChevronRight size={16} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { setSelectedChar(null); setLocation(`/character/${selectedChar.characterId}`); }}
+                        className="flex-[2] py-3 rounded-xl bg-primary text-white font-bold text-sm flex items-center justify-center gap-2 box-glow-pink hover:bg-primary/90 active:scale-95 transition-all"
+                      >
+                        <MessageCircle size={16} />
+                        Start Chat
+                        <ChevronRight size={16} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

@@ -41,6 +41,12 @@ const SUBSCRIPTION_TICKET_PERKS: Record<string, number> = {
   Gold: 600,
 };
 
+const SUBSCRIPTION_NEON_PERKS: Record<string, number> = {
+  Bronze: 50,
+  Silver: 150,
+  Gold: 300,
+};
+
 async function resolveStars(tier: string, period: string): Promise<number> {
   const base = BASE_TIER_PRICES[tier]?.[period]?.stars ?? 0;
   try {
@@ -228,10 +234,12 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
         logger.info({ userId, cards: rawPayload.cards, bonus: bonusAwarded, total: totalAwarded }, "Neon cards purchased");
       } else if (rawPayload.tier) {
         const tierTickets = SUBSCRIPTION_TICKET_PERKS[rawPayload.tier] ?? 0;
+        const tierNeon = SUBSCRIPTION_NEON_PERKS[rawPayload.tier] ?? 0;
         await db.update(usersTable)
           .set({
             subscriptionTier: rawPayload.tier,
             ticketBalance: tierTickets > 0 ? sql`ticket_balance + ${tierTickets}` : undefined,
+            neonCardBalance: tierNeon > 0 ? sql`neon_card_balance + ${tierNeon}` : undefined,
           })
           .where(eq(usersTable.id, userId));
 
@@ -239,9 +247,24 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
           telegramId: userId,
           actionType: `subscription_${rawPayload.tier}_${rawPayload.period ?? "unknown"}`,
           ticketAmount: tierTickets,
+          neonCardAmount: tierNeon,
         });
 
-        logger.info({ userId, tier: rawPayload.tier, ticketsGranted: tierTickets }, "Subscription activated");
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (botToken) {
+          const periodLabel = rawPayload.period ? ` (${rawPayload.period})` : "";
+          const confirmMsg = `🎉 *${rawPayload.tier} Subscription Activated${periodLabel}!*\n\n` +
+            `🎟 +${tierTickets} Tickets added\n` +
+            `🃏 +${tierNeon} Neon Cards added\n\n` +
+            `Welcome to ${rawPayload.tier} tier — enjoy your perks!`;
+          fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: userId, text: confirmMsg, parse_mode: "Markdown" }),
+          }).catch(err => logger.warn({ err }, "Failed to send subscription confirmation message"));
+        }
+
+        logger.info({ userId, tier: rawPayload.tier, ticketsGranted: tierTickets, neonGranted: tierNeon }, "Subscription activated");
       }
     } catch (err) {
       logger.error({ err }, "Failed to process payment webhook");

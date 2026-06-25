@@ -172,8 +172,10 @@ export function ChatDetail() {
         </Link>
         <div className="flex-1 min-w-0">
           <h2 className="font-bold text-white truncate">{conv?.character?.name}</h2>
-          <div className="text-xs text-primary flex items-center gap-1 font-medium">
+          <div className="text-xs text-primary flex items-center gap-1.5 font-medium">
             <Heart size={10} className="fill-primary" /> {conv?.affectionPoints || 0} AP
+            <span className="text-muted-foreground">·</span>
+            <span className="text-purple-400">{Math.min(100, Math.floor((conv?.affectionPoints || 0) / 500 * 100))}% 💜</span>
           </div>
         </div>
         <button onClick={() => setShowNewChatModal(true)}

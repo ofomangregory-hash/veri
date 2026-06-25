@@ -1348,7 +1348,7 @@ export function Admin() {
                 .map(c => (
                   <button key={c.characterId} onClick={() => setTwSelectedChar({ id: c.characterId, name: c.name })}
                     className="w-full flex items-center gap-3 p-3 rounded-xl bg-card border border-border hover:border-orange-500/50 transition-all text-left">
-                    <img src={c.profileImageUrl ?? `https://picsum.photos/seed/${c.characterId}/32/32`}
+                    <img src={c.avatarUrl ?? `https://picsum.photos/seed/${c.characterId}/32/32`}
                       className="w-8 h-8 rounded-full object-cover flex-shrink-0" alt="" />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-bold truncate">{c.name}</div>
@@ -1375,7 +1375,7 @@ export function Admin() {
                 <Sparkles className="text-orange-400" size={16} />
                 <span className="font-bold text-sm">{twSelectedChar.name}</span>
               </div>
-              <TriggerWordsSection characterId={twSelectedChar.id} getToken={getToken} />
+              <TriggerWordsSection characterId={twSelectedChar.id} token={getToken()} />
             </div>
           )}
         </div>
