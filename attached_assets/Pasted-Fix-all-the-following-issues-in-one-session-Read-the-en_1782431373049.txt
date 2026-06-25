@@ -1,0 +1,98 @@
+Fix all the following issues in one session. Read the entire codebase first before making any changes. Do not create any new tables.
+1. Character Wizard Navigation
+
+The Character Wizard is getting stuck on Step 2. Fix all 9 steps:
+
+Add "Next →" button at the bottom of every step that validates and proceeds
+Add "← Back" button (hidden on step 1) that goes back without clearing data
+Both buttons must be fully visible above the bottom navigation bar with enough bottom padding
+Step 1 validation: name must not be empty
+Step 2 validation: at least 1 scene selected (max 5)
+Step 3 validation: at least 1 genre selected
+Steps 4-9: Next always enabled
+Step 3: add "+ Add Custom Genre" button for typing custom genres not in the list
+Do not change any scene/genre data, styling, or other wizard logic
+
+2. Start Fresh conversation insert fix
+
+In conversations.ts, find the insert query at line 229 and line 806. Immediately BEFORE each insert add:
+typescriptawait db.update(conversations)
+  .set({ archived: true, updated_at: new Date() })
+  .where(
+    and(
+      eq(conversations.telegram_id, telegramId),
+      eq(conversations.character_id, characterId)
+    )
+  );
+3. Start Fresh modal cut off
+
+The "Yes, Fresh Start" button is hidden behind the bottom nav bar. Add enough bottom padding to the modal so both buttons are fully visible on all screen sizes.
+4. Fix failing Supabase queries
+
+In supabaseQuests.ts, supabaseHelpDesk.ts, and supabasePremiumTiers.ts verify table names are exactly quests, tickets, premium_tiers. Fix any mismatches. These functions must not fail silently.
+5. Admin panel tab labels not visible
+
+Fix the admin tab bar so these 3 tab labels are clearly visible:
+
+"Quest Hub" — Quest Hub Management
+"Referrals" — Referral Analytics
+"HelpDesk" — Help Desk Tickets
+
+6. Admin panel saves not persisting to Supabase
+
+Prices: when any price is edited in admin, call PATCH /api/admin/prices/:id with { amount: newValue }. Backend runs update prices set amount = $1, updated_at = now() where id = $2
+Premium tier features: add text input with "+ Add Feature" button below each tier's feature list. On add, append to features array and save via PATCH /api/admin/premium-tiers/:id with { features: updatedArray }. Delete buttons must also save to Supabase immediately
+Premium tier prices: when admin edits price and saves, update both premium_tiers table and prices table using IDs: bronze_weekly, silver_weekly, gold_weekly
+All toggle switches: must call API on change and only update UI after confirmed save
+Show ✅ "Saved successfully" on success and ❌ "Failed to save — please try again" on error after every save
+
+7. Customer Support routing + HelpDesk message format
+
+Replace support contacts in HamburgerDrawer.tsx with Telegram deep links: https://t.me/zxeelen, https://t.me/Zeelen020, https://t.me/zeele
+Show in-app message composer before sending anything externally
+Format every outgoing message like this:
+
+━━━━━━━━━━━━━━━━━━━━━━
+📩 Z-FANTASY Sweet Dreams
+━━━━━━━━━━━━━━━━━━━━━━
+🆔 User ID: {telegram_id}
+👤 Username: {username}
+📧 Ticket Type: {type}
+📅 Submitted: {timestamp}
+━━━━━━━━━━━━━━━━━━━━━━
+💬 Message:
+{user_message}
+━━━━━━━━━━━━━━━━━━━━━━
+
+Save every message to customer_support_messages with user_id, message, direction: 'inbound', read: false, created_at
+Create or update thread in customer_service_threads
+Send to Telegram via https://t.me/{username}?text={encodedMessage}
+Every ticket in tickets table must have user_id, type, subject, status: 'open', opened_by: 'user'
+Display issuer ID and username on every ticket card in admin HelpDesk view
+
+8. Neon Card Shop + Ticket Shop from Supabase
+
+Fetch these IDs from prices table and map to display — no hardcoded values:
+
+neon_starter_cards, neon_starter_bonus, neon_starter_price
+neon_booster_cards, neon_booster_bonus, neon_booster_price
+neon_mega_cards, neon_mega_bonus, neon_mega_price
+neon_custom_min, stars_per_nc
+tickets_per_star, ticket_starter_amount, ticket_starter_price
+ticket_booster_amount, ticket_booster_price
+
+On mount fetch all from prices table. If fetch fails show loading spinner — no hardcoded fallback. All amounts, bonuses, prices render from Supabase only.
+9. Admin character toggle buttons
+
+In admin Characters tab, fix Set Public, Set Premium, Set Private buttons:
+
+Each calls PATCH /api/characters/:character_id with { visibility: 'public' | 'premium' | 'private' }
+Show loading state while request is in flight
+Refresh character card after success
+Show error toast on failure
+
+Fix Promotional Overlay Text save button to call PATCH /api/characters/:character_id with { promotional_text: value } and save to characters table.
+Existing Supabase tables — use exact names, do not create new ones:
+
+users, characters, character_avatars, conversations, affection_words, affection_word_triggers, user_character_intimacy, trigger_words, transaction_logs, pending_grants, prices, system_configurations, user_restrictions, vault_items, tickets, helpdesk_messages, customer_support_messages, customer_service_threads, quests, quest_completions, quest_progress, referral_rewards, referral_logs, events, premium_tiers
+Do not generate SQL. Do not create tables. Do not touch files not related to the above fixes.

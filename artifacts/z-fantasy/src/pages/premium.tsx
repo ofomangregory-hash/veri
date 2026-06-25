@@ -50,8 +50,24 @@ export function Premium() {
   const [buyingTickets, setBuyingTickets] = useState<string | null>(null);
   const [tierConfigs, setTierConfigs] = useState<Record<string, { features: string[]; featured: boolean }>>(DEFAULT_TIER_CONFIGS);
   const [prices, setPrices] = useState<Record<string, Record<Period, number>>>(DEFAULT_PRICES);
+  const [neonPacks, setNeonPacks] = useState(NEON_PACKS_DEFAULT);
   const createInvoice = useCreateInvoice();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const token = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData || "mock_init_data_for_dev";
+    fetch("/api/config/prices", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { nc_starter?: number; nc_booster?: number; nc_mega?: number } | null) => {
+        if (!data) return;
+        setNeonPacks(prev => prev.map(pack => {
+          const key = `nc_${pack.id}` as keyof typeof data;
+          const stars = data[key];
+          return stars != null ? { ...pack, stars } : pack;
+        }));
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const token = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData || "mock_init_data_for_dev";
@@ -127,7 +143,7 @@ export function Premium() {
       const { invoiceLink } = await res.json() as { invoiceLink: string };
 
       openInvoiceSafe(invoiceLink, () => {
-        const amount = customAmount ?? NEON_PACKS.find(p => p.id === packId)?.cards ?? 0;
+        const amount = customAmount ?? neonPacks.find(p => p.id === packId)?.cards ?? 0;
         setCardsBought(amount);
         setTimeout(() => setCardsBought(null), 4000);
       });
@@ -331,7 +347,7 @@ export function Premium() {
         </p>
 
         <div className="grid grid-cols-3 gap-3 mb-4">
-          {NEON_PACKS.map(pack => (
+          {neonPacks.map(pack => (
             <button
               key={pack.id}
               onClick={() => handleBuyNeonCards(pack.id)}
