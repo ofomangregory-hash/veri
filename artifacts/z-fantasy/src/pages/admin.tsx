@@ -97,8 +97,11 @@ export function Admin() {
   const [ecoMsgCost, setEcoMsgCost] = useState("1");
   const [ecoSelfieCost, setEcoSelfieCost] = useState("15");
   const [ecoGiftSmall, setEcoGiftSmall] = useState("10");
+  const [ecoGiftSmallAp, setEcoGiftSmallAp] = useState("5");
   const [ecoGiftMedium, setEcoGiftMedium] = useState("25");
+  const [ecoGiftMediumAp, setEcoGiftMediumAp] = useState("15");
   const [ecoGiftLarge, setEcoGiftLarge] = useState("50");
+  const [ecoGiftLargeAp, setEcoGiftLargeAp] = useState("35");
   const [ecoCreationCost, setEcoCreationCost] = useState("25");
   const [ecoNcStarDivisor, setEcoNcStarDivisor] = useState("2");
   const [ecoTicketsPerStar, setEcoTicketsPerStar] = useState("3");
@@ -340,9 +343,9 @@ export function Admin() {
         const n = (k: string) => (typeof v[k] === "number" ? String(v[k]) : null);
         if (row.key === "eco_msg_cost"        && n("tickets"))    setEcoMsgCost(n("tickets")!);
         if (row.key === "eco_selfie_cost"     && n("nc"))         setEcoSelfieCost(n("nc")!);
-        if (row.key === "eco_gift_small"      && n("nc"))         setEcoGiftSmall(n("nc")!);
-        if (row.key === "eco_gift_medium"     && n("nc"))         setEcoGiftMedium(n("nc")!);
-        if (row.key === "eco_gift_large"      && n("nc"))         setEcoGiftLarge(n("nc")!);
+        if (row.key === "eco_gift_small")  { if (n("nc")) setEcoGiftSmall(n("nc")!);  if (n("ap")) setEcoGiftSmallAp(n("ap")!);  }
+        if (row.key === "eco_gift_medium") { if (n("nc")) setEcoGiftMedium(n("nc")!); if (n("ap")) setEcoGiftMediumAp(n("ap")!); }
+        if (row.key === "eco_gift_large")  { if (n("nc")) setEcoGiftLarge(n("nc")!);  if (n("ap")) setEcoGiftLargeAp(n("ap")!);  }
         if (row.key === "eco_creation_cost"   && n("nc"))         setEcoCreationCost(n("nc")!);
         if (row.key === "eco_nc_star_divisor" && n("divisor"))    setEcoNcStarDivisor(n("divisor")!);
         if (row.key === "eco_tickets_per_star"&& n("tickets"))    setEcoTicketsPerStar(n("tickets")!);
@@ -1116,8 +1119,11 @@ export function Admin() {
           ecoMsgCost={ecoMsgCost} setEcoMsgCost={setEcoMsgCost}
           ecoSelfieCost={ecoSelfieCost} setEcoSelfieCost={setEcoSelfieCost}
           ecoGiftSmall={ecoGiftSmall} setEcoGiftSmall={setEcoGiftSmall}
+          ecoGiftSmallAp={ecoGiftSmallAp} setEcoGiftSmallAp={setEcoGiftSmallAp}
           ecoGiftMedium={ecoGiftMedium} setEcoGiftMedium={setEcoGiftMedium}
+          ecoGiftMediumAp={ecoGiftMediumAp} setEcoGiftMediumAp={setEcoGiftMediumAp}
           ecoGiftLarge={ecoGiftLarge} setEcoGiftLarge={setEcoGiftLarge}
+          ecoGiftLargeAp={ecoGiftLargeAp} setEcoGiftLargeAp={setEcoGiftLargeAp}
           ecoCreationCost={ecoCreationCost} setEcoCreationCost={setEcoCreationCost}
           ecoNcStarDivisor={ecoNcStarDivisor} setEcoNcStarDivisor={setEcoNcStarDivisor}
           ecoTicketsPerStar={ecoTicketsPerStar} setEcoTicketsPerStar={setEcoTicketsPerStar}
@@ -2381,8 +2387,11 @@ interface PricingTabProps {
   ecoMsgCost: string; setEcoMsgCost: (v: string) => void;
   ecoSelfieCost: string; setEcoSelfieCost: (v: string) => void;
   ecoGiftSmall: string; setEcoGiftSmall: (v: string) => void;
+  ecoGiftSmallAp: string; setEcoGiftSmallAp: (v: string) => void;
   ecoGiftMedium: string; setEcoGiftMedium: (v: string) => void;
+  ecoGiftMediumAp: string; setEcoGiftMediumAp: (v: string) => void;
   ecoGiftLarge: string; setEcoGiftLarge: (v: string) => void;
+  ecoGiftLargeAp: string; setEcoGiftLargeAp: (v: string) => void;
   ecoCreationCost: string; setEcoCreationCost: (v: string) => void;
   ecoNcStarDivisor: string; setEcoNcStarDivisor: (v: string) => void;
   ecoTicketsPerStar: string; setEcoTicketsPerStar: (v: string) => void;
@@ -2401,7 +2410,9 @@ interface PricingTabProps {
 function PricingTab({
   priceOverrides, setPriceOverrides, savePriceOverride,
   ecoMsgCost, setEcoMsgCost, ecoSelfieCost, setEcoSelfieCost,
-  ecoGiftSmall, setEcoGiftSmall, ecoGiftMedium, setEcoGiftMedium, ecoGiftLarge, setEcoGiftLarge,
+  ecoGiftSmall, setEcoGiftSmall, ecoGiftSmallAp, setEcoGiftSmallAp,
+  ecoGiftMedium, setEcoGiftMedium, ecoGiftMediumAp, setEcoGiftMediumAp,
+  ecoGiftLarge, setEcoGiftLarge, ecoGiftLargeAp, setEcoGiftLargeAp,
   ecoCreationCost, setEcoCreationCost, ecoNcStarDivisor, setEcoNcStarDivisor,
   ecoTicketsPerStar, setEcoTicketsPerStar,
   ecoDailyFreeTickets, setEcoDailyFreeTickets, ecoDailyFreeNc, setEcoDailyFreeNc,
@@ -2410,10 +2421,10 @@ function PricingTab({
   ecoDailyGoldTickets, setEcoDailyGoldTickets, ecoDailyGoldNc, setEcoDailyGoldNc,
   savingEco, saveEcoConfig,
 }: PricingTabProps) {
-  const ecoFields: { label: string; state: string; set: (v: string) => void; key: string; valKey: string }[] = [
-    { label: "🍹 Cyber Cocktail (Small)", state: ecoGiftSmall, set: setEcoGiftSmall, key: "eco_gift_small", valKey: "nc" },
-    { label: "💎 Neon Bracelet (Medium)", state: ecoGiftMedium, set: setEcoGiftMedium, key: "eco_gift_medium", valKey: "nc" },
-    { label: "🔑 Secret Key (Large)", state: ecoGiftLarge, set: setEcoGiftLarge, key: "eco_gift_large", valKey: "nc" },
+  const giftRows: { label: string; icon: string; ecoKey: string; ncState: string; ncSet: (v: string) => void; apState: string; apSet: (v: string) => void }[] = [
+    { label: "Cyber Cocktail", icon: "🍹", ecoKey: "eco_gift_small",  ncState: ecoGiftSmall,  ncSet: setEcoGiftSmall,  apState: ecoGiftSmallAp,  apSet: setEcoGiftSmallAp  },
+    { label: "Neon Bracelet",  icon: "💎", ecoKey: "eco_gift_medium", ncState: ecoGiftMedium, ncSet: setEcoGiftMedium, apState: ecoGiftMediumAp, apSet: setEcoGiftMediumAp },
+    { label: "Secret Key",     icon: "🔑", ecoKey: "eco_gift_large",  ncState: ecoGiftLarge,  ncSet: setEcoGiftLarge,  apState: ecoGiftLargeAp,  apSet: setEcoGiftLargeAp  },
   ];
   const dailyRows: { tier: string; ecoKey: string; tState: string; tSet: (v: string) => void; nState: string; nSet: (v: string) => void }[] = [
     { tier: "Free",   ecoKey: "eco_daily_free",   tState: ecoDailyFreeTickets,   tSet: setEcoDailyFreeTickets,   nState: ecoDailyFreeNc,   nSet: setEcoDailyFreeNc },
@@ -2493,21 +2504,34 @@ function PricingTab({
           </div>
 
           <div className="p-4 rounded-xl bg-card border border-border space-y-3">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">In-Chat Gift Costs (🃏 Neon Cards)</p>
-            <div className="grid grid-cols-3 gap-3">
-              {ecoFields.map(({ label, state, set, key }) => (
-                <div key={key}>
-                  <label className="text-[10px] text-muted-foreground mb-1 block">{label}</label>
-                  <div className="flex gap-1.5">
-                    <Input value={state} onChange={e => set(e.target.value)} className="bg-background border-border h-8 text-xs text-center" />
-                    <button onClick={() => saveEcoConfig(key, { nc: Number(state) })} disabled={savingEco === key} className="px-2 h-8 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20 shrink-0">
-                      {savingEco === key ? "…" : <Save size={12} />}
-                    </button>
-                  </div>
-                </div>
-              ))}
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">In-Chat Gifts — Cost &amp; AP Reward</p>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left p-2 text-muted-foreground font-semibold">Gift</th>
+                    <th className="text-center p-2 text-muted-foreground font-semibold">🃏 NC Cost</th>
+                    <th className="text-center p-2 text-muted-foreground font-semibold">💜 AP Reward</th>
+                    <th className="text-center p-2 text-muted-foreground font-semibold">Save</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {giftRows.map(({ label, icon, ecoKey, ncState, ncSet, apState, apSet }) => (
+                    <tr key={ecoKey} className="border-t border-border">
+                      <td className="p-2 font-semibold">{icon} {label}</td>
+                      <td className="p-1.5"><Input value={ncState} onChange={e => ncSet(e.target.value)} className="bg-background border-border h-7 text-[11px] text-center" /></td>
+                      <td className="p-1.5"><Input value={apState} onChange={e => apSet(e.target.value)} className="bg-background border-border h-7 text-[11px] text-center" /></td>
+                      <td className="p-1.5 text-center">
+                        <button onClick={() => saveEcoConfig(ecoKey, { nc: Number(ncState), ap: Number(apState) })} disabled={savingEco === ecoKey} className="px-2 h-7 rounded-lg bg-accent/10 border border-accent/40 text-accent text-[10px] font-bold hover:bg-accent/20">
+                          {savingEco === ecoKey ? "…" : <Save size={11} />}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <p className="text-[10px] text-muted-foreground">Gold tier gets 50% off gift prices automatically.</p>
+            <p className="text-[10px] text-muted-foreground">Gold tier gets 50% off NC cost automatically. AP values are read from Supabase; fallback is 5 / 15 / 35.</p>
           </div>
 
           <div className="p-4 rounded-xl bg-card border border-border space-y-3">

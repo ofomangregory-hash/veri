@@ -1,0 +1,115 @@
+Admin — Per-User Per-Character Affection Control
+
+In the Affection admin section, when viewing a user's affection, ensure the admin can:
+
+Below the search user ID input, display a list of all users by default (no search needed to see them) — show a maximum of 10 users before vertical scrolling begins
+Each user in the list shows their username/telegram ID and is tappable to load their affection details
+Search filters the list in real time as the admin types — matching users appear, non-matching users hide
+Once a user is selected, show each character they have interacted with, with their current intimacy % shown
+Set, increase, decrease, or reset intimacy for each individual user-character pair
+All changes write immediately to user_character_intimacy table using user_id and character_id as the key
+Show a success confirmation after each change
+
+2. Ensure Premium Benefits Are Delivered on Purchase
+
+Find the Telegram Stars payment handler (pre_checkout_query and successful_payment webhook/handler in the bot). After a successful Stars payment is confirmed:
+
+Identify which premium tier was purchased from the payment payload
+Immediately credit the user's account: Add bonus tickets to ticket_balance, add bonus Neon Cards to neon_card_balance, set subscription_tier, set subscription_expiry to now + billing period
+Log every grant in transaction_logs with action_type = 'premium_benefit_grant', star_amount = what was paid, and the user's telegram ID
+Send user a bot message: "✅ [Tier] Premium activated! Your bonus tickets and Neon Cards have been added to your account."
+If any grant step fails, log the full error and retry once — never silently fail
+
+3. Make Premium Payment Processing Bulletproof
+
+Wrap everything in try/catch — log full error with telegram ID and payment amount, retry once after 5 seconds
+pending_grants table safety net — write payment to pending_grants first, mark completed only after all grants succeed
+The pending_grants table already exists in Supabase — do NOT create it, just read and write to it
+On server startup, query pending_grants where status = 'pending' and reprocess each one
+Answer pre_checkout_query immediately before any DB work — Telegram's 10-second window must never be missed
+Never block successful_payment — process grant asynchronously but always write to pending_grants first synchronously
+
+4. Fix Trigger Words Input & Save
+
+Trigger words are admin-only backend configuration — they are never shown to users in any part of the app or bot. They only silently trigger image generation when a user's message contains a matching word.
+In the Trigger Words section of the admin panel (Triggers tab):
+
+The input field is a plain text input — not a tag input, not a chip input. Just a regular text box where the admin types a word or comma-separated words
+Add a visible Save button next to or below the input field — do not auto-save on Enter or on blur, only save when the Save button is explicitly clicked
+On Save: insert the entry into the trigger_words table in Supabase, then display it as a new row below with a 🗑️ delete button
+After saving, clear the input field and show a new empty input + Save button ready for the next entry
+On page load / character select, fetch all existing trigger words for that character and render each as a plain text row with a 🗑️ delete button
+Each row shows the word(s) text + a 🗑️ delete button on the right — delete removes from Supabase and from the UI immediately
+Rows persist across sessions — loaded from DB not local state
+
+5. Fix Affection Points vs Intimacy — Separate the Two Systems
+There are now two distinct systems that must work independently:
+Affection Points (display only in chat):
+
+Affection points are shown to the user inside the chat UI as a visible counter — purely cosmetic/informational
+Also display affection as a percentage alongside the raw points (e.g. "💛 120 pts · 24%") — calculated as affection points / max affection threshold * 100, capped at 100%
+Affection points do NOT control or affect intimacy level in any way
+Affection points continue to accumulate from messages, trigger words, gifts etc as before
+Cap affection points display at any reasonable number — do not cap at 100
+
+Intimacy % (controls relationship progression, max 100%):
+
+Intimacy % is the stat that actually controls relationship level/progression
+Intimacy % is now driven by affection % — affection points convert to intimacy % (e.g. affection points / max * 100, capped at 100%)
+Intimacy max is 100% — never exceed this
+All relationship tier unlocks, scene unlocks, and level gates read from intimacy %, not raw affection points
+
+New affection point sources to add:
+
+Unlocking blurred/locked media: +2 affection points per unlock
+Gifts: double the current affection points awarded for all gift types (if gifts currently give X points, they now give 2X)
+
+6. Character Bio Screen Before Chat — Mini App & Bot
+Whenever a user selects or searches a character (whether they have an existing chat or not), always show the full character bio screen first before entering the chat.
+Mini App:
+
+When a user taps any character from Explore, Home, or anywhere else in the app, show a full bio screen first before opening the chat
+Bio screen must display: character avatar image, name, genre, NSFW/SFW tag, full personality description, scenes/settings, and any other saved character details
+If the user already has an existing active chat with that character: show a "Continue Chat" button and a "Start New Chat" button
+If it's a brand new character with no existing chat: show a "Start Chat" button only
+"Continue Chat" opens the existing active conversation as normal
+"Start New Chat" triggers the archive + reset flow (archive current chat, reset intimacy to 0, create fresh conversation) with a confirmation: "Start a new chat with [character name]? Your current chat will be archived."
+"Start Chat" creates a new conversation and opens it
+
+Bot:
+
+When a user selects a character from /browse, /explore, /characters, /search or any similar command, always send the full character bio message first
+Bio message must include: character avatar image, name, genre, NSFW/SFW tag, full bio text, personality traits, scenes/settings
+If the user already has an existing active chat with that character: show inline buttons "💬 Continue Chat" and "🔄 Start New Chat"
+If it's a brand new character: show inline button "💬 Start Chat" only
+"Continue Chat" resumes the existing conversation
+"Start New Chat" shows a confirmation message first: "Start a new chat with [character name]? Your current chat will be archived and intimacy reset to 0." with ✅ Confirm and ❌ Cancel buttons. On confirm: archive current chat, reset intimacy, create fresh conversation
+"Start Chat" creates a new conversation and sends the opening greeting
+
+7. Active Chats Card — Clickable with Two Sections
+In the Admin panel Stats page, make the Active Chats card clickable. When tapped it opens a full Active Chats page with two sections:
+Section 1 — Personal (Your Chats):
+
+Lists all characters the supreme admin account has personally interacted with
+Each row shows: character avatar, character name, last message preview, intimacy %, date of last activity
+Tapping a row opens that conversation in read-only view
+Each row has a 🔄 Reset Chat button — resets that character's chat (archives current conversation, resets intimacy to 0, creates a fresh conversation) with a confirmation prompt before executing
+
+Section 2 — General (All Users):
+
+Lists all users on the platform (username/telegram ID, avatar if available, total active chats count)
+Tapping a user expands or navigates to show all characters that user has interacted with
+Each character row shows: character name, intimacy %, last activity date
+Each character row has a 🔄 Reset Chat button — resets that specific user-character chat (archives, resets intimacy to 0, fresh conversation) with a confirmation prompt
+Each user row must have action buttons:
+
+🚫 Block — blocks the user from accessing the app/bot
+🔇 Mute — mutes the user (prevent sending messages temporarily)
+👁️ View Chats — opens a read-only view of all that user's conversations
+🗑️ Delete User — removes user with confirmation prompt
+
+
+Both sections load data from Supabase in real time
+Show a back button to return to Stats
+Do not change any other logic or UI.
+

@@ -6,6 +6,9 @@ export interface EconomyConfig {
   giftSmallNc: number;
   giftMediumNc: number;
   giftLargeNc: number;
+  giftSmallAp: number;
+  giftMediumAp: number;
+  giftLargeAp: number;
   creationCostNc: number;
   ncPerStarDivisor: number;
   ticketsPerStar: number;
@@ -25,6 +28,9 @@ const DEFAULTS: EconomyConfig = {
   giftSmallNc: 10,
   giftMediumNc: 25,
   giftLargeNc: 50,
+  giftSmallAp: 5,
+  giftMediumAp: 15,
+  giftLargeAp: 35,
   creationCostNc: 25,
   ncPerStarDivisor: 2,
   ticketsPerStar: 3,
@@ -55,9 +61,18 @@ export async function getEconomyConfig(): Promise<EconomyConfig> {
     switch (row.key) {
       case "eco_msg_cost":          if (n("tickets") != null) config.msgCostTickets = n("tickets")!; break;
       case "eco_selfie_cost":       if (n("nc") != null) config.selfieCostNc = n("nc")!; break;
-      case "eco_gift_small":        if (n("nc") != null) config.giftSmallNc = n("nc")!; break;
-      case "eco_gift_medium":       if (n("nc") != null) config.giftMediumNc = n("nc")!; break;
-      case "eco_gift_large":        if (n("nc") != null) config.giftLargeNc = n("nc")!; break;
+      case "eco_gift_small":
+        if (n("nc") != null) config.giftSmallNc = n("nc")!;
+        if (n("ap") != null) config.giftSmallAp = n("ap")!;
+        break;
+      case "eco_gift_medium":
+        if (n("nc") != null) config.giftMediumNc = n("nc")!;
+        if (n("ap") != null) config.giftMediumAp = n("ap")!;
+        break;
+      case "eco_gift_large":
+        if (n("nc") != null) config.giftLargeNc = n("nc")!;
+        if (n("ap") != null) config.giftLargeAp = n("ap")!;
+        break;
       case "eco_creation_cost":     if (n("nc") != null) config.creationCostNc = n("nc")!; break;
       case "eco_nc_star_divisor":   if (n("divisor") != null) config.ncPerStarDivisor = n("divisor")!; break;
       case "eco_tickets_per_star":  if (n("tickets") != null) config.ticketsPerStar = n("tickets")!; break;
