@@ -1,0 +1,118 @@
+BUG FIXES
+1. Start New Chat fails for existing character
+
+Before inserting a new conversation row, archive any existing active conversation for that (telegram_id, character_id) pair by setting archived = true. This prevents unique constraint violations.
+2. Create Character Wizard stuck on Step 2
+
+Add working Next and Previous buttons at the bottom of each of the 9 steps. Each Next button validates the current step before proceeding. Previous goes back without clearing data.
+3. Premium switches in admin panel not saving
+
+Fix all toggle switches in the admin panel to save their state to Supabase in real time.
+4. Premium card values are hardcoded
+
+All premium tier card values (prices, features, limits, descriptions) must fetch from Supabase and update in real time whenever changed from the bot, admin panel, or Supabase directly. No hardcoded values anywhere. Apply this to every card and price in the premium tab.
+5. Gold premium card addition not reflecting
+
+An addition made to the gold card via admin panel is saved to Supabase but not showing on the frontend premium tab. Fix the frontend to always render from live Supabase data, not local state or hardcoded defaults.
+6. All premium tiers have unlimited messages
+
+Stop deducting from ticket balance for any user on a premium tier. Check premium status before any deduction logic runs.
+7. Explore page UI — wrong prize currency
+
+The first card (Create Character) and other cards on the explore page show "tickets" as the prize instead of "neon cards." Fix all instances across the explore page where prize currency is displayed incorrectly.
+
+LOGIC CORRECTIONS
+8. Affection system rules
+
+Affection boost/reduce words operate in percentage
+Percentage cap: 100%
+Affection points cap: 1000 per user per character
+
+Enforce both caps in code. Display a note about these rules in the admin affection settings UI.
+
+
+UI / NAVIGATION CHANGES
+9. Archive Chat as third tab
+
+Move Archive Chat to the third tab in the chat section, sitting next to Active and Vault tabs. Order: Active | Vault | Archive.
+10. Search bar in Active Chat + Admin Chat section
+
+Add a search bar to the Active Chat list in the user-facing chat section. Show 6 chats before the page becomes scrollable. Scrolling up/down loads more.
+Also add a search bar to the chat section inside the admin panel so admins can search through all active chats.
+
+
+NEW FEATURES
+11. Vault linked to Supabase — persists across Railway restarts
+
+All media received across all chats must route to Vault and be stored in Supabase so it survives Railway restarts. Blurred images must remain blurred with an unlock amount fetched from Supabase. Do not override blur state.
+12. Customer Support routing
+
+In the side panel, route the Customer Support button to one of these Telegram accounts:
+
+07044291107
+07047377987
+07047720990
+
+13. Ticket & Dispute System — "HelpDesk"
+
+Build a full ticket system called HelpDesk.
+User side (side panel — new "HelpDesk" section):
+
+Users can create dispute/complaint tickets
+View all their tickets with status: Open, In Progress, Resolved, Closed
+Chat with admin/staff inside each ticket thread
+Tickets stay open until resolved or closed by either party
+All messages sent to the customer support Telegram numbers (item 12) must duplicate and also appear inside the HelpDesk Customer Support tab in the admin panel in real time
+
+Admin side (new "HelpDesk" tab with 3 sub-tabs):
+
+Disputes & Complaints — view and manage incoming dispute tickets, reply inside ticket thread, change ticket status
+Customer Support — all messages sent to the support Telegram accounts appear here in real time as threads. Admin can reply from here
+All Tickets — full table view of every ticket: issuer, type, status, created date, last updated
+
+Admin/staff can also send a ticket to a user. The user receives:
+
+A Telegram bot notification
+A popup on next app open routing them to that ticket
+
+14. Customer Service in Side Panel
+
+Add a Customer Service section to the side panel where users can send messages directly to admin. In the admin panel, add a Customer Service tab (separate from HelpDesk) showing all message threads and response tools for admin to reply.
+15. Quest Hub in Admin
+
+Add an elaborate Quest Hub tab to the admin panel where admin can:
+
+Create, edit, and delete quests
+Set reward type and amount (fetched from Supabase, never hardcoded)
+Set quest start date, duration, and end date
+Monitor quest completions and participation counts
+Rewards are distributed automatically on quest completion
+
+16. Character Multiple Avatars
+
+Admin can assign multiple avatars to a character. On the bio page, tapping the current avatar opens a swipeable view of all avatars showing "Avatar X of Y".
+Bio page is accessible from:
+
+The character listing (existing behavior)
+Tapping the character avatar during chat — this opens a WhatsApp-style media viewer with tabs: Images | Links | Media showing all content received in that chat thread. Blurred images stay blurred with unlock amount fetched from Supabase. Do not override blur state.
+
+17. Step 3 of Create Character — Custom Genre
+
+In the Create Character wizard, Step 3 (Origin/Genre) add a "+ Add Custom Genre" button. Users can type and submit a genre that isn't already listed. It gets added to their selection immediately.
+18. Referral Rewards — no hardcoded values
+
+All referral rewards must be fetched from Supabase. No hardcoded reward values anywhere. Add an elaborate Referrals section to the admin panel where admin can:
+
+Set and edit reward per referral
+View all referrals (who referred whom, date, reward given)
+Configure reward tiers
+See total referral activity and stats
+
+19. All events fetch timing from Supabase
+
+No fixed or hardcoded event durations or end dates anywhere. All events must read their start time, end time, and active status from Supabase.
+20. Bot commands audit
+
+Check for any bot commands defined in the codebase that have not yet been registered with the Telegram bot. Register and push all missing commands.
+
+General rule: every value that could change over time (prices, rewards, limits, durations, features) must be fetched from Supabase. Nothing business-logic related should be hardcoded.You said: so going through this code which tables need creation or to be added to supabase
