@@ -1,0 +1,52 @@
+Fix the following gaps found during the audit. Do not touch anything else.
+1. Point 1 — Earnings toggle buttons
+On the Earnings page (Star transactions only), replace the date input fields with quick toggle buttons at the very top: Daily / Weekly / Monthly / Custom. Custom shows a date range picker. The total Stars earned updates instantly when a toggle is selected. Do not change the transaction table below.
+2. Point 5 — Feature restriction enforcement per endpoint
+The auth middleware currently only checks ban/block. Add per-endpoint feature restriction checks by reading type = 'feature_block' from the user_restrictions table (or cache) and enforcing before each action:
+
+Chat message endpoint → check 'chat' not in features
+Character creation endpoint → check 'character_creation' not in features
+Shop endpoint → check 'shop' not in features
+Gift send endpoint → check 'gifts' not in features
+Daily claim endpoint → check 'daily_claim' not in features
+Invite & earn endpoint → check 'invite_earn' not in features
+Media inventory endpoint → check 'media_inventory' not in features
+Quest hub endpoint → check 'quest_hub' not in features
+Premium upgrade endpoint → check 'premium_upgrade' not in features
+
+Also enforce type = 'limit' limits per endpoint:
+
+limits.messages_per_day on chat message endpoint
+limits.characters_per_week on character creation endpoint
+limits.shop_purchases_per_day on shop endpoint
+
+If blocked return: "This feature has been restricted on your account. Contact support."
+Also enforce the same checks in the Telegram bot before processing each equivalent action.
+3. Point 6 — Character creation cost from Supabase
+In characters.ts, remove the hardcoded CHARACTER_CREATION_NEON_COST = 25. Replace every reference to this constant with await getPrice('char_create_nc'). Ensure getPrice is imported and awaited correctly everywhere this cost is used — creation endpoint, bot command, and UI display.
+4. Point 9 — Blurred images exempt from limits
+Blurred locked images must not count against a user's hourly or daily image limits. Find where blurred images are sent and ensure they bypass the image counter check entirely — the counter is neither checked nor incremented when a blurred image is sent.
+5. Point 10 — Trigger Words box on Stats page
+Add a "🔥 Trigger Words" box to the admin Stats page alongside the other stat boxes. Clicking it routes to the Trigger Words section of the admin panel.
+6. Trigger Words section not visible in admin panel
+The Trigger Words section is not showing in the admin panel. Fix this:
+
+Add it as a standalone top-level tab/section in the admin panel navigation alongside Characters, Users, Pricing, Premium, Broadcast etc.
+Must be accessible directly from the admin panel nav — not hidden inside another section
+Show a searchable list of all characters
+Clicking a character shows that character's trigger words as removable chips
+Admin can add new trigger words via a text input and remove existing ones
+All changes save immediately to the trigger_words table in Supabase with columns: id, character_id, word, created_at
+Do not create the table — just read and write to it
+
+7. Fix Daily Claim Countdown — Show for All Users
+The "next claim" countdown timer currently only shows for the supreme admin. Fix it to show for every user based on their tier's claim interval:
+
+Free → 24 hour cooldown
+Bronze → 12 hour cooldown
+Silver → 12 hour cooldown
+Gold → 12 hour cooldown
+Supreme admin → 6 hour cooldown
+
+After a user claims, store the last_daily_claim timestamp in Supabase. On the claim screen, read this timestamp and calculate the remaining cooldown based on the user's tier interval. Show the countdown timer to all users — not just admin. When the cooldown expires, show the claim button as active again.
+Do not change any other logic or UI.

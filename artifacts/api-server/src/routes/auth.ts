@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, usersTable, transactionsTable, systemConfigurationsTable } from "@workspace/db";
 import { getEconomyConfig } from "../lib/economyConfig";
+import { checkFeatureBlocked, RESTRICTION_ERROR } from "../lib/featureRestrictions";
 import {
   GetMeResponse,
   UpdateProfileBody,
@@ -104,6 +105,11 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
+  }
+
+  if (!req.isAdmin) {
+    const claimBlocked = await checkFeatureBlocked(req.telegramUserId, "daily_claim");
+    if (claimBlocked) { res.status(403).json({ error: RESTRICTION_ERROR }); return; }
   }
 
   const now = new Date();

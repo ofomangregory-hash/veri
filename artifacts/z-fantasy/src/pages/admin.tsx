@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { CharacterWizard } from "@/components/CharacterWizard";
 
-type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb";
+type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words";
 
 interface SysConfig { key: string; value: unknown; updatedAt: string }
 
@@ -75,7 +75,7 @@ export function Admin() {
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
-    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb"]
+    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words"]
     : ["stats", "users", "characters"];
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
@@ -131,6 +131,11 @@ export function Admin() {
   } | null>(null);
   const [earningsLoading, setEarningsLoading] = useState(false);
   const [earningsFilter, setEarningsFilter] = useState({ userId: "", type: "", dateFrom: "", dateTo: "" });
+  const [earningsRange, setEarningsRange] = useState<"daily" | "weekly" | "monthly" | "custom">("daily");
+
+  // ── Trigger Words state ─────────────────────────────────────────────────────
+  const [twSearch, setTwSearch] = useState("");
+  const [twSelectedChar, setTwSelectedChar] = useState<{ id: string; name: string } | null>(null);
 
   // ── BLB state ──────────────────────────────────────────────────────────────
   type BLBUser = { id: string; username: string | null; subscriptionTier: string; ticketBalance: number; status: string; restrictions: Record<string, unknown> | null };
@@ -441,6 +446,20 @@ export function Admin() {
     if (activeTab === "earnings" || activeTab === "transactions") fetchEarnings();
   }, [activeTab]);
 
+  useEffect(() => {
+    if (earningsRange === "custom") return;
+    const today = new Date();
+    const fmt = (d: Date) => d.toISOString().split("T")[0];
+    let dateFrom = fmt(today);
+    if (earningsRange === "weekly") {
+      const start = new Date(today); start.setDate(today.getDate() - today.getDay());
+      dateFrom = fmt(start);
+    } else if (earningsRange === "monthly") {
+      dateFrom = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+    }
+    setEarningsFilter(f => ({ ...f, dateFrom, dateTo: fmt(today) }));
+  }, [earningsRange]);
+
   const fetchBlbUsers = useCallback(async (search = "") => {
     setBlbLoading(true);
     try {
@@ -505,6 +524,7 @@ export function Admin() {
     transactions: "📋 Transactions",
     earnings: "⭐ Earnings",
     blb: "🚫 B.L.B",
+    trigger_words: "🔥 Triggers",
   };
 
   const filteredUsers = (usersData?.items ?? []).filter(u => {
@@ -597,10 +617,16 @@ export function Admin() {
                 <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Full Log →</div>
               </button>
               <button onClick={() => setActiveTab("blb")}
-                className="p-4 rounded-xl bg-card border border-border hover:border-red-500/60 transition-all text-left w-full cursor-pointer active:scale-95 col-span-2">
+                className="p-4 rounded-xl bg-card border border-border hover:border-red-500/60 transition-all text-left w-full cursor-pointer active:scale-95">
                 <Ban className="text-red-400 mb-2" size={20} />
                 <div className="text-lg font-bold text-red-400">🚫 B.L.B</div>
                 <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Ban · Block · Limit →</div>
+              </button>
+              <button onClick={() => setActiveTab("trigger_words")}
+                className="p-4 rounded-xl bg-card border border-border hover:border-orange-500/60 transition-all text-left w-full cursor-pointer active:scale-95">
+                <Sparkles className="text-orange-400 mb-2" size={20} />
+                <div className="text-lg font-bold text-orange-400">🔥 Triggers</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Trigger Words →</div>
               </button>
             </div>
           )}
@@ -1125,6 +1151,16 @@ export function Admin() {
             <h2 className="font-bold uppercase tracking-wider text-yellow-400">⭐ Earnings — Stars Revenue</h2>
           </div>
 
+          {/* Date range quick toggles */}
+          <div className="flex gap-1 p-1 bg-card rounded-xl border border-border">
+            {(["daily", "weekly", "monthly", "custom"] as const).map(r => (
+              <button key={r} onClick={() => { setEarningsRange(r); if (r !== "custom") setTimeout(fetchEarnings, 50); }}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${earningsRange === r ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/40" : "text-muted-foreground hover:text-foreground"}`}>
+                {r === "daily" ? "Today" : r.charAt(0).toUpperCase() + r.slice(1)}
+              </button>
+            ))}
+          </div>
+
           {earningsData && (
             <>
               <div className="grid grid-cols-3 gap-2">
@@ -1164,14 +1200,16 @@ export function Admin() {
               <option value="neon_card_purchase">Neon Card Purchase</option>
               <option value="ticket_purchase">Ticket Purchase</option>
             </select>
-            <input type="date" value={earningsFilter.dateFrom}
-              onChange={e => setEarningsFilter(f => ({ ...f, dateFrom: e.target.value }))}
-              className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground"
-            />
-            <input type="date" value={earningsFilter.dateTo}
-              onChange={e => setEarningsFilter(f => ({ ...f, dateTo: e.target.value }))}
-              className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground"
-            />
+            {earningsRange === "custom" && (<>
+              <input type="date" value={earningsFilter.dateFrom}
+                onChange={e => setEarningsFilter(f => ({ ...f, dateFrom: e.target.value }))}
+                className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground"
+              />
+              <input type="date" value={earningsFilter.dateTo}
+                onChange={e => setEarningsFilter(f => ({ ...f, dateTo: e.target.value }))}
+                className="px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground"
+              />
+            </>)}
           </div>
           <button onClick={fetchEarnings} disabled={earningsLoading}
             className="w-full py-2 rounded-xl bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 text-xs font-bold uppercase disabled:opacity-50">
@@ -1204,6 +1242,64 @@ export function Admin() {
               <div className="text-center text-xs text-muted-foreground py-8">No Stars earnings found</div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Trigger Words ── */}
+      {activeTab === "trigger_words" && isGodMode && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="text-orange-400" size={20} />
+            <h2 className="font-bold uppercase tracking-wider text-orange-400">🔥 Trigger Words</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">Manage trigger words for each character. Select a character to view and edit their trigger configuration.</p>
+
+          {/* Character search */}
+          <input
+            placeholder="Search characters…"
+            value={twSearch}
+            onChange={e => setTwSearch(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground"
+          />
+
+          {/* Character list */}
+          {!twSelectedChar && (
+            <div className="space-y-2 max-h-[45vh] overflow-y-auto">
+              {(charsData?.items ?? [])
+                .filter(c => !twSearch.trim() || c.name.toLowerCase().includes(twSearch.toLowerCase()))
+                .map(c => (
+                  <button key={c.characterId} onClick={() => setTwSelectedChar({ id: c.characterId, name: c.name })}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-card border border-border hover:border-orange-500/50 transition-all text-left">
+                    <img src={c.profileImageUrl ?? `https://picsum.photos/seed/${c.characterId}/32/32`}
+                      className="w-8 h-8 rounded-full object-cover flex-shrink-0" alt="" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold truncate">{c.name}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{c.characterId}</div>
+                    </div>
+                    <ChevronRight className="text-muted-foreground flex-shrink-0" size={14} />
+                  </button>
+                ))
+              }
+              {(charsData?.items ?? []).length === 0 && (
+                <div className="text-center text-xs text-muted-foreground py-8">No characters found</div>
+              )}
+            </div>
+          )}
+
+          {/* Trigger words editor for selected character */}
+          {twSelectedChar && (
+            <div className="space-y-3">
+              <button onClick={() => setTwSelectedChar(null)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                ← Back to list
+              </button>
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-card border border-orange-500/30">
+                <Sparkles className="text-orange-400" size={16} />
+                <span className="font-bold text-sm">{twSelectedChar.name}</span>
+              </div>
+              <TriggerWordsSection characterId={twSelectedChar.id} getToken={getToken} />
+            </div>
+          )}
         </div>
       )}
 

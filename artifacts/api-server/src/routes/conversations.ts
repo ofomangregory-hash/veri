@@ -23,6 +23,7 @@ import { logger } from "../lib/logger";
 import { getSupabaseCharacterById, type NormalizedCharacter } from "../lib/supabaseCharacters";
 import { getEconomyConfig } from "../lib/economyConfig";
 import { getPrice } from "../lib/supabasePrices";
+import { checkFeatureBlocked, checkLimitExceeded, RESTRICTION_ERROR } from "../lib/featureRestrictions";
 import { getIntimacyLevel, updateIntimacyLevel, getContentLevel, CONTENT_LEVEL_WORDS } from "../lib/supabaseIntimacy";
 import { checkTriggerWord } from "../lib/supabaseTriggerWords";
 import { getRandomCharacterAvatar } from "../lib/supabaseAvatars";
@@ -221,6 +222,13 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
   const isAdminUser = req.isAdmin;
 
   if (!isAdminUser) {
+    const chatBlocked = await checkFeatureBlocked(req.telegramUserId, "chat");
+    if (chatBlocked) { res.status(403).json({ error: RESTRICTION_ERROR }); return; }
+    const msgLimitExceeded = await checkLimitExceeded(req.telegramUserId, "max_messages", user.dailyMessageCount);
+    if (msgLimitExceeded) { res.status(403).json({ error: RESTRICTION_ERROR }); return; }
+  }
+
+  if (!isAdminUser) {
     const dailyLimit = DAILY_MSG_LIMITS[tier] ?? Infinity;
     if (user.dailyMessageCount >= dailyLimit) {
       res.status(402).json({ error: `Daily message limit of ${dailyLimit} reached for ${tier} tier.` }); return;
@@ -311,10 +319,13 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
   const isFreeTier = tier === "Free";
   const loop = isFreeTier ? AUTO_IMG_FREE : AUTO_IMG_PREMIUM;
   const positionInLoop = newMsgCount % loop.interval;
-  const shouldAutoImage = !autoImageUrl && positionInLoop === loop.triggerAt && canSendImage;
+  // Blurred images bypass limits — allow sending even when canSendImage is false
+  const shouldAutoImage = !autoImageUrl && positionInLoop === loop.triggerAt;
 
   if (shouldAutoImage) {
-    const isBlurred = Math.random() < 0.2;
+    // Force blur when over limit so it doesn't count against limits
+    const forceBlurred = !canSendImage;
+    const isBlurred = forceBlurred || Math.random() < 0.2;
     try {
       const loopScene = isBlurred
         ? `teaser preview, blurred suggestive scene, ${contentWords}`
@@ -332,7 +343,8 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
         contentLevelWords: contentWords,
       });
       autoIsLocked = isBlurred;
-      incrementHourlyImageCount(req.telegramUserId);
+      // Only count non-blurred images against hourly limit
+      if (!isBlurred) incrementHourlyImageCount(req.telegramUserId);
     } catch (err) {
       logger.warn({ err }, "Auto-image generation failed — using avatar fallback");
       const fallbackAvatar = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
@@ -351,7 +363,7 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     .set({
       messageHistory: newHistory,
       messageCount: newMsgCount,
-      dailyAutoImageCount: shouldAutoImage || triggeredWord ? sql`daily_auto_image_count + 1` : conv.dailyAutoImageCount,
+      dailyAutoImageCount: (shouldAutoImage || !!triggeredWord) && !autoIsLocked ? sql`daily_auto_image_count + 1` : conv.dailyAutoImageCount,
       updatedAt: new Date(),
     })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
@@ -571,6 +583,11 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  if (!req.isAdmin) {
+    const giftsBlocked = await checkFeatureBlocked(req.telegramUserId, "gifts");
+    if (giftsBlocked) { res.status(403).json({ error: RESTRICTION_ERROR }); return; }
+  }
 
   const tier = user.subscriptionTier;
   const giftReaction = GIFT_REACTIONS[parsed.data.giftType];

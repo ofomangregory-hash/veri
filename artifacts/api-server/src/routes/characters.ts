@@ -28,12 +28,13 @@ import {
   deleteSupabaseCharacter,
   type NormalizedCharacter,
 } from "../lib/supabaseCharacters";
+import { getEconomyConfig } from "../lib/economyConfig";
+import { checkFeatureBlocked, checkLimitExceeded, RESTRICTION_ERROR } from "../lib/featureRestrictions";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
 
 const MAX_CHARACTER_SLOTS = 3;
-const CHARACTER_CREATION_NEON_COST = 25;
 const FREE_WEEKLY_CREATION_LIMIT = 1;
 
 const PAID_TIERS = new Set(["Bronze", "Silver", "Gold", "supreme_admin"]);
@@ -155,6 +156,16 @@ router.post("/characters", async (req, res): Promise<void> => {
     res.status(404).json({ error: "User not found" });
     return;
   }
+
+  if (!req.isAdmin) {
+    const featureBlocked = await checkFeatureBlocked(req.telegramUserId, "character_creation");
+    if (featureBlocked) { res.status(403).json({ error: RESTRICTION_ERROR }); return; }
+    const creationLimitExceeded = await checkLimitExceeded(req.telegramUserId, "max_creations", user.weeklyCreationsCount ?? 0);
+    if (creationLimitExceeded) { res.status(403).json({ error: RESTRICTION_ERROR }); return; }
+  }
+
+  const eco = await getEconomyConfig();
+  const CHARACTER_CREATION_NEON_COST = eco.creationCostNc;
 
   const tier = user.subscriptionTier;
   const isPaid = PAID_TIERS.has(tier);
