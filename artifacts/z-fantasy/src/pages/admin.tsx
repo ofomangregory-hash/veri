@@ -142,7 +142,8 @@ export function Admin() {
 
   // ── Affection tab state ─────────────────────────────────────────────────────
   const [affSearch, setAffSearch] = useState("");
-  const [affUsers, setAffUsers] = useState<Array<{ userId: string; characterId: string; intimacyLevel: number }>>([]);
+  const [affFilter, setAffFilter] = useState<"all" | "today" | "weekly">("all");
+  const [affUsers, setAffUsers] = useState<Array<{ userId: string; characterId: string; intimacyLevel: number; affectionPoints?: number }>>([]);
   const [affLoading, setAffLoading] = useState(false);
   const [affSelectedChar, setAffSelectedChar] = useState<{ id: string; name: string } | null>(null);
   const [affWords, setAffWords] = useState<Array<{ id: string; word: string; amount: number; type: "boost" | "reduce" }>>([]);
@@ -182,6 +183,7 @@ export function Admin() {
 
   useEffect(() => {
     if (activeTab === "active_chats") loadActiveChats(activeChatsSearch, activeChatsPage);
+    if (activeTab === "affection") fetchAffUsers();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -563,11 +565,14 @@ export function Admin() {
   };
 
   // ── Affection tab functions ─────────────────────────────────────────────────
-  const fetchAffUsers = async () => {
+  const fetchAffUsers = async (overrideFilter?: "all" | "today" | "weekly") => {
     setAffLoading(true);
     try {
-      const data = await adminApi<Array<{ userId: string; characterId: string; intimacyLevel: number }>>(
-        "GET", `/admin/affection/users${affSearch.trim() ? `?search=${encodeURIComponent(affSearch.trim())}` : ""}`
+      const period = overrideFilter ?? affFilter;
+      const params = new URLSearchParams({ period });
+      if (affSearch.trim()) params.set("search", affSearch.trim());
+      const data = await adminApi<Array<{ userId: string; characterId: string; intimacyLevel: number; affectionPoints?: number }>>(
+        "GET", `/admin/affection/users?${params}`
       );
       setAffUsers(data);
     } catch { setAffUsers([]); }
@@ -1443,23 +1448,47 @@ export function Admin() {
           {/* User affection lookup */}
           <div className="p-4 bg-card rounded-xl border border-border space-y-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-foreground">User Affection Stats</p>
+
+            {/* Period filter pills */}
+            <div className="flex gap-1.5">
+              {(["all", "today", "weekly"] as const).map(f => (
+                <button key={f}
+                  onClick={() => { setAffFilter(f); fetchAffUsers(f); }}
+                  className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-colors ${affFilter === f ? "bg-primary/20 border-primary/60 text-primary" : "bg-background border-border text-muted-foreground hover:text-foreground"}`}>
+                  {f === "all" ? "All Time" : f === "today" ? "Today" : "Weekly"}
+                </button>
+              ))}
+              <span className="ml-auto text-[10px] text-muted-foreground self-center">{affUsers.length} shown</span>
+            </div>
+
+            {/* Search */}
             <div className="flex gap-2">
               <input value={affSearch} onChange={e => setAffSearch(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && fetchAffUsers()}
-                placeholder="User ID or username…"
+                placeholder="Filter by user ID…"
                 className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground" />
-              <button onClick={fetchAffUsers} disabled={affLoading}
+              <button onClick={() => fetchAffUsers()} disabled={affLoading}
                 className="px-3 py-2 rounded-lg bg-accent/10 border border-accent/40 text-accent text-xs font-bold hover:bg-accent/20 disabled:opacity-50">
                 {affLoading ? "…" : "Search"}
               </button>
             </div>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {affUsers.map(u => (
+
+            {/* List — 5 rows visible (~200px), then scroll */}
+            <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-0.5">
+              {affLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-10 bg-background rounded-lg border border-border animate-pulse" />
+                ))
+              ) : affUsers.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">No affection data found</p>
+              ) : affUsers.map(u => (
                 <div key={`${u.userId}-${u.characterId}`}
                   className="flex items-center gap-2 p-2 bg-background rounded-lg border border-border text-xs">
                   <div className="flex-1 min-w-0">
                     <div className="font-bold truncate">{u.userId}</div>
-                    <div className="text-[10px] text-muted-foreground">Char: {u.characterId.slice(0, 12)}… · Intimacy: {u.intimacyLevel}%</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      Char: {u.characterId.slice(0, 12)}… · 💜 {u.affectionPoints ?? 0} AP · {u.intimacyLevel}%
+                    </div>
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <button onClick={() => handleAdjustAff(u.userId, u.characterId, 10)} className="px-1.5 py-0.5 rounded bg-green-500/20 border border-green-500/40 text-green-400 text-[10px] font-bold">+10%</button>
@@ -1468,9 +1497,6 @@ export function Admin() {
                   </div>
                 </div>
               ))}
-              {affUsers.length === 0 && !affLoading && (
-                <p className="text-xs text-muted-foreground text-center py-4">Search a user to see their affection data</p>
-              )}
             </div>
           </div>
 

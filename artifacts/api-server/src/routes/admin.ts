@@ -943,6 +943,46 @@ router.post("/admin/characters/:characterId/avatars/generate", adminOnly, async 
 // ─── Affection Admin Routes ───────────────────────────────────────────────────
 router.get("/admin/affection/users", adminOnly, async (req, res): Promise<void> => {
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
+  const period = typeof req.query.period === "string" ? req.query.period : "all";
+
+  // For today/weekly, pull from local conversations table (has timestamps + affectionPoints)
+  if (period === "today" || period === "weekly") {
+    const cutoff = new Date();
+    if (period === "today") {
+      cutoff.setHours(0, 0, 0, 0);
+    } else {
+      cutoff.setDate(cutoff.getDate() - 7);
+    }
+
+    let query = db
+      .select({
+        userId: conversationsTable.telegramId,
+        characterId: conversationsTable.characterId,
+        affectionPoints: conversationsTable.affectionPoints,
+        updatedAt: conversationsTable.updatedAt,
+      })
+      .from(conversationsTable)
+      .where(
+        and(
+          gte(conversationsTable.updatedAt, cutoff),
+          eq(conversationsTable.archived, false),
+          search ? ilike(conversationsTable.telegramId, `%${search}%`) : sql`1=1`,
+        )
+      )
+      .orderBy(desc(conversationsTable.affectionPoints))
+      .limit(50)
+      .$dynamic();
+
+    const rows = await query;
+    res.json(rows.map(r => ({
+      userId: r.userId,
+      characterId: r.characterId,
+      affectionPoints: r.affectionPoints ?? 0,
+      intimacyLevel: Math.min(100, Math.floor(((r.affectionPoints ?? 0) / 500) * 100)),
+    })));
+    return;
+  }
+
   const data = await getAllUsersAffectionStats(search);
   res.json(data);
 });

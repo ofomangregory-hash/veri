@@ -35,6 +35,7 @@ export interface GenerateAvatarOptions {
   teaserDescription: string | null | undefined;
   imageSeed: string;
   nsfwEnabled?: boolean;
+  avatarUrl?: string | null;
 }
 
 function buildPrompt(opts: GenerateSelfieOptions): string {
@@ -58,19 +59,26 @@ function buildPrompt(opts: GenerateSelfieOptions): string {
   return promptParts.join(" ").replace(/\s{2,}/g, " ").trim();
 }
 
+/** Strip characters that break URL construction before encodeURIComponent */
+function sanitizePrompt(raw: string): string {
+  return raw
+    .replace(/[\n\r\t]/g, " ")
+    .replace(/["""'''`]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 async function tryPollinations(prompt: string, seed: string, nsfwEnabled: boolean): Promise<string | null> {
   try {
-    const encodedPrompt = encodeURIComponent(prompt);
+    const clean = sanitizePrompt(prompt);
+    const encodedPrompt = encodeURIComponent(clean);
     const seedNum = parseInt(seed, 10) || Math.floor(Math.random() * 9999999);
 
-    let url: string;
-    if (nsfwEnabled) {
-      url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seedNum}&nologo=true&safe=false`;
-    } else {
-      url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seedNum}&nologo=true`;
-    }
+    const url = nsfwEnabled
+      ? `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seedNum}&nologo=true&safe=false`
+      : `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seedNum}&nologo=true`;
 
-    logger.info({ prompt: prompt.slice(0, 80), nsfwEnabled }, "Attempting Pollinations image generation");
+    logger.info({ url, prompt: clean.slice(0, 80), nsfwEnabled }, "Attempting Pollinations image generation");
 
     const response = await axios.get(url, {
       responseType: "arraybuffer",
@@ -92,55 +100,40 @@ async function tryPollinations(prompt: string, seed: string, nsfwEnabled: boolea
     logger.info({ telegraphUrl }, "Pollinations image uploaded to Telegra.ph");
     return telegraphUrl;
   } catch (err) {
-    logger.warn({ message: (err as Error).message }, "Pollinations generation failed — falling back to Perchance");
+    logger.warn({ message: (err as Error).message }, "Pollinations generation failed — trying simple fallback");
     return null;
   }
 }
 
-async function tryPerchance(prompt: string, seed: string): Promise<string | null> {
+async function tryPollinationsSimple(genre: string, characterName: string): Promise<string | null> {
   try {
-    const negativePrompt = "blurry, low quality, bad anatomy, extra limbs, mutated hands, poorly drawn face, bad proportions, deformed, watermark, signature, text, logo, ugly, disfigured, out of frame, duplicate, cropped, worst quality, jpeg artifacts";
+    const simplePrompt = sanitizePrompt(`${genre} ${characterName} portrait beautiful`);
+    const encodedPrompt = encodeURIComponent(simplePrompt);
+    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=42`;
 
-    const requestId = Math.random().toString(36).slice(2, 16);
-    const params = new URLSearchParams();
-    params.set("prompt",            encodeURIComponent(prompt));
-    params.set("negativePrompt",    encodeURIComponent(negativePrompt));
-    params.set("seed",              seed);
-    params.set("resolution",        "512x768");
-    params.set("guidanceScale",     "7");
-    params.set("numInferenceSteps", "25");
-    params.set("imageFormat",       "jpeg");
-    params.set("channel",           "ai-text-to-image-generator");
-    params.set("subChannel",        "public");
-    params.set("requestId",         requestId);
+    logger.info({ url }, "Attempting Pollinations simple fallback");
 
-    const apiUrl = `https://image-generation.perchance.org/api/generateImage?${params.toString()}`;
-
-    logger.info({ prompt: prompt.slice(0, 80), seed }, "Attempting Perchance image generation");
-
-    const genResponse = await axios.get<{ imageUrl?: string }>(apiUrl, {
+    const response = await axios.get(url, {
+      responseType: "arraybuffer",
       timeout: 15000,
       headers: {
         "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
+        "Accept": "image/jpeg,image/png,image/*",
       },
+      validateStatus: (status) => status === 200,
     });
 
-    if (!genResponse.data?.imageUrl) {
-      logger.warn("Perchance API did not return imageUrl");
+    if (!response.data || response.data.byteLength < 1000) {
+      logger.warn({ bytes: response.data?.byteLength }, "Pollinations simple fallback returned too-small image");
       return null;
     }
 
-    const imgResponse = await axios.get(genResponse.data.imageUrl, {
-      responseType: "arraybuffer",
-      timeout: 30000,
-    });
-    const buffer = Buffer.from(imgResponse.data as ArrayBuffer);
-    const telegraphUrl = await uploadToTelegraph(buffer, `selfie_${requestId}.jpg`);
-    logger.info({ telegraphUrl }, "Perchance image uploaded to Telegra.ph");
+    const buffer = Buffer.from(response.data as ArrayBuffer);
+    const telegraphUrl = await uploadToTelegraph(buffer, `img_simple_${Date.now()}.jpg`);
+    logger.info({ telegraphUrl }, "Pollinations simple fallback uploaded to Telegra.ph");
     return telegraphUrl;
   } catch (err) {
-    logger.warn({ message: (err as Error).message }, "Perchance generation failed");
+    logger.warn({ message: (err as Error).message }, "Pollinations simple fallback failed");
     return null;
   }
 }
@@ -178,21 +171,27 @@ export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Prom
     imageSeed: opts.imageSeed,
     sceneDescription: "close-up portrait, looking at camera, soft studio lighting, high detail",
     nsfwEnabled: opts.nsfwEnabled ?? false,
+    avatarUrl: opts.avatarUrl,
   });
 }
 
 export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Promise<string> {
-  const { imageSeed, nsfwEnabled = false } = opts;
+  const { imageSeed, nsfwEnabled = false, avatarUrl, genre, characterName } = opts;
   const prompt = buildPrompt(opts);
 
-  // Primary: Pollinations.ai
+  // Primary: Pollinations.ai with full prompt
   const pollinationsUrl = await tryPollinations(prompt, imageSeed, nsfwEnabled);
   if (pollinationsUrl) return pollinationsUrl;
 
-  // Fallback: Perchance text-to-image
-  const perchanceUrl = await tryPerchance(prompt, imageSeed);
-  if (perchanceUrl) return perchanceUrl;
+  // Fallback: Pollinations with simplified prompt (genre + name only)
+  const simpleUrl = await tryPollinationsSimple(genre, characterName);
+  if (simpleUrl) return simpleUrl;
 
-  // Last resort: throw so callers can use their own fallback (e.g. avatar_url)
-  throw new Error("All image generation methods failed");
+  // Last resort: character's saved avatar_url — never break chat flow
+  if (avatarUrl) {
+    logger.warn({ characterName }, "All image generation failed — using avatar_url as fallback");
+    return avatarUrl;
+  }
+
+  throw new Error("All image generation methods failed and no avatar_url available");
 }
