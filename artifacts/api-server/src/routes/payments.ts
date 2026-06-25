@@ -198,77 +198,129 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
   }
 
   if (body.message?.successful_payment) {
-    try {
-      const rawPayload = JSON.parse(body.message.successful_payment.invoice_payload) as {
-        type?: string; tier?: string; userId?: string; period?: string; cards?: number; bonus?: number; tickets?: number;
-      };
-      const userId = String(body.message?.from?.id ?? rawPayload.userId);
+    // Always respond 200 immediately — never block on grant processing
+    res.json({ ok: true });
 
-      if (rawPayload.type === "tickets" && rawPayload.tickets) {
-        const bonusAwarded = rawPayload.bonus ?? 0;
-        const totalAwarded = rawPayload.tickets + bonusAwarded;
-        await db.update(usersTable)
-          .set({ ticketBalance: sql`ticket_balance + ${totalAwarded}` })
-          .where(eq(usersTable.id, userId));
+    // Process the grant asynchronously with retry
+    (async () => {
+      let grantId: string | null = null;
+      try {
+        const rawPayload = JSON.parse(body.message!.successful_payment!.invoice_payload) as {
+          type?: string; tier?: string; userId?: string; period?: string; cards?: number; bonus?: number; tickets?: number;
+        };
+        const userId = String(body.message?.from?.id ?? rawPayload.userId);
 
-        await db.insert(transactionsTable).values({
-          telegramId: userId,
-          actionType: `tickets_purchase_${totalAwarded}`,
-          ticketAmount: totalAwarded,
-        });
+        // Write pending_grant to Supabase first (safety net) — non-blocking
+        try {
+          const { supabase } = await import("../lib/supabase");
+          if (supabase) {
+            const { data: pg } = await supabase
+              .from("pending_grants")
+              .insert({ telegram_id: userId, payload: rawPayload, status: "pending" })
+              .select("id")
+              .single();
+            grantId = pg?.id ?? null;
+          }
+        } catch { /* Supabase unavailable — proceed anyway */ }
 
-        logger.info({ userId, tickets: rawPayload.tickets, bonus: bonusAwarded, total: totalAwarded }, "Tickets purchased");
-      } else if (rawPayload.type === "neon_cards" && rawPayload.cards) {
-        const bonusAwarded = rawPayload.bonus ?? 0;
-        const totalAwarded = rawPayload.cards + bonusAwarded;
-        await db.update(usersTable)
-          .set({ neonCardBalance: sql`neon_card_balance + ${totalAwarded}` })
-          .where(eq(usersTable.id, userId));
+        const grantWithRetry = async (fn: () => Promise<void>) => {
+          try { await fn(); }
+          catch (err) {
+            logger.warn({ err }, "Grant attempt 1 failed, retrying in 3s…");
+            await new Promise(r => setTimeout(r, 3000));
+            await fn(); // throws on 2nd failure — caught by outer try
+          }
+        };
 
-        await db.insert(transactionsTable).values({
-          telegramId: userId,
-          actionType: `neon_cards_purchase_${totalAwarded}`,
-          ticketAmount: totalAwarded,
-        });
+        if (rawPayload.type === "tickets" && rawPayload.tickets) {
+          const bonusAwarded = rawPayload.bonus ?? 0;
+          const totalAwarded = rawPayload.tickets + bonusAwarded;
+          await grantWithRetry(async () => {
+            await db.update(usersTable)
+              .set({ ticketBalance: sql`ticket_balance + ${totalAwarded}` })
+              .where(eq(usersTable.id, userId));
+            await db.insert(transactionsTable).values({
+              telegramId: userId,
+              actionType: `tickets_purchase_${totalAwarded}`,
+              ticketAmount: totalAwarded,
+            });
+          });
+          logger.info({ userId, tickets: rawPayload.tickets, bonus: bonusAwarded, total: totalAwarded }, "Tickets purchased");
 
-        logger.info({ userId, cards: rawPayload.cards, bonus: bonusAwarded, total: totalAwarded }, "Neon cards purchased");
-      } else if (rawPayload.tier) {
-        const tierTickets = SUBSCRIPTION_TICKET_PERKS[rawPayload.tier] ?? 0;
-        const tierNeon = SUBSCRIPTION_NEON_PERKS[rawPayload.tier] ?? 0;
-        await db.update(usersTable)
-          .set({
-            subscriptionTier: rawPayload.tier,
-            ticketBalance: tierTickets > 0 ? sql`ticket_balance + ${tierTickets}` : undefined,
-            neonCardBalance: tierNeon > 0 ? sql`neon_card_balance + ${tierNeon}` : undefined,
-          })
-          .where(eq(usersTable.id, userId));
+        } else if (rawPayload.type === "neon_cards" && rawPayload.cards) {
+          const bonusAwarded = rawPayload.bonus ?? 0;
+          const totalAwarded = rawPayload.cards + bonusAwarded;
+          await grantWithRetry(async () => {
+            await db.update(usersTable)
+              .set({ neonCardBalance: sql`neon_card_balance + ${totalAwarded}` })
+              .where(eq(usersTable.id, userId));
+            await db.insert(transactionsTable).values({
+              telegramId: userId,
+              actionType: `neon_cards_purchase_${totalAwarded}`,
+              ticketAmount: totalAwarded,
+            });
+          });
+          logger.info({ userId, cards: rawPayload.cards, bonus: bonusAwarded, total: totalAwarded }, "Neon cards purchased");
 
-        await db.insert(transactionsTable).values({
-          telegramId: userId,
-          actionType: `subscription_${rawPayload.tier}_${rawPayload.period ?? "unknown"}`,
-          ticketAmount: tierTickets,
-          neonCardAmount: tierNeon,
-        });
+        } else if (rawPayload.tier) {
+          const tierTickets = SUBSCRIPTION_TICKET_PERKS[rawPayload.tier] ?? 0;
+          const tierNeon = SUBSCRIPTION_NEON_PERKS[rawPayload.tier] ?? 0;
+          await grantWithRetry(async () => {
+            await db.update(usersTable)
+              .set({
+                subscriptionTier: rawPayload.tier,
+                ticketBalance: tierTickets > 0 ? sql`ticket_balance + ${tierTickets}` : undefined,
+                neonCardBalance: tierNeon > 0 ? sql`neon_card_balance + ${tierNeon}` : undefined,
+              })
+              .where(eq(usersTable.id, userId));
+            await db.insert(transactionsTable).values({
+              telegramId: userId,
+              actionType: `premium_benefit_grant`,
+              ticketAmount: tierTickets,
+              neonCardAmount: tierNeon,
+            });
+          });
 
-        const botToken = process.env.TELEGRAM_BOT_TOKEN;
-        if (botToken) {
-          const periodLabel = rawPayload.period ? ` (${rawPayload.period})` : "";
-          const confirmMsg = `🎉 *${rawPayload.tier} Subscription Activated${periodLabel}!*\n\n` +
-            `🎟 +${tierTickets} Tickets added\n` +
-            `🃏 +${tierNeon} Neon Cards added\n\n` +
-            `Welcome to ${rawPayload.tier} tier — enjoy your perks!`;
-          fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: userId, text: confirmMsg, parse_mode: "Markdown" }),
-          }).catch(err => logger.warn({ err }, "Failed to send subscription confirmation message"));
+          const botToken = process.env.TELEGRAM_BOT_TOKEN;
+          if (botToken) {
+            const periodLabel = rawPayload.period ? ` (${rawPayload.period})` : "";
+            const confirmMsg = `🎉 *${rawPayload.tier} Subscription Activated${periodLabel}!*\n\n` +
+              `🎟 +${tierTickets} Tickets added\n` +
+              `🃏 +${tierNeon} Neon Cards added\n\n` +
+              `Welcome to ${rawPayload.tier} tier — enjoy your perks!`;
+            fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: userId, text: confirmMsg, parse_mode: "Markdown" }),
+            }).catch(err => logger.warn({ err }, "Failed to send subscription confirmation message"));
+          }
+          logger.info({ userId, tier: rawPayload.tier, ticketsGranted: tierTickets, neonGranted: tierNeon }, "Subscription activated (premium_benefit_grant)");
         }
 
-        logger.info({ userId, tier: rawPayload.tier, ticketsGranted: tierTickets, neonGranted: tierNeon }, "Subscription activated");
+        // Mark pending_grant completed in Supabase
+        if (grantId) {
+          try {
+            const { supabase } = await import("../lib/supabase");
+            if (supabase) {
+              await supabase.from("pending_grants").update({ status: "completed" }).eq("id", grantId);
+            }
+          } catch { /* non-critical */ }
+        }
+      } catch (err) {
+        logger.error({ err }, "Failed to process payment webhook after retry");
+        // Mark as failed in Supabase so it can be manually retried
+        if (grantId) {
+          try {
+            const { supabase } = await import("../lib/supabase");
+            if (supabase) {
+              await supabase.from("pending_grants").update({ status: "failed", error: String(err) }).eq("id", grantId);
+            }
+          } catch { /* non-critical */ }
+        }
       }
-    } catch (err) {
-      logger.error({ err }, "Failed to process payment webhook");
-    }
+    })();
+
+    return;
   }
 
   res.json({ ok: true });

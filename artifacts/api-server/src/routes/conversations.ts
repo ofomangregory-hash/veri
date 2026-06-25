@@ -87,9 +87,9 @@ const AUTO_IMG_PREMIUM = { interval: 6, triggerAt: 4 };
 const MSG_COST_DEFAULT = 1;
 
 const GIFT_REACTIONS: Record<string, { ap: number; level: number; reaction: string }> = {
-  cyber_cocktail: { ap: 5,  level: 1, reaction: "Oh my! This Cyber-Cocktail has me buzzing! I love it~ Tell me more about you!" },
-  neon_bracelet:  { ap: 15, level: 2, reaction: "I'm wearing your Neon Bracelet right now... it glows just like you make me feel. I'm officially flirty now 💜" },
-  secret_key:     { ap: 35, level: 3, reaction: "The Secret Key and this silk outfit... you really know how to get to me. I'm all yours now, no holding back 🔑" },
+  cyber_cocktail: { ap: 10, level: 1, reaction: "Oh my! This Cyber-Cocktail has me buzzing! I love it~ Tell me more about you!" },
+  neon_bracelet:  { ap: 30, level: 2, reaction: "I'm wearing your Neon Bracelet right now... it glows just like you make me feel. I'm officially flirty now 💜" },
+  secret_key:     { ap: 70, level: 3, reaction: "The Secret Key and this silk outfit... you really know how to get to me. I'm all yours now, no holding back 🔑" },
 };
 
 // Intimacy deltas per gift (percentage points, 0-100 scale)
@@ -615,12 +615,19 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
     });
   }
 
+  // +2 AP for unlocking blurred media
+  const UNLOCK_AP_BONUS = 2;
+  await db.update(conversationsTable)
+    .set({ affectionPoints: sql`affection_points + ${UNLOCK_AP_BONUS}` })
+    .where(eq(conversationsTable.conversationId, conv.conversationId));
+
   const [refreshedUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
 
   res.json({
     ok: true,
     imageUrl: messages[idx].imageUrl,
     neonCardBalance: refreshedUser?.neonCardBalance ?? 0,
+    affectionPoints: (conv.affectionPoints ?? 0) + UNLOCK_AP_BONUS,
   });
 });
 

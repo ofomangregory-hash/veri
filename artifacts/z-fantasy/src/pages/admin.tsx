@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { CharacterWizard } from "@/components/CharacterWizard";
 
-type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words" | "affection";
+type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words" | "affection" | "active_chats";
 
 interface SysConfig { key: string; value: unknown; updatedAt: string }
 
@@ -75,7 +75,7 @@ export function Admin() {
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
-    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words", "affection"]
+    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words", "affection", "active_chats"]
     : ["stats", "users", "characters"];
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
@@ -151,6 +151,50 @@ export function Admin() {
   const [newAffAmount, setNewAffAmount] = useState("5");
   const [newAffType, setNewAffType] = useState<"boost" | "reduce">("boost");
   const [affResetRunning, setAffResetRunning] = useState(false);
+
+  // ── Active Chats state ─────────────────────────────────────────────────────
+  type ActiveChatRow = {
+    conversationId: string;
+    telegramId: string;
+    characterId: string;
+    affectionPoints: number;
+    messageCount: number;
+    updatedAt: string;
+    username: string | null;
+    subscriptionTier: string | null;
+  };
+  const [activeChats, setActiveChats] = useState<{ personal: ActiveChatRow[]; all: ActiveChatRow[] } | null>(null);
+  const [activeChatsLoading, setActiveChatsLoading] = useState(false);
+  const [activeChatsSearch, setActiveChatsSearch] = useState("");
+  const [activeChatsPage, setActiveChatsPage] = useState(1);
+
+  const loadActiveChats = useCallback(async (search = "", page = 1) => {
+    setActiveChatsLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page) });
+      if (search.trim()) params.set("search", search.trim());
+      const data = await adminApi<{ personal: ActiveChatRow[]; all: ActiveChatRow[] }>("GET", `/admin/active-chats?${params}`);
+      setActiveChats(data);
+      setActiveChatsPage(page);
+    } catch (e) { toast({ title: "Failed to load chats", description: String(e), variant: "destructive" }); }
+    finally { setActiveChatsLoading(false); }
+  }, [toast]);
+
+  useEffect(() => {
+    if (activeTab === "active_chats") loadActiveChats(activeChatsSearch, activeChatsPage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const deleteConversation = async (convId: string) => {
+    try {
+      await adminApi("DELETE", `/admin/conversations/${convId}`);
+      setActiveChats(prev => prev ? {
+        personal: prev.personal.filter(c => c.conversationId !== convId),
+        all: prev.all.filter(c => c.conversationId !== convId),
+      } : null);
+      toast({ title: "Conversation archived" });
+    } catch (e) { toast({ title: "Failed", description: String(e), variant: "destructive" }); }
+  };
 
   // ── BLB state ──────────────────────────────────────────────────────────────
   type BLBUser = { id: string; username: string | null; subscriptionTier: string; ticketBalance: number; status: string; restrictions: Record<string, unknown> | null };
@@ -606,6 +650,7 @@ export function Admin() {
     blb: "🚫 B.L.B",
     trigger_words: "🔥 Triggers",
     affection: "💝 Affection",
+    active_chats: "💬 Active Chats",
   };
 
   const filteredUsers = (usersData?.items ?? []).filter(u => {
@@ -662,11 +707,11 @@ export function Admin() {
               <div className="text-2xl font-bold">{stats?.totalCharacters ?? 0}</div>
               <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Characters →</div>
             </button>
-            <div className="p-4 rounded-xl bg-card border border-border box-glow-purple">
+            <button onClick={() => setActiveTab("active_chats")} className="p-4 rounded-xl bg-card border border-border box-glow-purple hover:border-secondary/60 transition-all text-left w-full cursor-pointer active:scale-95">
               <Activity className="text-secondary mb-2" size={20} />
               <div className="text-2xl font-bold">{stats?.activeConversations ?? 0}</div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Active Chats</div>
-            </div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Active Chats →</div>
+            </button>
             {isGodMode ? (
               <button onClick={() => setActiveTab("pricing")} className="p-4 rounded-xl bg-card border border-border hover:border-green-400/60 transition-all text-left w-full cursor-pointer active:scale-95">
                 <CreditCard className="text-green-400 mb-2" size={20} />
@@ -1495,6 +1540,115 @@ export function Admin() {
               {affResetRunning ? <><RefreshCw size={14} className="animate-spin" /> Resetting…</> : "⚡ Trigger Weekly Reset Now"}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ── Active Chats ── */}
+      {activeTab === "active_chats" && isGodMode && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Activity className="text-secondary" size={20} />
+            <h2 className="font-bold uppercase tracking-wider text-secondary">💬 Active Chats</h2>
+          </div>
+
+          {/* Search */}
+          <div className="flex gap-2">
+            <Input
+              value={activeChatsSearch}
+              onChange={e => setActiveChatsSearch(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && loadActiveChats(activeChatsSearch, 1)}
+              placeholder="Search by username or user ID…"
+              className="bg-card border-border h-9 text-sm flex-1"
+            />
+            <button onClick={() => loadActiveChats(activeChatsSearch, 1)} disabled={activeChatsLoading}
+              className="px-3 h-9 rounded-lg bg-accent/10 border border-accent/40 text-accent text-xs font-bold hover:bg-accent/20 disabled:opacity-50 shrink-0">
+              {activeChatsLoading ? "…" : "Search"}
+            </button>
+          </div>
+
+          {/* Personal section (admin's own chats) */}
+          {(activeChats?.personal?.length ?? 0) > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your Chats</p>
+              {activeChats!.personal.map(conv => (
+                <div key={conv.conversationId} className="flex items-center gap-3 p-3 rounded-xl bg-card border border-secondary/30">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold text-secondary truncate">{conv.username ?? conv.telegramId}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      Char: {conv.characterId.slice(0, 12)}… · {conv.messageCount} msgs · {conv.affectionPoints} AP
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {new Date(conv.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  </div>
+                  <button onClick={() => deleteConversation(conv.conversationId)}
+                    className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors shrink-0"
+                    title="Archive conversation">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* General section (all users) */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">All Active Chats</p>
+            {activeChatsLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-16 bg-card rounded-xl border border-border animate-pulse" />
+              ))
+            ) : (activeChats?.all ?? []).length === 0 ? (
+              <div className="text-center text-muted-foreground py-8 text-sm">No active conversations found.</div>
+            ) : (
+              (activeChats?.all ?? []).map(conv => (
+                <div key={conv.conversationId} className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white truncate">{conv.username ?? conv.telegramId.slice(0, 12)}</span>
+                      {conv.subscriptionTier && conv.subscriptionTier !== "Free" && (
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${tierColor(conv.subscriptionTier)}`}>{conv.subscriptionTier}</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      Char: {conv.characterId.slice(0, 12)}… · {conv.messageCount} msgs · 💜 {conv.affectionPoints} AP
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {new Date(conv.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => openUserDrawer(conv.telegramId)}
+                      className="p-1.5 rounded-lg bg-accent/10 border border-accent/30 text-accent hover:bg-accent/20 transition-colors"
+                      title="View user">
+                      <Eye size={12} />
+                    </button>
+                    <button onClick={() => deleteConversation(conv.conversationId)}
+                      className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors"
+                      title="Archive conversation">
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Pagination */}
+          {(activeChats?.all?.length ?? 0) >= 30 && (
+            <div className="flex justify-center gap-3">
+              {activeChatsPage > 1 && (
+                <button onClick={() => loadActiveChats(activeChatsSearch, activeChatsPage - 1)}
+                  className="px-3 py-1.5 rounded-lg bg-card border border-border text-xs text-muted-foreground hover:text-foreground">
+                  ← Prev
+                </button>
+              )}
+              <button onClick={() => loadActiveChats(activeChatsSearch, activeChatsPage + 1)}
+                className="px-3 py-1.5 rounded-lg bg-card border border-border text-xs text-muted-foreground hover:text-foreground">
+                Next →
+              </button>
+            </div>
+          )}
         </div>
       )}
 

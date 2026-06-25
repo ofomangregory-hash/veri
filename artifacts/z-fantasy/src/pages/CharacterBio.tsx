@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ChevronLeft, Share2, MessageCircle, Tag, User, Globe, Lock, EyeOff } from "lucide-react";
+import { ChevronLeft, Share2, MessageCircle, Tag, User, Globe, Lock, EyeOff, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 function getToken() {
@@ -29,16 +29,43 @@ export function CharacterBio() {
   const { toast } = useToast();
   const [char, setChar] = useState<Character | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasConv, setHasConv] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    fetch(`/api/characters/${id}`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then((data: Character | null) => { setChar(data); setLoading(false); })
-      .catch(() => setLoading(false));
+    const token = getToken();
+    Promise.all([
+      fetch(`/api/characters/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : null),
+      fetch(`/api/conversations`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : []),
+    ]).then(([charData, convs]: [Character | null, Array<{ characterId: string }>]) => {
+      setChar(charData);
+      setHasConv(Array.isArray(convs) && convs.some(c => c.characterId === id));
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, [id]);
+
+  const handleNewChat = async () => {
+    if (!id) return;
+    setArchiving(true);
+    try {
+      const res = await fetch(`/api/conversations/${id}/archive`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) throw new Error("Failed");
+      setHasConv(false);
+      setShowNewChatConfirm(false);
+      setLocation(`/chat/${id}`);
+    } catch {
+      toast({ title: "Failed to start new chat", variant: "destructive" });
+    } finally {
+      setArchiving(false);
+    }
+  };
 
   const shareLink = `https://t.me/${BOT_USERNAME}?start=char_${id}`;
   const isNsfw = char?.tags?.includes("#NSFW") ?? false;
@@ -183,14 +210,53 @@ export function CharacterBio() {
       </div>
 
       {/* Sticky chat CTA */}
-      <div className="fixed bottom-20 left-0 right-0 px-4 z-30">
-        <button
-          onClick={() => setLocation(`/chat/${id}`)}
-          className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-bold uppercase tracking-widest flex items-center justify-center gap-2 box-glow-pink hover:bg-primary/90 transition-all active:scale-95 shadow-2xl"
-        >
-          <MessageCircle size={20} /> Start Chat
-        </button>
+      <div className="fixed bottom-20 left-0 right-0 px-4 z-30 space-y-2">
+        {hasConv ? (
+          <>
+            <button
+              onClick={() => setLocation(`/chat/${id}`)}
+              className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-bold uppercase tracking-widest flex items-center justify-center gap-2 box-glow-pink hover:bg-primary/90 transition-all active:scale-95 shadow-2xl"
+            >
+              <MessageCircle size={20} /> Continue Chat
+            </button>
+            <button
+              onClick={() => setShowNewChatConfirm(true)}
+              className="w-full py-3 rounded-2xl bg-card border border-secondary/60 text-secondary font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-secondary/10 transition-all active:scale-95 text-sm"
+            >
+              <RefreshCw size={16} /> Start New Chat
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => setLocation(`/chat/${id}`)}
+            className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-bold uppercase tracking-widest flex items-center justify-center gap-2 box-glow-pink hover:bg-primary/90 transition-all active:scale-95 shadow-2xl"
+          >
+            <MessageCircle size={20} /> Start Chat
+          </button>
+        )}
       </div>
+
+      {/* New Chat Confirmation Modal */}
+      {showNewChatConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-end justify-center p-4">
+          <div className="w-full max-w-sm bg-card rounded-3xl border border-border p-6 space-y-4 shadow-2xl">
+            <h3 className="font-bold text-white text-lg text-center">Start Fresh?</h3>
+            <p className="text-sm text-muted-foreground text-center leading-relaxed">
+              This will archive your current conversation and reset intimacy to 0. Your chat history will be saved in the archive.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowNewChatConfirm(false)}
+                className="flex-1 py-3 rounded-xl border border-border text-muted-foreground text-sm font-bold hover:border-foreground/30 transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleNewChat} disabled={archiving}
+                className="flex-1 py-3 rounded-xl bg-secondary text-white text-sm font-bold hover:bg-secondary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {archiving ? <><RefreshCw size={14} className="animate-spin" /> Starting…</> : "Yes, Fresh Start"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -996,4 +996,79 @@ router.post("/admin/affection/reset-all", adminOnly, async (req, res): Promise<v
   res.json({ ok: true });
 });
 
+// ─── Active Chats Admin View ──────────────────────────────────────────────────
+router.get("/admin/active-chats", adminOnly, async (req, res): Promise<void> => {
+  const adminUserId = req.telegramUserId;
+  const page = Math.max(1, Number(req.query.page ?? 1));
+  const limit = 30;
+  const offset = (page - 1) * limit;
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+  try {
+    let baseQuery = db.select({
+      conversationId: conversationsTable.conversationId,
+      telegramId: conversationsTable.telegramId,
+      characterId: conversationsTable.characterId,
+      affectionPoints: conversationsTable.affectionPoints,
+      messageCount: conversationsTable.messageCount,
+      updatedAt: conversationsTable.updatedAt,
+      username: usersTable.username,
+      subscriptionTier: usersTable.subscriptionTier,
+    })
+      .from(conversationsTable)
+      .leftJoin(usersTable, eq(conversationsTable.telegramId, usersTable.id))
+      .where(eq(conversationsTable.archived, false));
+
+    if (search) {
+      baseQuery = baseQuery.where(
+        and(
+          eq(conversationsTable.archived, false),
+          or(
+            ilike(usersTable.username, `%${search}%`),
+            ilike(conversationsTable.telegramId, `%${search}%`),
+          )
+        )
+      ) as typeof baseQuery;
+    }
+
+    const [allRows, personalRows] = await Promise.all([
+      baseQuery
+        .orderBy(desc(conversationsTable.updatedAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({
+        conversationId: conversationsTable.conversationId,
+        telegramId: conversationsTable.telegramId,
+        characterId: conversationsTable.characterId,
+        affectionPoints: conversationsTable.affectionPoints,
+        messageCount: conversationsTable.messageCount,
+        updatedAt: conversationsTable.updatedAt,
+        username: usersTable.username,
+        subscriptionTier: usersTable.subscriptionTier,
+      })
+        .from(conversationsTable)
+        .leftJoin(usersTable, eq(conversationsTable.telegramId, usersTable.id))
+        .where(and(
+          eq(conversationsTable.telegramId, adminUserId),
+          eq(conversationsTable.archived, false),
+        ))
+        .orderBy(desc(conversationsTable.updatedAt)),
+    ]);
+
+    res.json({ personal: personalRows, all: allRows, page });
+  } catch (err) {
+    logger.error({ err }, "Failed to load active chats");
+    res.status(500).json({ error: "Failed to load active chats" });
+  }
+});
+
+// ─── Admin: Delete a conversation ─────────────────────────────────────────────
+router.delete("/admin/conversations/:conversationId", adminOnly, async (req, res): Promise<void> => {
+  const { conversationId } = req.params;
+  await db.update(conversationsTable)
+    .set({ archived: true })
+    .where(eq(conversationsTable.conversationId, conversationId));
+  res.json({ ok: true });
+});
+
 export default router;

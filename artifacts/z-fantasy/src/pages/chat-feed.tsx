@@ -75,7 +75,7 @@ export function ChatFeed() {
   const handleStartChat = (characterId: string) => {
     setPickerSelectedChar(null);
     setShowCharPicker(false);
-    setLocation(`/chat/${characterId}`);
+    setLocation(`/character/${characterId}`);
   };
 
   return (
@@ -111,7 +111,7 @@ export function ChatFeed() {
               </div>
             ) : (
               conversations?.map(conv => (
-                <Link key={conv.conversationId} href={`/chat/${conv.characterId}`} className="flex items-center gap-4 p-3 rounded-xl bg-card border border-border hover:border-secondary transition-colors relative overflow-hidden group">
+                <Link key={conv.conversationId} href={`/character/${conv.characterId}`} className="flex items-center gap-4 p-3 rounded-xl bg-card border border-border hover:border-secondary transition-colors relative overflow-hidden group">
                   <div className="relative w-14 h-14 rounded-full overflow-hidden border-2 border-secondary group-hover:box-glow-purple transition-all shrink-0">
                     <img src={conv.character?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${conv.character?.name}`} alt="Avatar" className="w-full h-full object-cover" />
                     {conv.unread && <div className="absolute top-0 right-0 w-3 h-3 bg-primary rounded-full box-glow-pink border-2 border-card" />}
