@@ -215,6 +215,14 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
     .limit(1);
 
   if (!conv) {
+    // Archive any existing row for this pair before inserting a new one (prevents unique constraint violation)
+    await db.update(conversationsTable)
+      .set({ archived: true, updatedAt: new Date() })
+      .where(and(
+        eq(conversationsTable.telegramId, req.telegramUserId),
+        eq(conversationsTable.characterId, params.data.characterId),
+      ));
+
     const greeting = character.initialGreeting ?? `Hello, I'm ${character.name}. I've been waiting for you...`;
     const initialMessage: ChatMessage = { role: "assistant", content: greeting, imageUrl: null, timestamp: new Date().toISOString() };
     [conv] = await db.insert(conversationsTable).values({
@@ -773,6 +781,14 @@ router.post("/conversations/:characterId/archive", async (req, res): Promise<voi
   const character = await getSupabaseCharacterById(characterId);
   const greeting = character?.initialGreeting ?? `Hello, I'm ${character?.name ?? "your companion"}. Nice to start fresh...`;
   const initialMessage: ChatMessage = { role: "assistant", content: greeting, imageUrl: null, timestamp: new Date().toISOString() };
+
+  // Archive any remaining rows for this pair before inserting (prevents unique constraint violation)
+  await db.update(conversationsTable)
+    .set({ archived: true, updatedAt: new Date() })
+    .where(and(
+      eq(conversationsTable.telegramId, req.telegramUserId),
+      eq(conversationsTable.characterId, characterId),
+    ));
 
   const [newConv] = await db.insert(conversationsTable).values({
     telegramId: req.telegramUserId,

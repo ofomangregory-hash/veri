@@ -78,6 +78,7 @@ async function tryPollinations(prompt: string, seed: string, nsfwEnabled: boolea
       ? `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seedNum}&nologo=true&safe=false`
       : `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seedNum}&nologo=true`;
 
+    console.log("Pollinations URL:", url);
     logger.info({ url, prompt: clean.slice(0, 80), nsfwEnabled }, "Attempting Pollinations image generation");
 
     const response = await axios.get(url, {
