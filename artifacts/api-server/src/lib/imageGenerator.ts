@@ -1,6 +1,50 @@
 import axios from "axios";
 import { logger } from "./logger";
 
+const HF_TOKEN = process.env.HF_API_TOKEN;
+
+async function generateWithHuggingFace(prompt: string): Promise<string | null> {
+  const cleanPrompt = prompt.trim().substring(0, 200);
+  console.log("HuggingFace prompt:", cleanPrompt);
+
+  const models = [
+    "Ojimi/anime-kawai-diffusion",
+    "hakurei/waifu-diffusion",
+    "prompthero/openjourney",
+  ];
+
+  for (const model of models) {
+    try {
+      const response = await fetch(
+        `https://api-inference.huggingface.co/models/${model}`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${HF_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ inputs: cleanPrompt }),
+          signal: AbortSignal.timeout(30000),
+        },
+      );
+
+      if (!response.ok) {
+        const err = await response.text();
+        console.error(`HF model ${model} failed:`, response.status, err);
+        continue;
+      }
+
+      const buffer = await response.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString("base64");
+      return `data:image/jpeg;base64,${base64}`;
+    } catch (err) {
+      console.error(`HF model ${model} error:`, err);
+      continue;
+    }
+  }
+  return null;
+}
+
 const GENRE_VISUAL_PREFIXES: Record<string, string> = {
   "Dark Goth":   "gothic cinematic lighting, dark background, pale skin, dark eye makeup, detailed face, highly detailed,",
   "Gothic":      "gothic cinematic lighting, dark atmosphere, detailed face, dramatic shadows, highly detailed,",
@@ -185,13 +229,24 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
   const { imageSeed, nsfwEnabled = false, avatarUrl, genre, characterName } = opts;
   const prompt = buildPrompt(opts);
 
-  // Primary: Pollinations.ai with full prompt
-  const pollinationsUrl = await tryPollinations(prompt, imageSeed, nsfwEnabled);
-  if (pollinationsUrl) return pollinationsUrl;
+  // Primary: HuggingFace with full prompt
+  if (HF_TOKEN) {
+    const hfUrl = await generateWithHuggingFace(prompt);
+    if (hfUrl) return hfUrl;
+    logger.warn({ characterName }, "HuggingFace generation failed — falling back to Pollinations");
+  } else {
+    logger.warn("HF_API_TOKEN not set — skipping HuggingFace, trying Pollinations");
+  }
 
-  // Fallback: Pollinations with simplified prompt (genre + name only)
-  const simpleUrl = await tryPollinationsSimple(genre, characterName);
-  if (simpleUrl) return simpleUrl;
+  // Fallback: Pollinations with short stylePrompt + characterName
+  const stylePrompt = (GENRE_VISUAL_PREFIXES[genre] ?? DEFAULT_VISUAL_PREFIX).replace(/,\s*$/, "");
+  const pollinationsPrompt = [stylePrompt, characterName]
+    .filter(Boolean)
+    .join(", ")
+    .replace(/,\s*$/, "")
+    .trim();
+  const pollinationsUrl = await tryPollinations(pollinationsPrompt, imageSeed, nsfwEnabled);
+  if (pollinationsUrl) return pollinationsUrl;
 
   // Last resort: character's saved avatar_url — never break chat flow
   if (avatarUrl) {
