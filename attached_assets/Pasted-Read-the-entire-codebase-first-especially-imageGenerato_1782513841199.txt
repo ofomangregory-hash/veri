@@ -1,0 +1,119 @@
+Read the entire codebase first, especially imageGenerator.ts, conversations.ts, and all frontend chat/vault/bio components. Do not create new tables. Do not touch files unrelated to the image system.
+Rewrite the entire image system with these exact rules:
+Supabase tables and columns available:
+
+conversations.daily_auto_image_count — daily auto images sent
+conversations.message_count — total messages in conversation
+conversations.blurred_image_count — blurred images sent in this conversation
+character_avatars — multiple avatars per character, is_primary column marks main one
+vault_items — all images saved here with is_blurred, media_type, media_url, user_id, character_id
+prices table — fetch all costs and limits, never hardcode anything
+
+
+1. AVATAR
+
+Generated on character creation if no image uploaded
+Prompt order: characterName first, then genre style prefix, then sub_genres
+Saved to characters.avatar_url AND character_avatars table with is_primary: true
+Admin can add multiple avatars per character from admin panel — each saved to character_avatars
+On bio page: show all avatars as swipeable gallery, primary shown first
+Never blurred, no cost, no limits
+Saves to vault with media_type: 'avatar', is_blurred: false
+
+
+2. AUTO LOOP
+
+Free tier: fires at message_count % 5 === 2
+Paid tier (Bronze/Silver/Gold): fires at message_count % 6 === 4
+Does NOT fire if a trigger word fires that message cycle
+Never blurred unless daily limit is hit
+If daily limit hit → send as blurred instead (see blurred rules below)
+Increments daily_auto_image_count only for non-blurred images
+Saves to vault with media_type: 'auto', is_blurred: false (or true if limit hit)
+
+
+3. BLURRED
+
+Fires every 5 messages for ALL tiers: message_count % 5 === 0
+Completely separate from auto loop — both fire independently
+Image is generated normally via Pollinations
+Saved to vault with media_type: 'blurred', is_blurred: true
+In chat: image shows with heavy cloudy/frosted CSS blur overlay — content not visible
+An unlock button sits on top showing NC cost
+Unlock cost fetched from prices table using id image_unlock_nc (default 15 NC)
+On unlock: deduct NC from users.neon_card_balance, set is_blurred: false on vault item
+Once unlocked stays unlocked permanently — blur removed in chat and vault
+Increments conversations.blurred_image_count on send
+Does NOT count toward daily auto image limit
+
+
+4. TRIGGER
+
+Fires when user message contains a word from trigger_words table for that character
+Overrides auto loop for that message cycle
+Prompt themed around the matched trigger word
+Never blurred
+Free to user
+Saves to vault with media_type: 'trigger', is_blurred: false
+Does NOT count toward daily auto image limit
+
+
+5. SELFIE
+
+Triggered by camera button in chat
+Cost fetched from prices table using id selfie_cost_nc (default 15 NC)
+User writes scene description
+Never blurred
+Deduct NC from users.neon_card_balance before generating
+If insufficient NC show error — do not generate
+Saves to vault with media_type: 'selfie', is_blurred: false
+Content scales with affection_points from conversations row
+
+
+DAILY LIMITS — all fetched from prices table:
+
+Free: free_daily_image_limit (30)
+Bronze: bronze_daily_image_limit (300)
+Silver: silver_daily_image_limit (400)
+Gold: gold_daily_image_limit (1000)
+
+When limit is hit: auto and trigger images send as blurred instead of stopping. Selfie and blurred type are completely unaffected by daily limits. Reset daily at midnight via existing cron.
+
+CLOUDY BLUR UI — apply to all blurred images in chat and vault:
+cssfilter: blur(20px);
+transform: scale(1.1);
+overflow: hidden;
+
+Show a lock icon centered on the blurred image
+Show unlock cost below lock icon: 🔒 Unlock for {cost} 💎
+On tap: show confirmation modal → user confirms → deduct NC → remove blur in place
+If insufficient NC: show ❌ Not enough Neon Cards toast
+Once unlocked: save is_blurred: false to vault permanently
+
+
+REMOVE COMPLETELY:
+
+All hourly image tracking — remove hourlyImageTracker in-memory Map entirely
+All hardcoded tier limits anywhere in codebase
+safe=false from Pollinations URL
+HuggingFace integration entirely — Railway cannot resolve the domain
+
+
+IMAGE GENERATION — Pollinations only:
+typescriptconst parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
+const cleanPrompt = parts.join(', ').replace(/,\s*$/, '').trim();
+const encodedPrompt = encodeURIComponent(cleanPrompt);
+const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&nologo=true`;
+console.log('Image prompt:', cleanPrompt);
+console.log('Pollinations URL:', url);
+Fallback chain: Pollinations → upload to Telegra.ph → on failure use avatar_url silently. Never throw. Never break chat flow.
+
+LOGGING:
+console.log('Auto image fired for:', telegram_id, character_id)
+console.log('Blurred image fired for:', telegram_id, character_id)
+console.log('Trigger image fired:', triggerWord, character_id)
+console.log('Selfie requested by:', telegram_id)
+console.log('Daily limit hit — sending blurred instead')
+console.log('Image unlocked by:', telegram_id, 'cost:', unlockCost)
+
+Do not create new tables. Do not add safety wrappers to any provider. Do not touch files outside the image system and bio page.

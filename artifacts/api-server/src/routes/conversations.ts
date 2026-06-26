@@ -28,7 +28,7 @@ import { getIntimacyLevel, updateIntimacyLevel, getContentLevel, CONTENT_LEVEL_W
 import { checkTriggerWord } from "../lib/supabaseTriggerWords";
 import { checkAffectionWord, recordAffectionTrigger } from "../lib/supabaseAffection";
 import { getRandomCharacterAvatar } from "../lib/supabaseAvatars";
-import { addVaultItem } from "../lib/supabaseVault";
+import { addVaultItem, unlockVaultItemByUrl } from "../lib/supabaseVault";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
@@ -49,23 +49,12 @@ async function getNotifyDelayMs(): Promise<number> {
   }
 }
 
-// ─── Hourly image tracking (in-memory, resets every 60 min) ───────────────────
-const hourlyImageTracker = new Map<string, { count: number; resetAt: number }>();
-
-function getHourlyImageCount(userId: string): number {
-  const entry = hourlyImageTracker.get(userId);
-  if (!entry || Date.now() > entry.resetAt) return 0;
-  return entry.count;
-}
-
-function incrementHourlyImageCount(userId: string): void {
-  const now = Date.now();
-  const entry = hourlyImageTracker.get(userId);
-  if (!entry || now > entry.resetAt) {
-    hourlyImageTracker.set(userId, { count: 1, resetAt: now + 3_600_000 });
-  } else {
-    entry.count++;
-  }
+// ─── Daily image limit from prices table ──────────────────────────────────────
+async function getDailyImageLimit(tier: string, isAdmin: boolean): Promise<number> {
+  if (isAdmin) return 999999;
+  const tierLower = tier.toLowerCase();
+  const defaults: Record<string, number> = { free: 30, bronze: 300, silver: 400, gold: 1000 };
+  return getPrice(`${tierLower}_daily_image_limit`, defaults[tierLower] ?? 30);
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -76,31 +65,6 @@ const DAILY_MSG_LIMITS: Record<string, number> = {
   Gold: Infinity,
 };
 
-const DAILY_AUTO_IMG_LIMITS_FALLBACK: Record<string, number> = {
-  Free: 10,
-  Bronze: 30,
-  Silver: 60,
-  Gold: 100,
-};
-
-const HOURLY_AUTO_IMG_LIMITS_FALLBACK: Record<string, number> = {
-  Free: 5,
-  Bronze: 10,
-  Silver: 20,
-  Gold: 30,
-};
-
-const DAILY_TRIGGER_LIMITS: Record<string, number> = {
-  Free: 3,
-  Bronze: 25,
-  Silver: 40,
-  Gold: 60,
-};
-
-// Auto-image loop: every Nth message include image
-const AUTO_IMG_FREE    = { interval: 5, triggerAt: 2 };
-const AUTO_IMG_PREMIUM = { interval: 6, triggerAt: 4 };
-
 const MSG_COST_DEFAULT = 1;
 
 const GIFT_REACTIONS: Record<string, { ap: number; level: number; reaction: string }> = {
@@ -109,7 +73,6 @@ const GIFT_REACTIONS: Record<string, { ap: number; level: number; reaction: stri
   secret_key:     { ap: 70, level: 3, reaction: "The Secret Key and this silk outfit... you really know how to get to me. I'm all yours now, no holding back 🔑" },
 };
 
-// Intimacy deltas per gift (percentage points, 0-100 scale)
 const GIFT_INTIMACY_DELTA: Record<string, number> = {
   cyber_cocktail: 1,
   neon_bracelet:  2,
@@ -146,16 +109,6 @@ function serializeCharacter(c: NormalizedCharacter) {
 function charHasNsfw(character: NormalizedCharacter): boolean {
   const tags = (character.tags ?? []) as string[];
   return tags.some(t => t.toUpperCase() === "#NSFW" || t.toUpperCase() === "NSFW");
-}
-
-async function getImageLimits(tier: string, isAdmin: boolean): Promise<{ hourly: number; daily: number }> {
-  if (isAdmin) return { hourly: 999, daily: 9999 };
-  const tierLower = tier.toLowerCase();
-  const [hourly, daily] = await Promise.all([
-    getPrice(`img_limit_${tierLower}_hourly`, HOURLY_AUTO_IMG_LIMITS_FALLBACK[tier] ?? 5),
-    getPrice(`img_limit_${tierLower}_daily`,  DAILY_AUTO_IMG_LIMITS_FALLBACK[tier]  ?? 10),
-  ]);
-  return { hourly, daily };
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -232,7 +185,6 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
     .limit(1);
 
   if (!conv) {
-    // Archive any existing row for this pair before inserting a new one (prevents unique constraint violation)
     await db.update(conversationsTable)
       .set({ archived: true, updatedAt: new Date() })
       .where(and(
@@ -249,7 +201,6 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
     }).returning();
   }
 
-  // Clear any pending push notification — user is actively viewing the conversation
   if (conv.notifyAfter) {
     void db.update(conversationsTable)
       .set({ notifyAfter: null })
@@ -298,7 +249,6 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     if (user.dailyMessageCount >= dailyLimit) {
       res.status(402).json({ error: `Daily message limit of ${dailyLimit} reached for ${tier} tier.` }); return;
     }
-    // Only Free tier users pay per-message tickets; premium tiers send for free
     if (tier === "Free") {
       const ecoFree = await getEconomyConfig();
       const freeMsgCost = ecoFree.msgCostTickets ?? MSG_COST_DEFAULT;
@@ -348,7 +298,6 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
   // ── Generate AI reply ─────────────────────────────────────────────────────
   const systemPrompt = character.systemPrompt ?? `You are ${character.name}, a captivating AI companion.`;
   const historyForAI = messages.map(m => ({ role: m.role, content: m.content }));
-
   const aiText = await generateAIReply(
     systemPrompt,
     historyForAI,
@@ -359,19 +308,22 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     charNsfw,
   );
 
-  // ── Image limits ──────────────────────────────────────────────────────────
-  const imgLimits = await getImageLimits(tier, isAdminUser);
-  const hourlyCount = getHourlyImageCount(req.telegramUserId);
-  const canSendImage = hourlyCount < imgLimits.hourly && conv.dailyAutoImageCount < imgLimits.daily;
-
+  // ── Image fire logic ───────────────────────────────────────────────────────
+  const newMsgCount = conv.messageCount + 1;
+  const isFreeTier = tier === "Free";
   const imageSeed = character.imageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
+  const dailyImageLimit = await getDailyImageLimit(tier, isAdminUser);
+  const overDailyLimit = conv.dailyAutoImageCount >= dailyImageLimit;
 
-  // ── Trigger word check ────────────────────────────────────────────────────
   let autoImageUrl: string | null = null;
   let autoIsLocked = false;
+  let triggerFired = false;
+  let dailyCountIncrement = 0;
 
+  // 1. Trigger word check
   const triggeredWord = await checkTriggerWord(params.data.characterId, parsed.data.content);
-  if (triggeredWord && canSendImage) {
+  if (triggeredWord) {
+    const forceBlurred = overDailyLimit && !isAdminUser;
     try {
       const triggerScene = `${triggeredWord} themed intimate scene, ${contentWords}`;
       autoImageUrl = await generateCharacterSelfie({
@@ -384,31 +336,27 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
         nsfwEnabled: charNsfw,
         contentLevelWords: contentWords,
       });
-      incrementHourlyImageCount(req.telegramUserId);
-      if (autoImageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, autoImageUrl, "trigger", false);
-      logger.info({ triggeredWord, characterId: params.data.characterId }, "Trigger word image generated");
+      autoIsLocked = forceBlurred;
+      triggerFired = true;
+      if (!forceBlurred) dailyCountIncrement++;
+      if (autoImageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, autoImageUrl, "trigger", forceBlurred);
+      console.log('Trigger image fired:', triggeredWord, params.data.characterId);
+      if (forceBlurred) console.log('Daily limit hit — sending blurred instead');
     } catch (err) {
       logger.warn({ err, triggeredWord }, "Trigger word image generation failed");
     }
   }
 
-  // ── Auto-image loop (only if no trigger image) ────────────────────────────
-  const newMsgCount = conv.messageCount + 1;
-  const isFreeTier = tier === "Free";
-  const loop = isFreeTier ? AUTO_IMG_FREE : AUTO_IMG_PREMIUM;
-  const positionInLoop = newMsgCount % loop.interval;
-  // Blurred images bypass limits — allow sending even when canSendImage is false
-  const shouldAutoImage = !autoImageUrl && positionInLoop === loop.triggerAt;
+  // 2. Auto-image loop (only if no trigger fired this cycle)
+  const autoInterval = isFreeTier ? 5 : 6;
+  const autoTriggerAt = isFreeTier ? 2 : 4;
+  const shouldAutoLoop = !triggerFired && (newMsgCount % autoInterval) === autoTriggerAt;
 
-  if (shouldAutoImage) {
-    // Force blur when over limit so it doesn't count against limits
-    const forceBlurred = !canSendImage;
-    const isBlurred = forceBlurred || Math.random() < 0.2;
+  if (shouldAutoLoop) {
+    const forceBlurred = overDailyLimit && !isAdminUser;
     try {
-      const loopScene = isBlurred
-        ? `teaser preview, blurred suggestive scene, ${contentWords}`
-        : `casual portrait, ${contentWords}`;
       const loopAvatarUrl = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
+      const loopScene = `casual portrait, ${contentWords}`;
       autoImageUrl = await generateCharacterSelfie({
         characterName: character.name,
         genre: character.genre ?? "Fantasy",
@@ -417,26 +365,45 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
         imageSeed,
         sceneDescription: loopScene,
         avatarUrl: loopAvatarUrl || undefined,
-        nsfwEnabled: charNsfw && !isBlurred,
+        nsfwEnabled: charNsfw,
         contentLevelWords: contentWords,
       });
-      autoIsLocked = isBlurred;
-      // Only count non-blurred images against hourly limit
-      if (!isBlurred) incrementHourlyImageCount(req.telegramUserId);
-      if (autoImageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, autoImageUrl, "auto", isBlurred);
+      autoIsLocked = forceBlurred;
+      if (!forceBlurred) dailyCountIncrement++;
+      if (autoImageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, autoImageUrl, "auto", forceBlurred);
+      console.log('Auto image fired for:', req.telegramUserId, params.data.characterId);
+      if (forceBlurred) console.log('Daily limit hit — sending blurred instead');
     } catch (err) {
-      logger.warn({ err }, "Auto-image generation failed — using avatar fallback");
+      logger.warn({ err }, "Auto-image loop failed — using avatar fallback");
       const fallbackAvatar = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
       autoImageUrl = fallbackAvatar || getGenreDefaultAvatar(character.genre ?? "Fantasy");
       autoIsLocked = false;
     }
   }
 
-  const timestamp = new Date().toISOString();
-  const userMsg: ChatMessage  = { role: "user",      content: parsed.data.content, imageUrl: null,          timestamp };
-  const assistantMsg: ChatMessage = { role: "assistant", content: aiText,               imageUrl: autoImageUrl,  timestamp, ...(autoIsLocked ? { isLocked: true } : {}) };
-
-  const newHistory = [...messages, userMsg, assistantMsg];
+  // 3. Blurred loop — completely independent, fires at every 5th message for ALL tiers
+  let blurredImageUrl: string | null = null;
+  if ((newMsgCount % 5) === 0) {
+    try {
+      const blurredAvatarUrl = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
+      const blurredScene = `teaser preview, close portrait, ${contentWords}`;
+      blurredImageUrl = await generateCharacterSelfie({
+        characterName: character.name,
+        genre: character.genre ?? "Fantasy",
+        systemPrompt,
+        teaserDescription: character.teaserDescription,
+        imageSeed,
+        sceneDescription: blurredScene,
+        avatarUrl: blurredAvatarUrl || undefined,
+        nsfwEnabled: false,
+        contentLevelWords: contentWords,
+      });
+      if (blurredImageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, blurredImageUrl, "blurred", true);
+      console.log('Blurred image fired for:', req.telegramUserId, params.data.characterId);
+    } catch (err) {
+      logger.warn({ err }, "Blurred image loop failed");
+    }
+  }
 
   // ── Affection word scanning ───────────────────────────────────────────────
   let affectionDelta = 0;
@@ -446,13 +413,38 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     void recordAffectionTrigger(req.telegramUserId, params.data.characterId, matchedAffWord.word);
   }
 
+  // ── Build message history ─────────────────────────────────────────────────
+  const timestamp = new Date().toISOString();
+  const userMsg: ChatMessage = { role: "user", content: parsed.data.content, imageUrl: null, timestamp };
+  const assistantMsg: ChatMessage = {
+    role: "assistant",
+    content: aiText,
+    imageUrl: autoImageUrl,
+    timestamp,
+    ...(autoIsLocked ? { isLocked: true } : {}),
+  };
+  const newHistory: ChatMessage[] = [...messages, userMsg, assistantMsg];
+
+  // Blurred image appended as a separate assistant entry (independent of AI reply)
+  if (blurredImageUrl) {
+    newHistory.push({
+      role: "assistant",
+      content: "",
+      imageUrl: blurredImageUrl,
+      isLocked: true,
+      timestamp,
+    });
+  }
+
   const notifyDelayMs = await getNotifyDelayMs();
 
   await db.update(conversationsTable)
     .set({
       messageHistory: newHistory,
       messageCount: newMsgCount,
-      dailyAutoImageCount: (shouldAutoImage || !!triggeredWord) && !autoIsLocked ? sql`daily_auto_image_count + 1` : conv.dailyAutoImageCount,
+      dailyAutoImageCount: dailyCountIncrement > 0
+        ? sql`daily_auto_image_count + ${dailyCountIncrement}`
+        : conv.dailyAutoImageCount,
       affectionPoints: affectionDelta !== 0 ? Math.min(1000, Math.max(0, conv.affectionPoints + affectionDelta)) : undefined,
       updatedAt: new Date(),
       notifyAfter: new Date(Date.now() + notifyDelayMs),
@@ -493,29 +485,17 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  const tier = user.subscriptionTier;
   const isSelfieAdmin = req.isAdmin;
+  const SELFIE_NEON_COST = isSelfieAdmin ? 0 : await getPrice("selfie_cost_nc", 15);
 
-  const selfieEco = await getEconomyConfig();
-  const SELFIE_NEON_COST = isSelfieAdmin ? 0 : selfieEco.selfieCostNc;
-
-  if (!isSelfieAdmin) {
-    const dailyTriggerLimit = DAILY_TRIGGER_LIMITS[tier] ?? 3;
-    if (user.dailyTriggerRequestsCount >= dailyTriggerLimit) {
-      res.status(402).json({ error: `Daily selfie limit of ${dailyTriggerLimit} reached for ${tier} tier.` }); return;
-    }
-    if (user.neonCardBalance < SELFIE_NEON_COST) {
-      res.status(402).json({ error: `Insufficient Neon Cards. Selfie requests cost ${SELFIE_NEON_COST} Neon Cards.` }); return;
-    }
+  if (!isSelfieAdmin && user.neonCardBalance < SELFIE_NEON_COST) {
+    res.status(402).json({ error: `Insufficient Neon Cards. Selfie requests cost ${SELFIE_NEON_COST} 💎` }); return;
   }
 
   const character = await getSupabaseCharacterById(params.data.characterId);
   if (!character) { res.status(404).json({ error: "Character not found" }); return; }
 
-  // Use nsfwEnabled from character tags and user preference
   const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
-
-  // Intimacy-gated content level for selfie
   const intimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
   const contentLevel = getContentLevel(intimacy, charNsfw);
   const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
@@ -538,15 +518,14 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
       contentLevelWords: contentWords,
     });
     matched = true;
+    console.log('Selfie requested by:', req.telegramUserId);
   } catch (err) {
     logger.warn({ err }, "Selfie image generation failed — using avatar fallback");
     imageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre ?? "Fantasy");
     matched = false;
   }
 
-  // Generate AI reaction text for the selfie
   const systemPrompt = character.systemPrompt ?? `You are ${character.name}, a captivating AI companion.`;
-
   let selfieText = "Here you go~ 📸";
   try {
     selfieText = await generateAIReply(
@@ -562,7 +541,6 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     logger.warn({ err }, "Selfie AI reaction failed, using fallback text");
   }
 
-  // Save selfie to conversation history
   const [conv] = await db.select().from(conversationsTable)
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
@@ -587,7 +565,6 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     if (imageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, imageUrl, "selfie", false);
   }
 
-  // Deduct neon cards and increment daily trigger count
   await db.update(usersTable).set({
     neonCardBalance: SELFIE_NEON_COST > 0 ? sql`neon_card_balance - ${SELFIE_NEON_COST}` : undefined,
     dailyTriggerRequestsCount: sql`daily_trigger_requests_count + 1`,
@@ -622,10 +599,10 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  const unlockCost = req.isAdmin ? 0 : await getPrice("image_unlock_nc", 5);
+  const unlockCost = req.isAdmin ? 0 : await getPrice("image_unlock_nc", 15);
 
   if (!req.isAdmin && user.neonCardBalance < unlockCost) {
-    res.status(402).json({ error: `Insufficient Neon Cards. Unlocking costs ${unlockCost} NC.` }); return;
+    res.status(402).json({ error: `Insufficient Neon Cards. Unlocking costs ${unlockCost} 💎` }); return;
   }
 
   const [conv] = await db.select().from(conversationsTable)
@@ -644,11 +621,17 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
 
   if (idx === -1) { res.status(404).json({ error: "Locked message not found" }); return; }
 
+  const unlockedImageUrl = messages[idx].imageUrl;
   messages[idx] = { ...messages[idx], isLocked: false };
 
   await db.update(conversationsTable)
     .set({ messageHistory: messages })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
+
+  // Also unlock in Supabase vault so vault stays consistent
+  if (unlockedImageUrl) {
+    void unlockVaultItemByUrl(req.telegramUserId, unlockedImageUrl);
+  }
 
   if (!req.isAdmin && unlockCost > 0) {
     await db.update(usersTable)
@@ -660,9 +643,9 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
       ticketAmount: 0,
       neonCardAmount: -unlockCost,
     });
+    console.log('Image unlocked by:', req.telegramUserId, 'cost:', unlockCost);
   }
 
-  // +2 AP for unlocking blurred media
   const UNLOCK_AP_BONUS = 2;
   await db.update(conversationsTable)
     .set({ affectionPoints: sql`affection_points + ${UNLOCK_AP_BONUS}` })
@@ -672,9 +655,10 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
 
   res.json({
     ok: true,
-    imageUrl: messages[idx].imageUrl,
+    imageUrl: unlockedImageUrl,
     neonCardBalance: refreshedUser?.neonCardBalance ?? 0,
     affectionPoints: (conv.affectionPoints ?? 0) + UNLOCK_AP_BONUS,
+    unlockCost,
   });
 });
 
@@ -705,7 +689,6 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     secret_key:     { cost: giftEco.giftLargeNc,  costGold: Math.floor(giftEco.giftLargeNc  / 2) },
   };
   const giftCosts = GIFT_COSTS[parsed.data.giftType]!;
-
   const isGiftAdmin = req.isAdmin;
   const cost = isGiftAdmin ? 0 : (tier === "Gold" ? giftCosts.costGold : giftCosts.cost);
 
@@ -751,7 +734,6 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     neonCardAmount: cost > 0 ? -cost : 0,
   });
 
-  // Update intimacy level in Supabase
   const intimacyDelta = GIFT_INTIMACY_DELTA[parsed.data.giftType] ?? 0;
   if (intimacyDelta > 0) {
     await updateIntimacyLevel(req.telegramUserId, params.data.characterId, intimacyDelta)
@@ -761,7 +743,6 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
   const character = await getSupabaseCharacterById(params.data.characterId);
   const [refreshedUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
 
-  // Scenario image for secret_key gift (use real generation based on intimacy)
   let scenarioImageUrl: string | null = null;
   if (parsed.data.giftType === "secret_key" && character) {
     const newIntimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
@@ -814,14 +795,12 @@ router.post("/conversations/:characterId/archive", async (req, res): Promise<voi
     .set({ archived: true })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
 
-  // Reset intimacy to 0
   await updateIntimacyLevel(req.telegramUserId, characterId, -100).catch(() => {});
 
   const character = await getSupabaseCharacterById(characterId);
   const greeting = character?.initialGreeting ?? `Hello, I'm ${character?.name ?? "your companion"}. Nice to start fresh...`;
   const initialMessage: ChatMessage = { role: "assistant", content: greeting, imageUrl: null, timestamp: new Date().toISOString() };
 
-  // Archive any remaining rows for this pair before inserting (prevents unique constraint violation)
   await db.update(conversationsTable)
     .set({ archived: true, updatedAt: new Date() })
     .where(and(

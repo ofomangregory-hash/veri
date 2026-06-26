@@ -55,7 +55,12 @@ const PRICE_DEFAULTS: Record<string, PriceEntry> = {
   img_limit_gold_daily:     { id: "img_limit_gold_daily",     label: "Gold Daily Image Limit",     amount: 100},
   img_limit_supreme_daily:  { id: "img_limit_supreme_daily",  label: "Supreme Daily Image Limit",  amount: 9999},
   // Unlock cost
-  image_unlock_nc:          { id: "image_unlock_nc",          label: "Image Unlock Cost (NC)",     amount: 5  },
+  image_unlock_nc:          { id: "image_unlock_nc",          label: "Image Unlock Cost (NC)",     amount: 15 },
+  // Daily image limits (per spec)
+  free_daily_image_limit:   { id: "free_daily_image_limit",   label: "Free Daily Image Limit",     amount: 30   },
+  bronze_daily_image_limit: { id: "bronze_daily_image_limit", label: "Bronze Daily Image Limit",   amount: 300  },
+  silver_daily_image_limit: { id: "silver_daily_image_limit", label: "Silver Daily Image Limit",   amount: 400  },
+  gold_daily_image_limit:   { id: "gold_daily_image_limit",   label: "Gold Daily Image Limit",     amount: 1000 },
 };
 
 // Legacy aliases — old IDs used throughout the codebase, mapped to canonical IDs

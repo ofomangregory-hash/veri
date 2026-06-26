@@ -7,7 +7,7 @@ export interface VaultItem {
   characterId: string;
   characterName: string;
   mediaUrl: string;
-  mediaType: "selfie" | "gift" | "auto" | "trigger";
+  mediaType: "selfie" | "gift" | "auto" | "trigger" | "blurred" | "avatar";
   isBlurred: boolean;
   createdAt: string;
 }
@@ -31,25 +31,25 @@ export async function addVaultItem(
       is_blurred: isBlurred,
     });
   } catch (err) {
-    logger.warn({ err }, "addVaultItem: failed");
+    console.error("addVaultItem: failed", err);
   }
 }
 
-export async function getUserVaultItems(userId: string): Promise<VaultItem[]> {
+export async function getUserVaultItems(userId: string, characterId?: string): Promise<VaultItem[]> {
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase
+    let q = supabase
       .from("vault_items")
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(200);
-
+    if (characterId) q = q.eq("character_id", characterId);
+    const { data, error } = await q;
     if (error) {
-      logger.warn({ error }, "getUserVaultItems: query failed");
+      console.error("getUserVaultItems: query failed", error);
       return [];
     }
-
     return (data ?? []).map(row => ({
       id: String(row.id),
       userId: String(row.user_id),
@@ -61,7 +61,7 @@ export async function getUserVaultItems(userId: string): Promise<VaultItem[]> {
       createdAt: String(row.created_at),
     }));
   } catch (err) {
-    logger.warn({ err }, "getUserVaultItems: failed");
+    console.error("getUserVaultItems: failed", err);
     return [];
   }
 }
@@ -78,5 +78,19 @@ export async function unlockVaultItem(userId: string, itemId: string): Promise<b
   } catch (err) {
     logger.warn({ err }, "unlockVaultItem: failed");
     return false;
+  }
+}
+
+export async function unlockVaultItemByUrl(userId: string, mediaUrl: string): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase
+      .from("vault_items")
+      .update({ is_blurred: false })
+      .eq("user_id", userId)
+      .eq("media_url", mediaUrl);
+    if (error) console.error("unlockVaultItemByUrl: failed", error);
+  } catch (err) {
+    console.error("unlockVaultItemByUrl: failed", err);
   }
 }

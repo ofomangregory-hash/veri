@@ -28,6 +28,8 @@ export function ChatDetail() {
   const [selfieDesc, setSelfieDesc] = useState("");
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  // Unlock confirmation state
+  const [unlockTarget, setUnlockTarget] = useState<ChatMsg | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -47,6 +49,16 @@ export function ChatDetail() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Unlock cost fetched from server
+  const { data: unlockCostData } = useQuery<{ cost: number }>({
+    queryKey: ["unlock-cost"],
+    queryFn: () => fetch("/api/media/unlock-cost", {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }).then(r => r.json()),
+    staleTime: 10 * 60 * 1000,
+  });
+  const unlockCost = unlockCostData?.cost ?? 15;
+
   // Unlock mutation
   const unlockMutation = useMutation({
     mutationFn: async (messageTimestamp: string) => {
@@ -65,11 +77,18 @@ export function ChatDetail() {
       return res.json() as Promise<{ ok: boolean; imageUrl: string | null; neonCardBalance: number }>;
     },
     onSuccess: () => {
+      setUnlockTarget(null);
       refetch();
       queryClient.invalidateQueries({ queryKey: ["me"] });
     },
     onError: (err: Error) => {
-      toast({ title: "Unlock Failed", description: err.message, variant: "destructive" });
+      setUnlockTarget(null);
+      const isLowBalance = err.message.toLowerCase().includes("insufficient") || err.message.toLowerCase().includes("neon");
+      if (isLowBalance) {
+        toast({ title: "❌ Not enough Neon Cards", description: err.message, variant: "destructive" });
+      } else {
+        toast({ title: "Unlock Failed", description: err.message, variant: "destructive" });
+      }
     },
   });
 
@@ -119,7 +138,15 @@ export function ChatDetail() {
         toast({ title: "Selfie Requested!", description: "Generating your image…" });
         refetch();
       },
-      onError: () => toast({ title: "Request Failed", variant: "destructive" })
+      onError: (err: unknown) => {
+        const msg = (err as { message?: string })?.message ?? "";
+        const isLowBalance = msg.toLowerCase().includes("insufficient") || msg.toLowerCase().includes("neon");
+        if (isLowBalance) {
+          toast({ title: "❌ Not enough Neon Cards", description: msg, variant: "destructive" });
+        } else {
+          toast({ title: "Request Failed", variant: "destructive" });
+        }
+      }
     });
   };
 
@@ -127,7 +154,7 @@ export function ChatDetail() {
     if (!id) return;
     setArchiving(true);
     try {
-      const token = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
+      const token = getToken();
       const res = await fetch(`/api/conversations/${id}/archive`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -147,17 +174,22 @@ export function ChatDetail() {
     setArchiving(false);
   };
 
-  const handleUnlock = useCallback((msg: ChatMsg) => {
-    if (!msg.timestamp) return;
-    unlockMutation.mutate(msg.timestamp);
-  }, [unlockMutation]);
+  // Tap on lock icon → show confirmation modal
+  const handleUnlockTap = useCallback((msg: ChatMsg) => {
+    setUnlockTarget(msg);
+  }, []);
+
+  // Confirmed unlock
+  const confirmUnlock = () => {
+    if (!unlockTarget?.timestamp) return;
+    unlockMutation.mutate(unlockTarget.timestamp);
+  };
 
   const tier = me?.subscriptionTier ?? "Free";
   const isGold = tier === "Gold";
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
-  // Cast messages from API since the generated type doesn't include isLocked
   const messages = (conv?.messages ?? []) as ChatMsg[];
 
   return (
@@ -193,37 +225,41 @@ export function ChatDetail() {
           const isLocked = msg.isLocked === true && !isUser;
           return (
             <div key={i} className={`flex flex-col max-w-[85%] ${isUser ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-              <div className={`p-3 rounded-2xl ${
-                isUser
-                  ? 'bg-primary text-primary-foreground rounded-tr-sm box-glow-pink'
-                  : 'bg-card text-card-foreground border border-border rounded-tl-sm'
-              }`}>
-                {msg.content}
-              </div>
+              {/* Only show text bubble if there's content */}
+              {msg.content && (
+                <div className={`p-3 rounded-2xl ${
+                  isUser
+                    ? 'bg-primary text-primary-foreground rounded-tr-sm box-glow-pink'
+                    : 'bg-card text-card-foreground border border-border rounded-tl-sm'
+                }`}>
+                  {msg.content}
+                </div>
+              )}
               {msg.imageUrl && (
-                <div className="mt-2 rounded-xl overflow-hidden border border-border max-w-xs relative">
+                <div className={`${msg.content ? "mt-2" : ""} rounded-xl overflow-hidden border border-border max-w-xs relative`}>
                   {isLocked ? (
-                    /* Blurred locked image with unlock CTA */
-                    <div className="relative">
-                      <img
-                        src={msg.imageUrl}
-                        alt="Locked"
-                        className="w-full h-auto blur-xl scale-110 brightness-50 select-none pointer-events-none"
-                        draggable={false}
-                      />
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/20">
+                    /* Blurred locked image — cloudy/frosted overlay per spec */
+                    <div
+                      className="relative cursor-pointer"
+                      onClick={() => handleUnlockTap(msg)}
+                      title={`Unlock for ${unlockCost} 💎`}
+                    >
+                      <div style={{ overflow: "hidden" }}>
+                        <img
+                          src={msg.imageUrl}
+                          alt="Locked"
+                          style={{ filter: "blur(20px)", transform: "scale(1.1)" }}
+                          className="w-full h-auto select-none pointer-events-none brightness-50"
+                          draggable={false}
+                        />
+                      </div>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30">
                         <div className="p-3 rounded-full bg-black/60 border border-primary/50 box-glow-pink">
                           <Lock size={22} className="text-primary" />
                         </div>
-                        <p className="text-white text-xs font-semibold drop-shadow-lg">Locked Image</p>
-                        <button
-                          onClick={() => handleUnlock(msg)}
-                          disabled={unlockMutation.isPending}
-                          className="mt-1 px-4 py-1.5 rounded-full bg-primary text-white text-xs font-bold box-glow-pink hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-60"
-                        >
-                          <Unlock size={12} />
-                          {unlockMutation.isPending ? "Unlocking…" : "Unlock"}
-                        </button>
+                        <p className="text-white text-xs font-bold drop-shadow-lg">
+                          🔒 Unlock for {unlockCost} 💎
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -271,6 +307,55 @@ export function ChatDetail() {
           <Send size={20} className="ml-0.5" />
         </button>
       </div>
+
+      {/* Unlock Confirmation Modal */}
+      <AnimatePresence>
+        {unlockTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm"
+            onClick={() => setUnlockTarget(null)}
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="w-full bg-card border-t border-primary/40 rounded-t-2xl p-6 shadow-[0_-10px_40px_rgba(255,0,127,0.25)]"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-white flex items-center gap-2">
+                  <Unlock size={16} className="text-primary" /> Unlock Image
+                </h3>
+                <button onClick={() => setUnlockTarget(null)} className="text-muted-foreground hover:text-white transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+              <p className="text-sm text-muted-foreground mb-5">
+                Unlock this image for <span className="text-primary font-bold">{unlockCost} 💎 Neon Cards</span>. Once unlocked it stays unlocked permanently.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setUnlockTarget(null)}
+                  className="flex-1 py-3 rounded-xl border border-border text-muted-foreground text-sm font-bold hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmUnlock}
+                  disabled={unlockMutation.isPending}
+                  className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-bold box-glow-pink hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-2 transition-all"
+                >
+                  <Unlock size={14} />
+                  {unlockMutation.isPending ? "Unlocking…" : `Unlock · ${unlockCost} 💎`}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Selfie Prompt Modal */}
       <AnimatePresence>

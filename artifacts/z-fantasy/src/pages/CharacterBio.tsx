@@ -37,9 +37,11 @@ interface ChatMessage {
 
 interface VaultItem {
   id: string;
+  mediaUrl: string;
   imageUrl: string;
-  unlocked: boolean;
+  isBlurred: boolean;
   characterName: string;
+  mediaType: string;
 }
 
 const BOT_USERNAME = "zfantasy_bot";
@@ -325,16 +327,25 @@ export function CharacterBio() {
               {vaultItems.length === 0 ? (
                 <p className="col-span-3 text-center text-xs text-muted-foreground py-6">No vault media for this character.</p>
               ) : (
-                vaultItems.map((item, i) => (
-                  <div key={item.id} className="aspect-square rounded-lg overflow-hidden border border-border relative">
-                    <img src={item.imageUrl} alt="" className={`w-full h-full object-cover ${!item.unlocked ? "blur-md brightness-50" : ""}`} />
-                    {!item.unlocked && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-[10px] text-white/80 font-bold bg-black/60 px-2 py-0.5 rounded-full">10 🃏</span>
-                      </div>
-                    )}
-                  </div>
-                ))
+                vaultItems.map((item) => {
+                  const url = item.mediaUrl || item.imageUrl;
+                  return (
+                    <div key={item.id} className="aspect-square rounded-lg border border-border relative cursor-pointer" style={{ overflow: "hidden" }}>
+                      <img
+                        src={url}
+                        alt=""
+                        style={item.isBlurred ? { filter: "blur(20px)", transform: "scale(1.1)" } : undefined}
+                        className={`w-full h-full object-cover${item.isBlurred ? " brightness-50" : ""}`}
+                      />
+                      {item.isBlurred && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/30">
+                          <span className="text-lg">🔒</span>
+                          <span className="text-[9px] text-white/80 font-bold bg-black/60 px-1.5 py-0.5 rounded-full">Locked</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
           )}
