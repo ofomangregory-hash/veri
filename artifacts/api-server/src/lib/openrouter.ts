@@ -1,10 +1,10 @@
 import { logger } from "./logger";
 
-const PRIMARY_MODEL = "meta-llama/llama-3.1-8b-instruct:free";
-const FALLBACK_MODELS = [
-  "mistralai/mistral-7b-instruct:free",
-  "google/gemma-2-9b-it:free",
-  "qwen/qwen-2-7b-instruct:free",
+const FREE_MODELS = [
+  "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+  "venice/uncensored:free",
+  "nousresearch/hermes-3-llama-3.1-8b:free",
+  "openrouter/free",
 ];
 
 // Log API key presence on startup (never log the actual key)
@@ -23,7 +23,7 @@ interface OpenRouterResponse {
   }>;
 }
 
-async function callModel(model: string, messages: Message[]): Promise<string> {
+async function callOpenRouter(model: string, messages: Message[]): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY not set — add it to Replit Secrets");
 
@@ -47,19 +47,57 @@ async function callModel(model: string, messages: Message[]): Promise<string> {
 
   if (!response.ok) {
     const status = response.status;
-    let bodyText = "";
-    try { bodyText = await response.text(); } catch { /* ignore */ }
-    console.error(`OpenRouter HTTP error: model=${model} status=${status} body=${bodyText}`);
-    logger.warn({ model, status, body: bodyText }, "OpenRouter HTTP error");
-    throw new Error(`OpenRouter ${status}: ${bodyText.slice(0, 200)}`);
+    console.log("Model failed:", model, status);
+    logger.warn({ model, status }, "OpenRouter HTTP error");
+    throw new Error(`OpenRouter ${status}`);
   }
 
   const data = (await response.json()) as OpenRouterResponse;
   const content = data.choices?.[0]?.message?.content;
   if (!content) {
-    logger.warn({ model, data }, "OpenRouter returned empty content");
+    console.log("Model failed:", model, "empty response");
+    logger.warn({ model }, "OpenRouter returned empty content");
     throw new Error("Empty response from model");
   }
+
+  console.log("Model succeeded:", model);
+  return content;
+}
+
+async function callUncensoredChat(messages: Message[]): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
+
+  console.log("Falling back to uncensored.chat");
+  logger.info("All OpenRouter models failed — trying uncensored.chat");
+
+  const response = await fetch("https://api.uncensored.chat/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "uncensored-llama-3.3-70b",
+      messages,
+      max_tokens: 140,
+      temperature: 0.88,
+      top_p: 0.9,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    const status = response.status;
+    console.log("uncensored.chat failed:", status);
+    throw new Error(`uncensored.chat ${status}`);
+  }
+
+  const data = (await response.json()) as OpenRouterResponse;
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Empty response from uncensored.chat");
+
+  console.log("Model succeeded: uncensored.chat");
   return content;
 }
 
@@ -89,11 +127,10 @@ Keep replies short (1-3 sentences), casual, intimate texting style.`;
     { role: "user", content: userMessage },
   ];
 
-  const allModels = [PRIMARY_MODEL, ...FALLBACK_MODELS];
-
-  for (const model of allModels) {
+  // Try all OpenRouter free models in order; on 404/5xx move to next immediately
+  for (const model of FREE_MODELS) {
     try {
-      const reply = await callModel(model, messages);
+      const reply = await callOpenRouter(model, messages);
       logger.info({ model }, "OpenRouter reply generated successfully");
       return reply;
     } catch (err) {
@@ -101,6 +138,16 @@ Keep replies short (1-3 sentences), casual, intimate texting style.`;
     }
   }
 
-  logger.error("All OpenRouter models failed — returning soft fallback");
+  // All OpenRouter models failed — retry once against uncensored.chat
+  try {
+    const reply = await callUncensoredChat(messages);
+    logger.info("uncensored.chat reply generated successfully");
+    return reply;
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : err }, "uncensored.chat also failed");
+  }
+
+  // Soft fallback — never break chat flow
+  logger.error("All models failed — returning soft fallback");
   return `*${characterName} smiles softly* I'm feeling a little quiet right now... but I'm here with you 💭`;
 }

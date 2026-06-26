@@ -1,0 +1,62 @@
+In imageGenerator.ts and the OpenRouter chat handler only. Do not touch any other files. Do not create new tables.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1 — FIX IMAGE GENERATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Remove HuggingFace entirely. Railway cannot resolve api-inference.huggingface.co
+   (ENOTFOUND DNS error — network block on Railway, not a code bug).
+   Delete generateWithHuggingFace and all HF model retry logic.
+
+2. Make Pollinations the sole image provider. Fix prompt construction —
+   character name must come FIRST or Pollinations returns 400:
+
+   const parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
+   const cleanPrompt = parts.join(', ').replace(/,\s*$/, '').trim();
+   const encodedPrompt = encodeURIComponent(cleanPrompt);
+   const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&nologo=true&safe=false`;
+
+   console.log('Image prompt:', cleanPrompt);
+   console.log('Pollinations URL:', url);
+
+3. On Pollinations failure → fall back to character avatar_url silently. Never throw.
+
+4. Genre prefix:
+   - Anime → "anime style, anime art, 2D illustration"
+   - Realistic → "realistic, photorealistic, detailed photography, lifelike"
+   Always: characterName first, then stylePrefix, then sub_genres joined.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2 — FIX OPENROUTER CHAT MODELS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All current free model slugs are dead (all returning 404). Replace the entire
+model list with these working uncensored free models in order:
+
+const FREE_MODELS = [
+  'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', // primary — uncensored, 32K context
+  'venice/uncensored:free',                                         // same base model, separate quota
+  'nousresearch/hermes-3-llama-3.1-8b:free',                      // uncensored fallback
+  'openrouter/free',                                                // last resort — auto picks available free model
+];
+
+Fallback logic:
+- Try each model in order
+- On 404 or 5xx move to next immediately
+- If ALL OpenRouter models fail, retry once against uncensored.chat:
+    base URL: https://api.uncensored.chat/v1
+    model: "uncensored-llama-3.3-70b"
+    same Authorization header, same request body format (OpenAI-compatible)
+- If that also fails, return the existing soft fallback response
+- Never break chat flow
+
+Logging:
+  console.log('Model failed:', modelSlug, status)
+  console.log('Model succeeded:', modelSlug)
+  console.log('Falling back to uncensored.chat')
+
+Note: these models are uncensored and will handle roleplay/character content
+without refusals. Do not add any system prompt safety wrappers around them —
+they will fight the character persona instructions.
+
+Do not touch any other files.
