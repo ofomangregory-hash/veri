@@ -68,10 +68,10 @@ async function tryPollinations(
     const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
     const encodedPrompt = encodeURIComponent(cleanPrompt);
     const seedNum = parseInt(imageSeed, 10) || Math.floor(Math.random() * 9999999);
-    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seedNum}&nologo=true&safe=false`;
+    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&nologo=true`;
 
     console.log("Image prompt:", cleanPrompt);
-    console.log("Pollinations URL:", url);
+    console.log('Pollinations URL:', url);
     logger.info({ url, characterName, nsfwEnabled }, "Attempting Pollinations image generation");
 
     const response = await axios.get(url, {
