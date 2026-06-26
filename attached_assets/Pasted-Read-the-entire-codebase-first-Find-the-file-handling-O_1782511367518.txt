@@ -1,0 +1,102 @@
+Read the entire codebase first. Find the file handling OpenRouter chat completions — likely openrouter.ts or similar. Do not touch any other files.
+Replace the entire chat provider logic with this new fallback chain: uncensored.chat → Groq → OpenRouter → soft fallback.
+Log on startup:
+typescriptconsole.log('UNCENSORED_CHAT_API_KEY:', process.env.UNCENSORED_CHAT_API_KEY ? 'present' : 'missing');
+console.log('GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'present' : 'missing');
+console.log('OPENROUTER_API_KEY:', process.env.OPENROUTER_API_KEY ? 'present' : 'missing');
+Provider 1 — uncensored.chat (primary, fully uncensored):
+typescripttry {
+  const res = await fetch('https://api.uncensored.chat/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.UNCENSORED_CHAT_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: 'uncensored-llama-3.3-70b',
+      messages,
+      max_tokens: 1000,
+      temperature: 0.9
+    }),
+    signal: AbortSignal.timeout(15000)
+  });
+  if (res.ok) {
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content;
+    if (text) {
+      console.log('uncensored.chat succeeded');
+      return text;
+    }
+  }
+  console.log('uncensored.chat failed:', res.status, '— trying Groq');
+} catch (err) {
+  console.log('uncensored.chat error:', err, '— trying Groq');
+}
+Provider 2 — Groq (fallback 1, less restricted):
+typescripttry {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: 'mixtral-8x7b-32768',
+      messages,
+      max_tokens: 1000,
+      temperature: 0.9
+    }),
+    signal: AbortSignal.timeout(15000)
+  });
+  if (res.ok) {
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content;
+    if (text) {
+      console.log('Groq succeeded');
+      return text;
+    }
+  }
+  console.log('Groq failed:', res.status, '— trying OpenRouter');
+} catch (err) {
+  console.log('Groq error:', err, '— trying OpenRouter');
+}
+Provider 3 — OpenRouter (fallback 2, uncensored models only):
+typescriptconst OPENROUTER_MODELS = [
+  'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+  'nousresearch/hermes-3-llama-3.1-8b:free',
+  'openrouter/free'
+];
+
+for (const model of OPENROUTER_MODELS) {
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: 1000,
+        temperature: 0.9
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content;
+      if (text) {
+        console.log('OpenRouter succeeded:', model);
+        return text;
+      }
+    }
+    console.log('Model failed:', model, res.status);
+  } catch (err) {
+    console.log('Model error:', model, err);
+  }
+}
+Final fallback — soft response:
+typescriptconsole.log('All providers failed — returning soft fallback');
+return existingSoftFallbackResponse;
+Do not add any safety wrappers or content filters around any provider. Do not create new tables. Do not touch any other files.

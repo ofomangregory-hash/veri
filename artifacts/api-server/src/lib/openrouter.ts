@@ -1,104 +1,19 @@
 import { logger } from "./logger";
 
-const FREE_MODELS = [
-  "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-  "venice/uncensored:free",
-  "nousresearch/hermes-3-llama-3.1-8b:free",
-  "openrouter/free",
-];
-
 // Log API key presence on startup (never log the actual key)
-console.log(`OpenRouter API key: ${process.env.OPENROUTER_API_KEY ? "present" : "missing"}`);
+console.log('UNCENSORED_CHAT_API_KEY:', process.env.UNCENSORED_CHAT_API_KEY ? 'present' : 'missing');
+console.log('GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'present' : 'missing');
+console.log('OPENROUTER_API_KEY:', process.env.OPENROUTER_API_KEY ? 'present' : 'missing');
+
+const OPENROUTER_MODELS = [
+  'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+  'nousresearch/hermes-3-llama-3.1-8b:free',
+  'openrouter/free',
+];
 
 interface Message {
   role: string;
   content: string;
-}
-
-interface OpenRouterResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
-}
-
-async function callOpenRouter(model: string, messages: Message[]): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY not set — add it to Replit Secrets");
-
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://z-fantasy.replit.app",
-      "X-Title": "Z-Fantasy",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: 140,
-      temperature: 0.88,
-      top_p: 0.9,
-    }),
-    signal: AbortSignal.timeout(10000),
-  });
-
-  if (!response.ok) {
-    const status = response.status;
-    console.log("Model failed:", model, status);
-    logger.warn({ model, status }, "OpenRouter HTTP error");
-    throw new Error(`OpenRouter ${status}`);
-  }
-
-  const data = (await response.json()) as OpenRouterResponse;
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) {
-    console.log("Model failed:", model, "empty response");
-    logger.warn({ model }, "OpenRouter returned empty content");
-    throw new Error("Empty response from model");
-  }
-
-  console.log("Model succeeded:", model);
-  return content;
-}
-
-async function callUncensoredChat(messages: Message[]): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
-
-  console.log("Falling back to uncensored.chat");
-  logger.info("All OpenRouter models failed — trying uncensored.chat");
-
-  const response = await fetch("https://api.uncensored.chat/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "uncensored-llama-3.3-70b",
-      messages,
-      max_tokens: 140,
-      temperature: 0.88,
-      top_p: 0.9,
-    }),
-    signal: AbortSignal.timeout(15000),
-  });
-
-  if (!response.ok) {
-    const status = response.status;
-    console.log("uncensored.chat failed:", status);
-    throw new Error(`uncensored.chat ${status}`);
-  }
-
-  const data = (await response.json()) as OpenRouterResponse;
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Empty response from uncensored.chat");
-
-  console.log("Model succeeded: uncensored.chat");
-  return content;
 }
 
 export async function generateAIReply(
@@ -127,27 +42,100 @@ Keep replies short (1-3 sentences), casual, intimate texting style.`;
     { role: "user", content: userMessage },
   ];
 
-  // Try all OpenRouter free models in order; on 404/5xx move to next immediately
-  for (const model of FREE_MODELS) {
+  // ── Provider 1: uncensored.chat (primary, fully uncensored) ──────────────
+  try {
+    const res = await fetch('https://api.uncensored.chat/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.UNCENSORED_CHAT_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'uncensored-llama-3.3-70b',
+        messages,
+        max_tokens: 1000,
+        temperature: 0.9
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+    if (res.ok) {
+      const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const text = data.choices?.[0]?.message?.content;
+      if (text) {
+        console.log('uncensored.chat succeeded');
+        logger.info('uncensored.chat reply generated successfully');
+        return text;
+      }
+    }
+    console.log('uncensored.chat failed:', res.status, '— trying Groq');
+  } catch (err) {
+    console.log('uncensored.chat error:', err, '— trying Groq');
+  }
+
+  // ── Provider 2: Groq (fallback 1, less restricted) ──────────────────────
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'mixtral-8x7b-32768',
+        messages,
+        max_tokens: 1000,
+        temperature: 0.9
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+    if (res.ok) {
+      const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const text = data.choices?.[0]?.message?.content;
+      if (text) {
+        console.log('Groq succeeded');
+        logger.info('Groq reply generated successfully');
+        return text;
+      }
+    }
+    console.log('Groq failed:', res.status, '— trying OpenRouter');
+  } catch (err) {
+    console.log('Groq error:', err, '— trying OpenRouter');
+  }
+
+  // ── Provider 3: OpenRouter (fallback 2, uncensored models only) ──────────
+  for (const model of OPENROUTER_MODELS) {
     try {
-      const reply = await callOpenRouter(model, messages);
-      logger.info({ model }, "OpenRouter reply generated successfully");
-      return reply;
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          max_tokens: 1000,
+          temperature: 0.9
+        }),
+        signal: AbortSignal.timeout(10000)
+      });
+      if (res.ok) {
+        const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+        const text = data.choices?.[0]?.message?.content;
+        if (text) {
+          console.log('OpenRouter succeeded:', model);
+          logger.info({ model }, 'OpenRouter reply generated successfully');
+          return text;
+        }
+      }
+      console.log('Model failed:', model, res.status);
     } catch (err) {
-      logger.warn({ err: err instanceof Error ? err.message : err, model }, "Model failed, trying next");
+      console.log('Model error:', model, err);
     }
   }
 
-  // All OpenRouter models failed — retry once against uncensored.chat
-  try {
-    const reply = await callUncensoredChat(messages);
-    logger.info("uncensored.chat reply generated successfully");
-    return reply;
-  } catch (err) {
-    logger.warn({ err: err instanceof Error ? err.message : err }, "uncensored.chat also failed");
-  }
-
-  // Soft fallback — never break chat flow
-  logger.error("All models failed — returning soft fallback");
+  // ── Final fallback — never break chat flow ───────────────────────────────
+  console.log('All providers failed — returning soft fallback');
+  logger.error('All providers failed — returning soft fallback');
   return `*${characterName} smiles softly* I'm feeling a little quiet right now... but I'm here with you 💭`;
 }
