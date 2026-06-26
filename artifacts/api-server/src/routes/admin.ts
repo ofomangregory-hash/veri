@@ -28,6 +28,7 @@ import { generateCharacterAvatar } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import { listSupabaseCharacters, createSupabaseCharacter, updateSupabaseCharacter, getSupabaseCharacterById } from "../lib/supabaseCharacters";
 import { supabase } from "../lib/supabase";
+import { getBot } from "../lib/telegram-bot";
 
 const router: IRouter = Router();
 
@@ -1100,6 +1101,66 @@ router.get("/admin/active-chats", adminOnly, async (req, res): Promise<void> => 
     logger.error({ err }, "Failed to load active chats");
     res.status(500).json({ error: "Failed to load active chats" });
   }
+});
+
+// ─── Admin: Direct message a user via Telegram bot ────────────────────────────
+router.post("/admin/message-user", adminOnly, async (req, res): Promise<void> => {
+  const { telegram_id, username, message } = req.body as { telegram_id?: string; username?: string; message?: string };
+  if (!telegram_id || !message?.trim()) {
+    res.status(400).json({ error: "telegram_id and message are required" });
+    return;
+  }
+  const header = "━━━━━━━━━━━━━━━━━━━━━━\n📣 Z-Fantasy Sweet Dreams\n━━━━━━━━━━━━━━━━━━━━━━\n\n";
+  const fullMessage = header + message.trim();
+
+  const bot = getBot();
+  if (bot) {
+    try {
+      await bot.sendMessage(telegram_id, fullMessage);
+    } catch (err) {
+      logger.warn({ err }, "Failed to send DM via bot");
+    }
+  }
+
+  if (supabase) {
+    try {
+      const { data: existingThread } = await supabase
+        .from("customer_service_threads")
+        .select("id")
+        .eq("user_id", telegram_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let threadId: string | null = existingThread?.id ?? null;
+      if (threadId) {
+        await supabase.from("customer_service_threads")
+          .update({ last_message_at: new Date().toISOString(), status: "open" })
+          .eq("id", threadId);
+      } else {
+        const { data: newThread } = await supabase
+          .from("customer_service_threads")
+          .insert({ user_id: telegram_id, title: `Admin DM to ${username ?? telegram_id}`, status: "open" })
+          .select("id")
+          .single();
+        threadId = newThread?.id ?? null;
+      }
+
+      if (threadId) {
+        await supabase.from("customer_support_messages").insert({
+          thread_id: threadId,
+          user_id: telegram_id,
+          message: fullMessage,
+          direction: "outbound",
+          read: true,
+        });
+      }
+    } catch (err) {
+      logger.warn({ err }, "Failed to save DM to Supabase");
+    }
+  }
+
+  res.json({ success: true });
 });
 
 // ─── Admin: Delete a conversation ─────────────────────────────────────────────

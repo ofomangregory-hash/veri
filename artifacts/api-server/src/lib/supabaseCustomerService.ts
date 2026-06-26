@@ -175,6 +175,26 @@ export async function getAdminUnreadCount(): Promise<number> {
   }
 }
 
+export async function getUnreadThreadIds(): Promise<string[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("customer_support_messages")
+      .select("thread_id")
+      .eq("read", false)
+      .eq("direction", "inbound");
+    if (error) {
+      console.error("getUnreadThreadIds actual error:", error.message, error.code);
+      return [];
+    }
+    const ids = [...new Set((data ?? []).map((r: Record<string, unknown>) => String(r.thread_id)))];
+    return ids;
+  } catch (err) {
+    console.error("getUnreadThreadIds caught:", err);
+    return [];
+  }
+}
+
 export async function closeCsThread(threadId: string): Promise<void> {
   if (!supabase) return;
   try {

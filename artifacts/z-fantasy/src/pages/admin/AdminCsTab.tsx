@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { MessageSquare, Send, RefreshCw, ChevronLeft, Archive } from "lucide-react";
 
 function getToken() {
@@ -58,6 +58,20 @@ export function AdminCsTab({ onThreadRead }: AdminCsTabProps) {
   const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("open");
   const [error, setError] = useState<string | null>(null);
   const msgsEndRef = useRef<HTMLDivElement>(null);
+  const [unreadThreadIds, setUnreadThreadIds] = useState<Set<string>>(new Set());
+
+  const fetchUnreadIds = useCallback(async () => {
+    try {
+      const data = await adminApi<{ threadIds: string[] }>("GET", "/admin/cs/threads/unread-ids");
+      setUnreadThreadIds(new Set(data.threadIds ?? []));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    void fetchUnreadIds();
+    const id = setInterval(fetchUnreadIds, 30_000);
+    return () => clearInterval(id);
+  }, [fetchUnreadIds]);
 
   const fetchThreads = async () => {
     setLoading(true);
@@ -85,6 +99,7 @@ export function AdminCsTab({ onThreadRead }: AdminCsTabProps) {
         adminApi("PATCH", `/admin/cs/threads/${thread.id}/read`).catch(() => {}),
       ]);
       setMessages(msgs);
+      setUnreadThreadIds(prev => { const n = new Set(prev); n.delete(thread.id); return n; });
       onThreadRead?.();
     } catch (e) {
       setError(String(e));
@@ -180,6 +195,9 @@ export function AdminCsTab({ onThreadRead }: AdminCsTabProps) {
                       }`}>
                         {thread.status}
                       </span>
+                      {unreadThreadIds.has(thread.id) && (
+                        <span className="w-2 h-2 rounded-full bg-primary shrink-0" style={{ boxShadow: "0 0 6px var(--color-primary)" }} />
+                      )}
                       <span className="text-[10px] text-muted-foreground font-mono truncate">uid: {thread.userId}</span>
                     </div>
                     <p className="text-sm font-semibold truncate text-foreground">{thread.title}</p>

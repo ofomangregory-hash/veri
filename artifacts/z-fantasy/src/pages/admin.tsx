@@ -2115,6 +2115,29 @@ interface UserDrawerProps {
 }
 
 function UserDrawer({ drawerUser, drawerLoading, drawerTxns, editTickets, setEditTickets, editNeon, setEditNeon, editTier, setEditTier, editStaff, setEditStaff, savingUser, saveUserChanges, onClose }: UserDrawerProps) {
+  const [dmOpen, setDmOpen] = useState(false);
+  const [dmMessage, setDmMessage] = useState("");
+  const [dmSending, setDmSending] = useState(false);
+  const { toast } = useToast();
+
+  const handleSendDm = async () => {
+    if (!drawerUser || !dmMessage.trim() || dmSending) return;
+    setDmSending(true);
+    try {
+      await adminApi("POST", "/admin/message-user", {
+        telegram_id: drawerUser.id,
+        username: drawerUser.username ?? null,
+        message: dmMessage.trim(),
+      });
+      toast({ title: `✅ Message sent to @${drawerUser.username ?? drawerUser.id}` });
+      setDmOpen(false);
+      setDmMessage("");
+    } catch {
+      toast({ title: "❌ Failed to send — please try again", variant: "destructive" });
+    }
+    setDmSending(false);
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -2161,6 +2184,10 @@ function UserDrawer({ drawerUser, drawerLoading, drawerTxns, editTickets, setEdi
               {savingUser ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
               {savingUser ? "Saving…" : "Save Changes"}
             </button>
+            <button onClick={() => setDmOpen(true)}
+              className="w-full py-2.5 rounded-xl border border-primary/40 text-primary text-sm font-bold hover:bg-primary/10 transition-all flex items-center justify-center gap-2">
+              ✉️ Send Message
+            </button>
             <button onClick={onClose}
               className="w-full py-2.5 rounded-xl border border-border text-muted-foreground text-sm hover:text-foreground hover:border-border/80 transition-all">
               Cancel
@@ -2168,6 +2195,56 @@ function UserDrawer({ drawerUser, drawerLoading, drawerTxns, editTickets, setEdi
           </div>
         )}
       </div>
+
+      {dmOpen && drawerUser && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => { setDmOpen(false); setDmMessage(""); }}
+        >
+          <div
+            className="w-full max-w-sm bg-background border-t border-border rounded-t-2xl p-6 space-y-4"
+            style={{ paddingBottom: "48px" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm">✉️ Message to @{drawerUser.username ?? drawerUser.id}</h3>
+              <button onClick={() => { setDmOpen(false); setDmMessage(""); }} className="p-1 text-muted-foreground hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-3 rounded-xl bg-muted/30 border border-border text-[10px] text-muted-foreground font-mono whitespace-pre-line leading-relaxed">
+              {"━━━━━━━━━━━━━━━━━━━━━━\n📣 Z-Fantasy Sweet Dreams\n━━━━━━━━━━━━━━━━━━━━━━"}
+            </div>
+            <div className="space-y-1">
+              <textarea
+                value={dmMessage}
+                onChange={e => setDmMessage(e.target.value.slice(0, 500))}
+                placeholder="Type your message…"
+                rows={4}
+                className="w-full rounded-xl bg-background border border-border px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/60 resize-none"
+              />
+              <p className="text-[10px] text-muted-foreground text-right">{500 - dmMessage.length} chars remaining</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setDmOpen(false); setDmMessage(""); }}
+                className="flex-1 h-11 rounded-xl border border-border text-muted-foreground text-sm font-bold hover:bg-card transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleSendDm()}
+                disabled={!dmMessage.trim() || dmSending}
+                className="flex-[2] h-11 rounded-xl bg-gradient-to-r from-primary to-secondary text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
+              >
+                {dmSending
+                  ? <><RefreshCw size={14} className="animate-spin" /> Sending…</>
+                  : "Send Message"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

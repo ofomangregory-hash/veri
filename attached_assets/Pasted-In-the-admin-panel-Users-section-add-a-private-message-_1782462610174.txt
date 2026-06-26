@@ -1,0 +1,40 @@
+In the admin panel Users section, add a private message feature for each user. Also add a real-time unread dot indicator on CS thread rows. Do not touch any other files.
+Feature 1: Admin Direct Message to User
+When admin clicks on a user in the Users tab, add a "Send Message" button in the expanded user view. Clicking it opens a compose modal with:
+Message header (auto-prepended, not editable):
+━━━━━━━━━━━━━━━━━━━━━━
+📣 Z-Fantasy Sweet Dreams
+━━━━━━━━━━━━━━━━━━━━━━
+Modal design:
+
+Dark themed modal matching the app aesthetic
+Header shows the user's name/username at the top — "Message to @{username}"
+A textarea for the admin to type the message
+Character counter showing remaining characters (max 500)
+Two buttons at the bottom: Cancel (outlined) and Send Message (pink/accent gradient, full width)
+Loading spinner on Send button while sending
+Success toast: ✅ Message sent to @{username}
+Error toast: ❌ Failed to send — please try again
+
+On send:
+
+Prepend the header block to the message automatically
+Send via Telegram bot to that user's telegram_id
+Save to customer_support_messages table with user_id, message (full formatted text), direction: 'outbound', read: true, created_at
+Create or update thread in customer_service_threads for that user
+
+Backend:
+
+Add POST /api/admin/message-user endpoint accepting { telegram_id, username, message }. Sends via bot and saves to Supabase. Returns { success: true } on success.
+
+Feature 2: Real-time Unread Dot on CS Thread Rows
+In the Customer Service thread list in the admin panel, add a real-time unread dot indicator on each thread row:
+
+Show a small filled circle (pink/accent color, ~8px) next to the user's name on any thread that has unread messages (read = false and direction = 'inbound' in customer_support_messages)
+The dot is visible without opening the thread so admin knows at a glance who needs a reply
+When admin opens a thread, call markThreadRead to set all messages in that thread to read = true
+The dot disappears immediately after the thread is opened and marked read
+Unread badge count on the Customer Service tab updates in real time as threads are read
+Poll for new unread messages every 30 seconds so the dot appears automatically when a user sends a new message without requiring a page refresh
+
+Do not create new tables. Do not touch any other files.

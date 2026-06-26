@@ -10,6 +10,7 @@ import {
   closeCsThread,
   markThreadRead,
   getAdminUnreadCount,
+  getUnreadThreadIds,
 } from "../lib/supabaseCustomerService";
 import { getBot } from "../lib/telegram-bot";
 import { logger } from "../lib/logger";
@@ -120,6 +121,12 @@ router.patch("/admin/cs/threads/:threadId/close", async (req, res): Promise<void
   if (!req.isAdmin) { res.status(403).json({ error: "Forbidden" }); return; }
   await closeCsThread(req.params.threadId);
   res.json({ ok: true });
+});
+
+router.get("/admin/cs/threads/unread-ids", async (req, res): Promise<void> => {
+  if (!req.isAdmin) { res.status(403).json({ error: "Forbidden" }); return; }
+  const threadIds = await getUnreadThreadIds();
+  res.json({ threadIds });
 });
 
 export default router;
