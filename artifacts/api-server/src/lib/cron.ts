@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { db, usersTable, transactionsTable, conversationsTable } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { supabase } from "./supabase";
 import { getBot } from "./telegram-bot";
@@ -94,10 +94,11 @@ async function runUnreadNotifications(): Promise<void> {
     const rows = Array.isArray(due) ? due : (due as unknown as { rows: { conversation_id: string; telegram_id: string; character_id: string }[] }).rows;
     if (!rows || rows.length === 0) return;
 
-    const ids = rows.map(r => r.conversation_id);
-    await db.execute(
-      sql`UPDATE conversations SET notify_after = NULL WHERE conversation_id = ANY(${ids})`,
-    );
+    const rawIds = rows.map(r => r.conversation_id);
+    const ids = Array.isArray(rawIds) ? rawIds : [rawIds];
+    await db.update(conversationsTable)
+      .set({ notifyAfter: null })
+      .where(inArray(conversationsTable.conversationId, ids));
 
     const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? "z_fantasy_bot";
 
