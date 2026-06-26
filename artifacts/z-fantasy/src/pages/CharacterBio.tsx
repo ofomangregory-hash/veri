@@ -127,7 +127,8 @@ export function CharacterBio() {
       setHasConv(false);
       setShowNewChatConfirm(false);
       setLocation(`/chat/${id}`);
-    } catch {
+    } catch (err) {
+      console.error("Start Fresh failed:", err);
       toast({ title: "Failed to start new chat", variant: "destructive" });
     } finally {
       setArchiving(false);

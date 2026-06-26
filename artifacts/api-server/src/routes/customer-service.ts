@@ -11,6 +11,7 @@ import {
   markThreadRead,
   getAdminUnreadCount,
   getUnreadThreadIds,
+  getUserCsMessages,
 } from "../lib/supabaseCustomerService";
 import { getBot } from "../lib/telegram-bot";
 import { logger } from "../lib/logger";
@@ -127,6 +128,13 @@ router.get("/admin/cs/threads/unread-ids", async (req, res): Promise<void> => {
   if (!req.isAdmin) { res.status(403).json({ error: "Forbidden" }); return; }
   const threadIds = await getUnreadThreadIds();
   res.json({ threadIds });
+});
+
+router.get("/admin/cs/users/:userId/messages", async (req, res): Promise<void> => {
+  if (!req.isAdmin) { res.status(403).json({ error: "Forbidden" }); return; }
+  const limit = Math.min(Number(req.query.limit ?? 5), 20);
+  const msgs = await getUserCsMessages(req.params.userId, limit);
+  res.json(msgs);
 });
 
 export default router;

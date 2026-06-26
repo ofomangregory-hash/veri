@@ -61,6 +61,29 @@ export async function getUserCsThreads(userId: string): Promise<CsThread[]> {
   }
 }
 
+export async function getUserCsMessages(userId: string, limit = 5): Promise<CsMessage[]> {
+  if (!supabase) return [];
+  try {
+    const { data: threads } = await supabase
+      .from("customer_service_threads")
+      .select("id")
+      .eq("user_id", userId);
+    if (!threads || threads.length === 0) return [];
+    const threadIds = threads.map((t: Record<string, unknown>) => String(t.id));
+    const { data, error } = await supabase
+      .from("customer_support_messages")
+      .select("*")
+      .in("thread_id", threadIds)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) { logger.warn({ error }, "getUserCsMessages: failed"); return []; }
+    return (data ?? []).map(mapCsMessage).reverse();
+  } catch (err) {
+    logger.warn({ err }, "getUserCsMessages: failed");
+    return [];
+  }
+}
+
 export async function getAllCsThreads(
   status?: string,
   limit = 50,

@@ -249,6 +249,7 @@ export function Admin() {
   const [drawerUser, setDrawerUser] = useState<UserDetail | null>(null);
   const [drawerTxns, setDrawerTxns] = useState<Array<{ transactionId: string; actionType: string; ticketAmount: number; timestamp: string }>>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
+  const [charSearch, setCharSearch] = useState("");
   const [editTickets, setEditTickets] = useState("");
   const [editNeon, setEditNeon] = useState("");
   const [editTier, setEditTier] = useState("");
@@ -975,7 +976,16 @@ export function Admin() {
             </div>
           )}
           <div className="space-y-3">
-            {((charsData?.items ?? []) as Array<NonNullable<typeof charsData>["items"][0] & { creatorUsername?: string | null }>).map(char => (
+            <input
+              type="text"
+              value={charSearch}
+              onChange={e => setCharSearch(e.target.value)}
+              placeholder="Search by name…"
+              className="w-full h-9 rounded-lg border border-border bg-card text-sm px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent/50 transition-colors"
+            />
+            {((charsData?.items ?? []) as Array<NonNullable<typeof charsData>["items"][0] & { creatorUsername?: string | null }>)
+              .filter(char => !charSearch.trim() || char.name.toLowerCase().includes(charSearch.toLowerCase()))
+              .map(char => (
               <div key={char.characterId} className="rounded-xl bg-card border border-border overflow-hidden">
                 <div className="flex items-center gap-3 p-3">
                   <div className="w-10 h-10 rounded-full overflow-hidden border border-border shrink-0">
@@ -2181,7 +2191,15 @@ function UserDrawer({ drawerUser, drawerLoading, drawerTxns, editTickets, setEdi
   const [dmOpen, setDmOpen] = useState(false);
   const [dmMessage, setDmMessage] = useState("");
   const [dmSending, setDmSending] = useState(false);
+  const [csMessages, setCsMessages] = useState<Array<{ id: string; senderType: string; message: string; createdAt: string }>>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!drawerUser) { setCsMessages([]); return; }
+    adminApi<Array<{ id: string; senderType: string; message: string; createdAt: string }>>(
+      "GET", `/admin/cs/users/${drawerUser.id}/messages`
+    ).then(msgs => setCsMessages(Array.isArray(msgs) ? msgs : [])).catch(() => setCsMessages([]));
+  }, [drawerUser?.id]);
 
   const handleSendDm = async () => {
     if (!drawerUser || !dmMessage.trim() || dmSending) return;
@@ -2237,6 +2255,7 @@ function UserDrawer({ drawerUser, drawerLoading, drawerTxns, editTickets, setEdi
               editNeon={editNeon} setEditNeon={setEditNeon}
               editTier={editTier} setEditTier={setEditTier}
               editStaff={editStaff} setEditStaff={setEditStaff}
+              csMessages={csMessages}
             />
           ) : null}
         </div>
@@ -2319,9 +2338,10 @@ interface UserDrawerContentProps {
   editNeon: string; setEditNeon: (v: string) => void;
   editTier: string; setEditTier: (v: string) => void;
   editStaff: string; setEditStaff: (v: string) => void;
+  csMessages: Array<{ id: string; senderType: string; message: string; createdAt: string }>;
 }
 
-function UserDrawerContent({ drawerUser, drawerTxns, editTickets, setEditTickets, editNeon, setEditNeon, editTier, setEditTier, editStaff, setEditStaff }: UserDrawerContentProps) {
+function UserDrawerContent({ drawerUser, drawerTxns, editTickets, setEditTickets, editNeon, setEditNeon, editTier, setEditTier, editStaff, setEditStaff, csMessages }: UserDrawerContentProps) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
@@ -2402,6 +2422,28 @@ function UserDrawerContent({ drawerUser, drawerTxns, editTickets, setEditTickets
           </div>
           <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
             {drawerTxns.map(txn => <TxnRow key={txn.transactionId} txn={txn} />)}
+          </div>
+        </div>
+      )}
+      {csMessages.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 pt-1">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-2">Recent CS Messages</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+            {csMessages.map(msg => (
+              <div key={msg.id} className={`p-2.5 rounded-lg text-xs border ${msg.senderType === "user" ? "bg-card border-border" : "bg-accent/5 border-accent/30"}`}>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className={`font-bold text-[10px] uppercase ${msg.senderType === "user" ? "text-muted-foreground" : "text-accent"}`}>
+                    {msg.senderType === "user" ? "↙ Inbound" : "↗ Outbound"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">{new Date(msg.createdAt).toLocaleDateString()}</span>
+                </div>
+                <p className="text-foreground/80 leading-relaxed line-clamp-2">{msg.message}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}

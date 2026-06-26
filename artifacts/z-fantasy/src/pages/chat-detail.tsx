@@ -141,6 +141,7 @@ export function ChatDetail() {
       setShowNewChatModal(false);
       toast({ title: "🔄 Fresh start!", description: "New conversation started." });
     } catch (e) {
+      console.error("Start Fresh failed:", e);
       toast({ title: "Failed", description: String(e), variant: "destructive" });
     }
     setArchiving(false);
