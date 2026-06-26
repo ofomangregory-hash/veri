@@ -1,6 +1,5 @@
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
-import { CharacterInputGenre } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,23 +9,17 @@ import { getGetMeQueryKey } from "@workspace/api-client-react";
 
 const PRESET_NAMES = ["Nexus-9", "Lyra", "Vex", "Aria", "Cipher", "Nyx", "Seraph", "Zara"];
 
-const GENRES = Object.values(CharacterInputGenre);
-
-const GENRE_ICONS: Record<string, string> = {
-  Fantasy: "🧙",
-  "Sci-Fi": "🚀",
-  "Dark Goth": "🖤",
-  Anime: "🌸",
-  Modern: "🏙️",
-  Horror: "👁️",
-  Romance: "💕",
-  Adventure: "⚔️",
-};
+const SUB_GENRES = [
+  "Fantasy", "Adventure", "Romance", "Horror", "Sci-Fi", "Cyberpunk",
+  "Supernatural", "Historical", "Modern", "Isekai", "Slice of Life",
+  "Thriller", "Drama", "Action", "Elf", "Vampire", "Demon", "Angel", "Warrior", "Mage",
+];
+const MAX_SUBGENRES = 2;
 
 const STEPS = [
   { id: 1, title: "Entity Name",       subtitle: "Choose or type your companion's identity" },
   { id: 2, title: "Visual Form",       subtitle: "Upload an avatar for your entity" },
-  { id: 3, title: "Origin Genre",      subtitle: "What world does your entity come from?" },
+  { id: 3, title: "Origin Genre",      subtitle: "Choose art style and character type" },
   { id: 4, title: "Core Data",         subtitle: "Age & biographical directives" },
   { id: 5, title: "First Contact",     subtitle: "Their opening transmission" },
   { id: 6, title: "Signal Tags",       subtitle: "Classify your entity's attributes" },
@@ -53,19 +46,19 @@ export function Create() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [genre, setGenre] = useState<string>(GENRES[0]);
+  const [artStyle, setArtStyle] = useState<"Anime" | "Realistic" | "">("");
+  const [subGenres, setSubGenres] = useState<string[]>([]);
+  const [customSubGenreInput, setCustomSubGenreInput] = useState("");
+  const [showCustomSubGenre, setShowCustomSubGenre] = useState(false);
+
   const [age, setAge] = useState("");
   const [bio, setBio] = useState("");
   const [greeting, setGreeting] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [isNsfw, setIsNsfw] = useState(false);
-  const [nsfwPrivate, setNsfwPrivate] = useState(true);
   const [visibility, setVisibility] = useState<"public" | "private">("private");
-  const [usingCustomGenre, setUsingCustomGenre] = useState(false);
-  const [customGenreInput, setCustomGenreInput] = useState("");
 
   const resolvedName = usingCustomName ? customNameInput.trim() : name;
-  const resolvedGenre = usingCustomGenre ? (customGenreInput.trim() || "Custom") : genre;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -85,8 +78,25 @@ export function Create() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  function addCustomSubGenre() {
+    const val = customSubGenreInput.trim();
+    if (!val || subGenres.length >= MAX_SUBGENRES) return;
+    setSubGenres(prev => [...prev, val]);
+    setCustomSubGenreInput("");
+    setShowCustomSubGenre(false);
+  }
+
+  function toggleSubGenre(sg: string) {
+    setSubGenres(prev => {
+      if (prev.includes(sg)) return prev.filter(x => x !== sg);
+      if (prev.length >= MAX_SUBGENRES) return prev;
+      return [...prev, sg];
+    });
+  }
+
   function canAdvance(): boolean {
     if (step === 1) return resolvedName.length > 0;
+    if (step === 3) return artStyle !== "" && subGenres.length >= 1;
     return true;
   }
 
@@ -124,9 +134,10 @@ export function Create() {
         }
       }
 
-      const tags = tagsInput
+      const extraTags = tagsInput
         ? tagsInput.split(",").map(t => t.trim()).filter(Boolean)
         : [];
+      const tags = [...subGenres, ...extraTags];
 
       const res = await fetch("/api/characters", {
         method: "POST",
@@ -136,7 +147,7 @@ export function Create() {
         },
         body: JSON.stringify({
           name: resolvedName,
-          genre: resolvedGenre,
+          genre: artStyle || "Realistic",
           age: age || undefined,
           bio: bio || undefined,
           initialGreeting: greeting || undefined,
@@ -169,6 +180,7 @@ export function Create() {
 
   const progressPct = (step / STEPS.length) * 100;
   const currentStep = STEPS[step - 1];
+  const allSubGenreOptions = [...SUB_GENRES, ...subGenres.filter(s => !SUB_GENRES.includes(s))];
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background">
@@ -300,53 +312,99 @@ export function Create() {
               )}
             </div>
             <p className="text-center text-xs text-muted-foreground">
-              Skipping avatar will auto-generate one based on genre
+              Skipping avatar will auto-generate one based on art style
             </p>
           </div>
         )}
 
-        {/* ── Step 3: Genre ── */}
+        {/* ── Step 3: Genre (Art Style + Sub-genre) ── */}
         {step === 3 && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              {GENRES.map(g => (
-                <button
-                  key={g}
-                  onClick={() => { setGenre(g); setUsingCustomGenre(false); }}
-                  className={`py-4 px-4 rounded-xl border font-bold text-sm transition-all flex items-center gap-2 ${
-                    !usingCustomGenre && genre === g
-                      ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
-                      : "border-border bg-card text-muted-foreground hover:border-primary/30"
-                  }`}
-                >
-                  <span className="text-xl">{GENRE_ICONS[g] ?? "✨"}</span>
-                  {g}
-                </button>
-              ))}
+          <div className="space-y-6">
+            {/* Step A: Art Style */}
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                Step A — Art Style <span className="text-primary">*</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {(["Anime", "Realistic"] as const).map(style => (
+                  <button
+                    key={style}
+                    onClick={() => setArtStyle(style)}
+                    className={`py-5 rounded-xl border text-sm font-bold transition-all flex flex-col items-center gap-2 ${
+                      artStyle === style
+                        ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
+                        : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                    }`}
+                  >
+                    <span className="text-3xl">{style === "Anime" ? "🌸" : "📷"}</span>
+                    {style}
+                    <span className="text-[10px] font-normal text-muted-foreground">
+                      {style === "Anime" ? "2D illustration style" : "Photo-realistic style"}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-            {!usingCustomGenre ? (
-              <button
-                onClick={() => setUsingCustomGenre(true)}
-                className="w-full py-3 rounded-xl border border-dashed border-secondary/50 text-secondary font-bold text-sm hover:border-secondary hover:bg-secondary/10 transition-all"
-              >
-                ✏️ Enter Custom Genre
-              </button>
-            ) : (
-              <div className="space-y-2">
-                <input
-                  autoFocus
-                  value={customGenreInput}
-                  onChange={e => setCustomGenreInput(e.target.value)}
-                  placeholder="e.g. Cyberpunk, Mythology, Steampunk..."
-                  maxLength={48}
-                  className="w-full h-12 rounded-xl border border-secondary/50 bg-card px-4 text-sm font-bold text-white placeholder:text-muted-foreground outline-none focus:border-secondary focus:shadow-[0_0_16px_rgba(157,0,255,0.2)] transition-all"
-                />
-                <button
-                  onClick={() => { setUsingCustomGenre(false); setCustomGenreInput(""); }}
-                  className="text-xs text-muted-foreground hover:text-white transition-colors"
-                >
-                  ← Back to presets
-                </button>
+
+            {/* Step B: Sub-genres (shows after art style is picked) */}
+            {artStyle && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                    Step B — Character Type
+                  </p>
+                  <span className="text-xs font-semibold text-muted-foreground">{subGenres.length}/{MAX_SUBGENRES}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {allSubGenreOptions.map(sg => {
+                    const selected = subGenres.includes(sg);
+                    const maxed = subGenres.length >= MAX_SUBGENRES && !selected;
+                    return (
+                      <button
+                        key={sg}
+                        disabled={maxed}
+                        onClick={() => toggleSubGenre(sg)}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          selected
+                            ? "bg-primary/30 text-primary border-primary/60 box-glow-pink"
+                            : maxed
+                            ? "bg-card/40 text-muted-foreground/40 border-border/40 cursor-not-allowed"
+                            : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/30"
+                        }`}
+                      >
+                        {selected && <Check size={10} className="inline mr-1" />}{sg}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {showCustomSubGenre ? (
+                  <div className="flex gap-2 mt-3">
+                    <input
+                      autoFocus
+                      value={customSubGenreInput}
+                      onChange={e => setCustomSubGenreInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") addCustomSubGenre(); }}
+                      placeholder="Type a custom type..."
+                      maxLength={32}
+                      className="flex-1 h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-white focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      onClick={addCustomSubGenre}
+                      disabled={!customSubGenreInput.trim() || subGenres.length >= MAX_SUBGENRES}
+                      className="px-3 h-9 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors disabled:opacity-40"
+                    >
+                      Add
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowCustomSubGenre(true)}
+                    className="w-full mt-3 py-2 rounded-xl border border-dashed border-accent/40 text-accent text-xs font-semibold hover:bg-accent/5 transition-colors"
+                  >
+                    ➕ Add Custom
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -426,9 +484,15 @@ export function Create() {
               <span className="font-bold text-white">{resolvedName}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Genre</span>
-              <span className="font-semibold text-white">{genre}</span>
+              <span className="text-muted-foreground">Art Style</span>
+              <span className="font-semibold text-white">{artStyle || "—"}</span>
             </div>
+            {subGenres.length > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Types</span>
+                <span className="font-semibold text-white">{subGenres.join(", ")}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Visibility</span>
               <span className="font-semibold text-white">🔒 Private</span>

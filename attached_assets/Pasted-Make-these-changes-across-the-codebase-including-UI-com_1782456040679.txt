@@ -1,0 +1,76 @@
+Make these changes across the codebase including UI components. Do not touch any backend routes or create any new tables.
+1. Restructure genre selection in both the admin panel Character Wizard Step 2 and the main user-facing Create tab Step 3
+New two-step genre flow:
+Step A — Pick Art Style (required, pick one):
+
+Two large prominent buttons: Anime and Realistic
+
+Controls how all images for this character are generated
+Saves to genre field as 'Anime' or 'Realistic'
+Must pick one before sub-genre grid appears
+Selected button shows highlighted/active state
+
+Step B — Pick Character Type/Tags (appears after Step A, pick one or more):
+
+Show this sub-genre grid:
+
+Fantasy, Adventure, Romance, Horror, Sci-Fi, Cyberpunk, Supernatural, Historical, Modern, Isekai, Slice of Life, Thriller, Drama, Action, Elf, Vampire, Demon, Angel, Warrior, Mage
+
+User can select multiple
+"+ Add Custom" button opens an inline text input
+User types custom tag, presses Add or Enter — adds it to the grid and selects it immediately
+Input clears after adding
+Custom tags saved to tags array just like built-in ones
+At least one sub-genre must be selected before Next is enabled
+Art style (genre) saves as 'Anime' or 'Realistic'
+Sub-genre selections save to tags array on the character
+
+2. Image generation — use genre for art style
+
+In imageGenerator.ts, check the character's genre field when building the image prompt:
+
+If genre = 'Anime' → prepend anime style, anime art, 2D illustration, to the prompt
+If genre = 'Realistic' → prepend realistic, photorealistic, detailed photography, lifelike, to the prompt
+Also append selected tags to the prompt for character context
+Character name must always be included in the prompt
+Strip any trailing commas or empty segments from the final prompt
+
+3. Update explore page UI — character cards
+
+Add teaser description below character name — show teaser_description field as 2-line truncated text using line-clamp-2
+Add Anime / Realistic filter tabs at the top:
+
+Anime tab: characters where genre = 'Anime'
+Realistic tab: characters where genre = 'Realistic'
+Default to Anime on load
+
+
+Add search bar below filter tabs with hashtag support:
+
+Plain text (no #) searches by name only
+#tag searches across tags array, genre, teaser_description, and name fields
+Multiple hashtags use AND logic — character must match ALL typed tags
+Case insensitive
+Show hint text: Tip: Use #tags to search traits e.g. #elf #dominant
+
+
+Make sure tags array is included in the character fetch query
+All cards same fixed height with object-fit: cover on image area
+Show selected tags as small clickable #tag chips on each card — tapping one adds it to the search bar automatically
+Tapping any #tag chip on a card adds it to the search bar and filters the list
+"Your character" create card: dashed border, + icon, neon card cost badge fetched from prices table using id char_create_nc
+
+4. Explore page filter tabs update
+
+Anime tab shows characters where genre = 'Anime'
+Realistic tab shows characters where genre = 'Realistic'
+Remove old genre-based tab logic that used Fantasy/Modern/etc to determine tabs
+
+Existing Supabase table fields being used:
+
+characters.genre — stores 'Anime' or 'Realistic'
+characters.tags — stores sub-genre array
+characters.teaser_description — short bio shown on card
+prices.char_create_nc — neon card cost for create card badge
+
+Do not fix broken images. Do not create new tables. Do not change any backend routes.

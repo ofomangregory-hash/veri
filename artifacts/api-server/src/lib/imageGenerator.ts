@@ -71,6 +71,8 @@ export interface GenerateSelfieOptions {
   nsfwEnabled?: boolean;
   /** Extra content-level words appended to the prompt based on intimacy level */
   contentLevelWords?: string;
+  /** Character sub-genre/trait tags appended to the prompt for context */
+  tags?: string[];
 }
 
 export interface GenerateAvatarOptions {
@@ -83,18 +85,26 @@ export interface GenerateAvatarOptions {
 }
 
 function buildPrompt(opts: GenerateSelfieOptions): string {
-  const { characterName, genre, teaserDescription, sceneDescription, contentLevelWords } = opts;
+  const { characterName, genre, teaserDescription, sceneDescription, contentLevelWords, tags } = opts;
 
-  const visualPrefix = (GENRE_VISUAL_PREFIXES[genre] ?? DEFAULT_VISUAL_PREFIX).replace(/,\s*$/, "");
+  const artStylePrefix =
+    genre === "Anime"
+      ? "anime style, anime art, 2D illustration"
+      : genre === "Realistic"
+      ? "realistic, photorealistic, detailed photography, lifelike"
+      : (GENRE_VISUAL_PREFIXES[genre] ?? DEFAULT_VISUAL_PREFIX).replace(/,\s*$/, "");
 
   const subjectHint = teaserDescription
     ? teaserDescription.replace(/\n/g, " ").slice(0, 150)
-    : `stunning ${genre.toLowerCase()} companion`;
+    : `stunning companion`;
+
+  const tagContext = tags && tags.length > 0 ? tags.join(", ") : null;
 
   const parts: (string | null | undefined)[] = [
     characterName,
-    visualPrefix,
+    artStylePrefix,
     subjectHint,
+    tagContext,
     sceneDescription,
     contentLevelWords || null,
     "portrait, solo, looking at viewer, masterpiece, best quality, ultra-detailed",

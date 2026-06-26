@@ -135,11 +135,11 @@ const TYPE_COLORS: Record<string, string> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function buildSystemPrompt(data: WizardData): string {
-  const { name, characterType, scenes, behaviors, personalities, traits, moods, bio, initialGreeting } = data;
+  const { name, artStyle, subGenres, behaviors, personalities, traits, moods, bio, initialGreeting } = data;
+  const typeDesc = subGenres.length ? subGenres.join("/") : artStyle || "companion";
   const parts = [
-    `You are ${name}, a ${characterType} companion in the Z-Fantasy universe.`,
+    `You are ${name}, a ${typeDesc} companion in the Z-Fantasy universe.`,
     bio ? `Background: ${bio}` : "",
-    scenes.length ? `Your world and setting: ${scenes.join(", ")}.` : "",
     behaviors.length ? `Your core behaviors: ${behaviors.join(", ")}.` : "",
     personalities.length ? `Your personality archetype: ${personalities.join(", ")}.` : "",
     traits.length ? `Your special traits: ${traits.join(", ")}.` : "",
@@ -154,8 +154,8 @@ function buildSystemPrompt(data: WizardData): string {
 
 export interface WizardData {
   name: string;
-  characterType: string;
-  scenes: string[];
+  artStyle: "Anime" | "Realistic" | "";
+  subGenres: string[];
   behaviors: string[];
   personalities: string[];
   traits: string[];
@@ -168,12 +168,12 @@ export interface WizardData {
   nsfwEnabled: boolean;
 }
 
-type Step = "name" | "scene" | "behavior" | "personality" | "traits" | "mood" | "nsfw" | "visibility" | "review";
-const BASE_STEPS: Step[] = ["name", "scene", "behavior", "personality", "traits", "mood", "visibility", "review"];
-const SUPREME_STEPS: Step[] = ["name", "scene", "behavior", "personality", "traits", "mood", "nsfw", "visibility", "review"];
+type Step = "name" | "genre" | "behavior" | "personality" | "traits" | "mood" | "nsfw" | "visibility" | "review";
+const BASE_STEPS: Step[] = ["name", "genre", "behavior", "personality", "traits", "mood", "visibility", "review"];
+const SUPREME_STEPS: Step[] = ["name", "genre", "behavior", "personality", "traits", "mood", "nsfw", "visibility", "review"];
 const STEP_LABELS: Record<Step, string> = {
   name:        "Choose a Name",
-  scene:       "Choose Scenes & Settings",
+  genre:       "Art Style & Character Type",
   behavior:    "Choose Behaviors",
   personality: "Choose Personality",
   traits:      "Choose Traits",
@@ -183,8 +183,13 @@ const STEP_LABELS: Record<Step, string> = {
   review:      "Review & Create",
 };
 
+const SUB_GENRES = [
+  "Fantasy", "Adventure", "Romance", "Horror", "Sci-Fi", "Cyberpunk",
+  "Supernatural", "Historical", "Modern", "Isekai", "Slice of Life",
+  "Thriller", "Drama", "Action", "Elf", "Vampire", "Demon", "Angel", "Warrior", "Mage",
+];
+const MAX_SUBGENRES = 2;
 const MAX_PERSONALITIES = 3;
-const MAX_SCENES = 5;
 const MAX_BEHAVIORS = 7;
 const MAX_TRAITS = 7;
 const MAX_MOODS = 5;
@@ -232,16 +237,17 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
   const { toast } = useToast();
   const STEPS = isSupremeAdmin ? SUPREME_STEPS : BASE_STEPS;
   const [step, setStep] = useState<Step>("name");
-  const [typeFilter, setTypeFilter] = useState("All");
   const [creating, setCreating] = useState(false);
   const [customName, setCustomName] = useState("");
+  const [customSubGenreInput, setCustomSubGenreInput] = useState("");
+  const [showCustomSubGenre, setShowCustomSubGenre] = useState(false);
 
-  type ListStep = "scenes" | "behaviors" | "personalities" | "traits" | "moods";
+  type ListStep = "behaviors" | "personalities" | "traits" | "moods";
   const [customText, setCustomText] = useState<Record<ListStep, string>>({
-    scenes: "", behaviors: "", personalities: "", traits: "", moods: "",
+    behaviors: "", personalities: "", traits: "", moods: "",
   });
   const [showCustom, setShowCustom] = useState<Record<ListStep, boolean>>({
-    scenes: false, behaviors: false, personalities: false, traits: false, moods: false,
+    behaviors: false, personalities: false, traits: false, moods: false,
   });
 
   function submitCustom(key: ListStep, max: number) {
@@ -252,7 +258,7 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
   }
 
   const [data, setData] = useState<WizardData>({
-    name: "", characterType: "Modern", scenes: [], behaviors: [],
+    name: "", artStyle: "", subGenres: [], behaviors: [],
     personalities: [], traits: [], moods: [], bio: "",
     age: "", initialGreeting: "", avatarUrl: "", visibility: "private",
     nsfwEnabled: false,
@@ -269,7 +275,7 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
     if (prev) setStep(prev);
   }
 
-  function toggle<K extends "behaviors" | "personalities" | "traits" | "moods" | "scenes">(
+  function toggle<K extends "behaviors" | "personalities" | "traits" | "moods">(
     key: K, value: string, max: number
   ) {
     setData(d => {
@@ -282,29 +288,23 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
 
   const canProceed = (): boolean => {
     if (step === "name") return data.name.length > 0;
-    if (step === "scene") return data.scenes.length >= 1;
+    if (step === "genre") return data.artStyle !== "" && data.subGenres.length >= 1;
     if (step === "behavior") return data.behaviors.length >= 1;
     return true;
   };
-
-  const filteredNames = typeFilter === "All"
-    ? CHARACTER_NAMES
-    : typeFilter === "Custom"
-    ? []
-    : CHARACTER_NAMES.filter(n => n.type === typeFilter);
 
   async function create() {
     if (!data.name.trim()) return;
     setCreating(true);
     try {
       const systemPrompt = buildSystemPrompt(data);
-      const tags = [data.characterType, ...data.behaviors.slice(0, 3)];
+      const tags = [...data.subGenres, ...data.behaviors.slice(0, 3)];
       if (data.nsfwEnabled) tags.push("#NSFW");
       await adminApi("POST", "/admin/characters/create", {
         name: data.name.trim(),
         bio: data.bio || undefined,
         age: data.age || undefined,
-        genre: data.characterType,
+        genre: data.artStyle || "Realistic",
         tags,
         avatarUrl: data.avatarUrl || undefined,
         initialGreeting: data.initialGreeting || undefined,
@@ -330,7 +330,7 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
         </button>
         <div className="flex-1">
           <h2 className="font-bold text-sm uppercase tracking-widest text-glow-blue">Character Wizard</h2>
-          {data.name && <p className="text-xs text-muted-foreground mt-0.5 truncate">{data.name} · {data.characterType}</p>}
+          {data.name && <p className="text-xs text-muted-foreground mt-0.5 truncate">{data.name}{data.artStyle ? ` · ${data.artStyle}` : ""}</p>}
         </div>
         <div className="text-xs text-muted-foreground font-mono">{stepIndex + 1}/{STEPS.length}</div>
       </div>
@@ -345,7 +345,7 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
       </div>
       <div className="px-4 pb-3 shrink-0">
         <span className="text-xs font-bold uppercase tracking-widest text-accent">{STEP_LABELS[step]}</span>
-        {step === "scene" && <span className="text-xs text-muted-foreground ml-2">pick up to {MAX_SCENES} · {data.scenes.length}/{MAX_SCENES}</span>}
+        {step === "genre" && data.artStyle && <span className="text-xs text-muted-foreground ml-2">{data.subGenres.length}/{MAX_SUBGENRES} types selected</span>}
         {step === "behavior" && <span className="text-xs text-muted-foreground ml-2">pick up to {MAX_BEHAVIORS} · {data.behaviors.length}/{MAX_BEHAVIORS}</span>}
         {step === "personality" && <span className="text-xs text-muted-foreground ml-2">pick up to {MAX_PERSONALITIES} · {data.personalities.length}/{MAX_PERSONALITIES}</span>}
         {step === "traits" && <span className="text-xs text-muted-foreground ml-2">pick up to {MAX_TRAITS} · {data.traits.length}/{MAX_TRAITS}</span>}
@@ -358,43 +358,29 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
         {/* ── Step: Name ── */}
         {step === "name" && (
           <div className="space-y-3">
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {CHARACTER_TYPES.map(t => (
-                <button key={t} onClick={() => setTypeFilter(t)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${
-                    typeFilter === t ? "bg-accent text-background border-accent" : "bg-card text-muted-foreground border-border hover:text-foreground"
-                  }`}>{t}</button>
+            <div className="grid grid-cols-3 gap-2">
+              {CHARACTER_NAMES.map(({ name, type }) => (
+                <button key={name} onClick={() => {
+                  setCustomName("");
+                  setData(d => ({ ...d, name }));
+                  setTimeout(goNext, 120);
+                }}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    data.name === name && !customName
+                      ? "border-primary/60 bg-primary/15 box-glow-pink"
+                      : "border-border bg-card hover:border-primary/30"
+                  }`}>
+                  <div className="text-sm font-bold truncate">{name}</div>
+                  <div className={`text-[10px] px-1.5 py-0.5 rounded-full border inline-block mt-1 ${TYPE_COLORS[type] ?? "text-muted-foreground border-border"}`}>
+                    {type}
+                  </div>
+                </button>
               ))}
             </div>
 
-            {/* Preset name grid — hidden when Custom filter is active */}
-            {typeFilter !== "Custom" && filteredNames.length > 0 && (
-              <div className="grid grid-cols-3 gap-2">
-                {filteredNames.map(({ name, type }) => (
-                  <button key={name} onClick={() => {
-                    setCustomName("");
-                    setData(d => ({ ...d, name, characterType: type }));
-                    // Auto-advance immediately on preset name click
-                    setTimeout(goNext, 120);
-                  }}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
-                      data.name === name && data.characterType !== "Custom"
-                        ? "border-primary/60 bg-primary/15 box-glow-pink"
-                        : "border-border bg-card hover:border-primary/30"
-                    }`}>
-                    <div className="text-sm font-bold truncate">{name}</div>
-                    <div className={`text-[10px] px-1.5 py-0.5 rounded-full border inline-block mt-1 ${TYPE_COLORS[type] ?? "text-muted-foreground border-border"}`}>
-                      {type}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Always-visible custom name input — works on any filter */}
-            <div className={`pt-3 space-y-2 ${typeFilter !== "Custom" ? "border-t border-border mt-1" : ""}`}>
+            <div className="pt-3 space-y-2 border-t border-border mt-1">
               <label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                ✏️ {typeFilter === "Custom" ? "Enter a custom name" : "Or type your own name"}
+                ✏️ Or type your own name
               </label>
               <div className="flex gap-2">
                 <input
@@ -402,11 +388,7 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
                   onChange={e => {
                     const val = e.target.value;
                     setCustomName(val);
-                    if (val.trim()) {
-                      setData(d => ({ ...d, name: val.trim(), characterType: "Custom" }));
-                    } else {
-                      setData(d => ({ ...d, name: d.characterType === "Custom" ? "" : d.name, characterType: d.characterType === "Custom" ? "Modern" : d.characterType }));
-                    }
+                    setData(d => ({ ...d, name: val.trim() }));
                   }}
                   placeholder="e.g. Seraphina..."
                   className={`flex-1 h-10 rounded-lg border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none transition-colors ${
@@ -431,42 +413,113 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
           </div>
         )}
 
-        {/* ── Step: Scene (multi-select up to 5) ── */}
-        {step === "scene" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              {SCENES.map(scene => (
-                <button key={scene} onClick={() => toggle("scenes", scene, MAX_SCENES)}
-                  className={`p-3 rounded-xl border text-left text-sm font-semibold transition-all ${
-                    data.scenes.includes(scene)
-                      ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
-                      : "border-border bg-card text-foreground hover:border-primary/30 hover:text-primary"
-                  }`}>
-                  {data.scenes.includes(scene) && <Check size={10} className="inline mr-1" />}
-                  {scene}
-                </button>
-              ))}
-            </div>
-            {showCustom.scenes ? (
-              <div className="flex gap-2">
-                <input
-                  autoFocus
-                  value={customText.scenes}
-                  onChange={e => setCustomText(p => ({ ...p, scenes: e.target.value }))}
-                  onKeyDown={e => e.key === "Enter" && submitCustom("scenes", MAX_SCENES)}
-                  placeholder="Type a custom scene..."
-                  className="flex-1 h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-foreground focus:outline-none focus:border-accent"
-                />
-                <button onClick={() => submitCustom("scenes", MAX_SCENES)}
-                  className="px-3 h-9 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors">
-                  Add
-                </button>
+        {/* ── Step: Genre ── */}
+        {step === "genre" && (
+          <div className="space-y-5">
+            {/* Step A: Art Style */}
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                Step A — Art Style <span className="text-primary">*</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {(["Anime", "Realistic"] as const).map(style => (
+                  <button
+                    key={style}
+                    onClick={() => setData(d => ({ ...d, artStyle: style }))}
+                    className={`py-5 rounded-xl border text-sm font-bold transition-all flex flex-col items-center gap-2 ${
+                      data.artStyle === style
+                        ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
+                        : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                    }`}
+                  >
+                    <span className="text-3xl">{style === "Anime" ? "🌸" : "📷"}</span>
+                    {style}
+                    <span className="text-[10px] font-normal text-muted-foreground">
+                      {style === "Anime" ? "2D illustration style" : "Photo-realistic style"}
+                    </span>
+                  </button>
+                ))}
               </div>
-            ) : (
-              <button onClick={() => setShowCustom(p => ({ ...p, scenes: true }))}
-                className="w-full py-2 rounded-lg border border-dashed border-accent/40 text-accent text-xs font-semibold hover:bg-accent/5 transition-colors">
-                ➕ Add Custom
-              </button>
+            </div>
+
+            {/* Step B: Sub-genres (appears after art style is picked) */}
+            {data.artStyle && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                    Step B — Character Type
+                  </p>
+                  <span className="text-xs font-semibold text-muted-foreground">{data.subGenres.length}/{MAX_SUBGENRES}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[...SUB_GENRES, ...data.subGenres.filter(s => !SUB_GENRES.includes(s))].map(sg => {
+                    const selected = data.subGenres.includes(sg);
+                    const maxed = data.subGenres.length >= MAX_SUBGENRES && !selected;
+                    return (
+                      <button
+                        key={sg}
+                        disabled={maxed}
+                        onClick={() => {
+                          setData(d => ({
+                            ...d,
+                            subGenres: d.subGenres.includes(sg)
+                              ? d.subGenres.filter(x => x !== sg)
+                              : d.subGenres.length < MAX_SUBGENRES
+                                ? [...d.subGenres, sg]
+                                : d.subGenres,
+                          }));
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          selected
+                            ? "bg-primary/30 text-primary border-primary/60 box-glow-pink"
+                            : maxed
+                            ? "bg-card/40 text-muted-foreground/40 border-border/40 cursor-not-allowed"
+                            : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/30"
+                        }`}
+                      >
+                        {selected && <Check size={10} className="inline mr-1" />}{sg}
+                      </button>
+                    );
+                  })}
+                </div>
+                {showCustomSubGenre ? (
+                  <div className="flex gap-2 mt-3">
+                    <input
+                      autoFocus
+                      value={customSubGenreInput}
+                      onChange={e => setCustomSubGenreInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" && customSubGenreInput.trim() && data.subGenres.length < MAX_SUBGENRES) {
+                          setData(d => ({ ...d, subGenres: [...d.subGenres, customSubGenreInput.trim()] }));
+                          setCustomSubGenreInput("");
+                          setShowCustomSubGenre(false);
+                        }
+                      }}
+                      placeholder="Type a custom type..."
+                      className="flex-1 h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-foreground focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      onClick={() => {
+                        if (customSubGenreInput.trim() && data.subGenres.length < MAX_SUBGENRES) {
+                          setData(d => ({ ...d, subGenres: [...d.subGenres, customSubGenreInput.trim()] }));
+                          setCustomSubGenreInput("");
+                          setShowCustomSubGenre(false);
+                        }
+                      }}
+                      className="px-3 h-9 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors"
+                    >
+                      Add
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowCustomSubGenre(true)}
+                    className="w-full mt-3 py-2 rounded-lg border border-dashed border-accent/40 text-accent text-xs font-semibold hover:bg-accent/5 transition-colors"
+                  >
+                    ➕ Add Custom
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -666,13 +719,17 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
 
             {/* Summary card */}
             <div className="p-4 rounded-xl bg-card border border-primary/30 space-y-3 box-glow-blue">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <User size={14} className="text-accent" />
                 <span className="font-bold text-sm">{data.name}</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${TYPE_COLORS[data.characterType] ?? ""}`}>{data.characterType}</span>
+                {data.artStyle && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-primary/40 text-primary">{data.artStyle}</span>
+                )}
+                {data.subGenres.map(sg => (
+                  <span key={sg} className="text-[10px] px-1.5 py-0.5 rounded-full border border-accent/40 text-accent">{sg}</span>
+                ))}
               </div>
               <div className="text-xs text-muted-foreground space-y-1">
-                <div>🌍 <span className="text-foreground">{data.scenes.join(", ") || "—"}</span></div>
                 <div>⚡ {data.behaviors.join(", ") || "—"}</div>
                 <div>🎭 {data.personalities.join(", ") || "—"}</div>
                 <div>✨ {data.traits.join(", ") || "—"}</div>
