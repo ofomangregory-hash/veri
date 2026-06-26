@@ -26,7 +26,8 @@ function parseSearch(query: string) {
 }
 
 function matchesFilters(char: CharacterItem, genreTab: string, plain: string, hashtags: string[]): boolean {
-  if (char.genre !== genreTab) return false;
+  const charGenre = char.genre && ["Anime", "Realistic"].includes(char.genre) ? char.genre : "Anime";
+  if (charGenre !== genreTab) return false;
   if (plain && !char.name.toLowerCase().includes(plain)) return false;
   if (hashtags.length > 0) {
     const haystack = [

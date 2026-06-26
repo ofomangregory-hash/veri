@@ -94,6 +94,7 @@ router.get("/characters", async (req, res): Promise<void> => {
   }
 
   const { items, total } = await listSupabaseCharacters(listOpts);
+  console.log(`[characters] API returned ${items.length} characters (total=${total}, genre filter=${genre ?? "none"})`);
 
   const filtered = genre
     ? items.filter(c => c.genre === genre || c.tags.some(t => t.toLowerCase().includes(genre.toLowerCase())))

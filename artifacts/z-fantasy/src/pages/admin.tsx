@@ -716,7 +716,7 @@ export function Admin() {
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`relative shrink-0 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all whitespace-nowrap ${
-              activeTab === tab ? "bg-accent text-background box-glow-blue" : "text-muted-foreground hover:text-foreground"
+              activeTab === tab ? "bg-accent text-background box-glow-blue" : "text-foreground/70 hover:text-foreground"
             }`}
           >
             {tabLabel[tab]}

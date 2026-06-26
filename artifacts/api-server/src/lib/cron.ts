@@ -6,6 +6,7 @@ import { supabase } from "./supabase";
 import { getBot } from "./telegram-bot";
 
 async function runAutoGiftClaim(): Promise<void> {
+  console.log("Auto claim cron fired", new Date());
   try {
     const now = new Date();
 

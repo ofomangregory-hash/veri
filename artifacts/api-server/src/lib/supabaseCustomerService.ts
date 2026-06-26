@@ -77,9 +77,14 @@ export async function getAllCsThreads(
     if (status && status !== "all") query = query.eq("status", status);
 
     const { data, error, count } = await query;
-    if (error) { logger.warn({ error }, "getAllCsThreads: failed"); return { threads: [], total: 0 }; }
+    if (error) {
+      console.error("actual error:", error.message, error.code, error.details);
+      logger.warn({ error }, "getAllCsThreads: failed");
+      return { threads: [], total: 0 };
+    }
     return { threads: (data ?? []).map(mapThread), total: count ?? 0 };
   } catch (err) {
+    console.error("actual error:", err);
     logger.warn({ err }, "getAllCsThreads: failed");
     return { threads: [], total: 0 };
   }
