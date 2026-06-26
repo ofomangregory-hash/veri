@@ -178,18 +178,19 @@ export function Admin() {
   const [activeChatsSearch, setActiveChatsSearch] = useState("");
   const [activeChatsPage, setActiveChatsPage] = useState(1);
 
-  useEffect(() => {
+  const fetchCsUnread = useCallback(async () => {
     if (!isGodMode) return;
-    const fetchCsUnread = async () => {
-      try {
-        const data = await adminApi<{ count: number }>("GET", "/admin/cs/unread-count");
-        setCsUnreadCount(data.count ?? 0);
-      } catch {}
-    };
+    try {
+      const data = await adminApi<{ count: number }>("GET", "/admin/cs/unread-count");
+      setCsUnreadCount(data.count ?? 0);
+    } catch {}
+  }, [isGodMode]);
+
+  useEffect(() => {
     void fetchCsUnread();
     const id = setInterval(fetchCsUnread, 30_000);
     return () => clearInterval(id);
-  }, [isGodMode]);
+  }, [fetchCsUnread]);
 
   const loadActiveChats = useCallback(async (search = "", page = 1) => {
     setActiveChatsLoading(true);
@@ -1788,7 +1789,7 @@ export function Admin() {
 
       {/* ── Customer Service ── */}
       {activeTab === "cs" && isGodMode && (
-        <AdminCsTab />
+        <AdminCsTab onThreadRead={() => { void fetchCsUnread(); }} />
       )}
 
       {/* ── Transactions (All) ── */}

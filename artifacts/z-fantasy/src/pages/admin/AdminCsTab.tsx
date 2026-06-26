@@ -43,7 +43,11 @@ function fmtTime(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function AdminCsTab() {
+interface AdminCsTabProps {
+  onThreadRead?: () => void;
+}
+
+export function AdminCsTab({ onThreadRead }: AdminCsTabProps) {
   const [threads, setThreads] = useState<CsThread[]>([]);
   const [selectedThread, setSelectedThread] = useState<CsThread | null>(null);
   const [messages, setMessages] = useState<CsMessage[]>([]);
@@ -81,6 +85,7 @@ export function AdminCsTab() {
         adminApi("PATCH", `/admin/cs/threads/${thread.id}/read`).catch(() => {}),
       ]);
       setMessages(msgs);
+      onThreadRead?.();
     } catch (e) {
       setError(String(e));
     }
