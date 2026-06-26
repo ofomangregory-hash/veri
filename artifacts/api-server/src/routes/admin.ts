@@ -1172,4 +1172,158 @@ router.delete("/admin/conversations/:conversationId", adminOnly, async (req, res
   res.json({ ok: true });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// IMAGES MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// GET /admin/images/stats — aggregate vault counts by type + character
+router.get("/admin/images/stats", adminOnly, async (req, res): Promise<void> => {
+  if (!supabase) { res.json({ byType: {}, byCharacter: [], totalBlurred: 0, total: 0 }); return; }
+  try {
+    const { data } = await supabase.from("vault_items").select("media_type, is_blurred, character_id, character_name");
+    const rows = (data ?? []) as { media_type: string; is_blurred: boolean; character_id: string; character_name: string }[];
+    const byType: Record<string, number> = {};
+    const charMap: Record<string, { characterId: string; characterName: string; count: number; blurred: number }> = {};
+    let totalBlurred = 0;
+    for (const r of rows) {
+      byType[r.media_type] = (byType[r.media_type] ?? 0) + 1;
+      if (r.is_blurred) totalBlurred++;
+      if (!charMap[r.character_id]) charMap[r.character_id] = { characterId: r.character_id, characterName: r.character_name, count: 0, blurred: 0 };
+      charMap[r.character_id].count++;
+      if (r.is_blurred) charMap[r.character_id].blurred++;
+    }
+    res.json({ byType, byCharacter: Object.values(charMap).sort((a, b) => b.count - a.count), totalBlurred, total: rows.length });
+  } catch (err) {
+    logger.warn({ err }, "admin/images/stats failed");
+    res.json({ byType: {}, byCharacter: [], totalBlurred: 0, total: 0 });
+  }
+});
+
+// GET /admin/images/avatars — all characters with avatar data
+router.get("/admin/images/avatars", adminOnly, async (req, res): Promise<void> => {
+  try {
+    const chars = await listSupabaseCharacters({ limit: 500 });
+    res.json(chars.items.map(c => ({
+      characterId: c.characterId,
+      name: c.name,
+      genre: c.genre,
+      avatarUrl: c.avatarUrl,
+      visibility: c.visibility,
+      subGenres: c.subGenres ?? [],
+      imageSeed: c.imageSeed ?? String(Math.floor(Math.random() * 9999999)),
+    })));
+  } catch (err) {
+    logger.warn({ err }, "admin/images/avatars failed");
+    res.json([]);
+  }
+});
+
+// POST /admin/images/regenerate-avatar/:characterId — regenerate avatar via Pollinations
+router.post("/admin/images/regenerate-avatar/:characterId", adminOnly, async (req, res): Promise<void> => {
+  const { characterId } = req.params;
+  try {
+    const char = await getSupabaseCharacterById(characterId);
+    if (!char) { res.status(404).json({ error: "Character not found" }); return; }
+    const avatarUrl = await generateCharacterAvatar({
+      characterName: char.name,
+      genre: char.genre ?? "Anime",
+      teaserDescription: char.teaserDescription,
+      imageSeed: char.imageSeed ?? String(Math.floor(Math.random() * 9999999)),
+      avatarUrl: char.avatarUrl,
+      subGenres: Array.isArray(char.subGenres) ? char.subGenres as string[] : [],
+    });
+    await updateSupabaseCharacter(characterId, { avatar_url: avatarUrl });
+    await db.update(charactersTable).set({ avatarUrl }).where(eq(charactersTable.characterId, characterId));
+    res.json({ avatarUrl });
+  } catch (err) {
+    logger.warn({ err }, "admin/images/regenerate-avatar failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /admin/images/vault — vault items with filters
+router.get("/admin/images/vault", adminOnly, async (req, res): Promise<void> => {
+  if (!supabase) { res.json({ items: [], total: 0 }); return; }
+  try {
+    const { characterId, mediaType, blurred, page } = req.query as Record<string, string>;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limit = 50;
+    const offset = (pageNum - 1) * limit;
+    let query = supabase.from("vault_items").select("*", { count: "exact" }).order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+    if (characterId) query = query.eq("character_id", characterId);
+    if (mediaType) query = query.eq("media_type", mediaType);
+    if (blurred === "true") query = query.eq("is_blurred", true);
+    if (blurred === "false") query = query.eq("is_blurred", false);
+    const { data, count } = await query;
+    res.json({ items: data ?? [], total: count ?? 0 });
+  } catch (err) {
+    logger.warn({ err }, "admin/images/vault failed");
+    res.json({ items: [], total: 0 });
+  }
+});
+
+// DELETE /admin/images/vault/:itemId — delete a vault item
+router.delete("/admin/images/vault/:itemId", adminOnly, async (req, res): Promise<void> => {
+  if (!supabase) { res.status(503).json({ error: "Supabase unavailable" }); return; }
+  try {
+    await supabase.from("vault_items").delete().eq("id", req.params.itemId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /admin/images/trigger-words/:characterId
+router.get("/admin/images/trigger-words/:characterId", adminOnly, async (req, res): Promise<void> => {
+  const { getTriggerWordsForCharacter } = await import("../lib/supabaseTriggerWords");
+  const words = await getTriggerWordsForCharacter(req.params.characterId);
+  res.json(words);
+});
+
+// POST /admin/images/trigger-words/:characterId
+router.post("/admin/images/trigger-words/:characterId", adminOnly, async (req, res): Promise<void> => {
+  const { addTriggerWord } = await import("../lib/supabaseTriggerWords");
+  const { word } = req.body as { word: string };
+  if (!word?.trim()) { res.status(400).json({ error: "word required" }); return; }
+  const result = await addTriggerWord(req.params.characterId, word.trim());
+  if (!result) { res.status(500).json({ error: "Failed to add trigger word" }); return; }
+  res.json(result);
+});
+
+// DELETE /admin/images/trigger-words/:wordId
+router.delete("/admin/images/trigger-words/:wordId", adminOnly, async (req, res): Promise<void> => {
+  const { removeTriggerWord } = await import("../lib/supabaseTriggerWords");
+  await removeTriggerWord(req.params.wordId);
+  res.json({ ok: true });
+});
+
+// GET /admin/images/auto-loop — daily auto-image counts per character
+router.get("/admin/images/auto-loop", adminOnly, async (req, res): Promise<void> => {
+  try {
+    const rows = await db
+      .select({
+        characterId: conversationsTable.characterId,
+        dailyCount: sql<number>`SUM(${conversationsTable.dailyAutoImageCount})`,
+        msgCount: sql<number>`SUM(${conversationsTable.messageCount})`,
+        convCount: sql<number>`COUNT(*)`,
+      })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.archived, false))
+      .groupBy(conversationsTable.characterId);
+    res.json(rows);
+  } catch (err) {
+    logger.warn({ err }, "admin/images/auto-loop failed");
+    res.json([]);
+  }
+});
+
+// POST /admin/images/auto-loop/reset/:characterId — reset daily auto count for all convs of a character
+router.post("/admin/images/auto-loop/reset/:characterId", adminOnly, async (req, res): Promise<void> => {
+  const { characterId } = req.params;
+  await db.update(conversationsTable)
+    .set({ dailyAutoImageCount: 0 })
+    .where(eq(conversationsTable.characterId, characterId));
+  res.json({ ok: true });
+});
+
 export default router;
