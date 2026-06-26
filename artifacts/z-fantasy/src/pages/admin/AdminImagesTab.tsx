@@ -121,11 +121,26 @@ function OverviewTab() {
 }
 
 // ── Avatars ───────────────────────────────────────────────────────────────────
+type BulkStatus = "idle" | "running" | "done" | "cancelled";
+
+interface BulkState {
+  status: BulkStatus;
+  done: number;
+  total: number;
+  failed: string[];
+  current: string | null;
+  cancelRequested: boolean;
+}
+
+const EMPTY_BULK: BulkState = { status: "idle", done: 0, total: 0, failed: [], current: null, cancelRequested: false };
+
 function AvatarsTab() {
   const [chars, setChars] = useState<AvatarChar[]>([]);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
+  const [bulk, setBulk] = useState<BulkState>(EMPTY_BULK);
+  const cancelRef = { current: false };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -143,12 +158,91 @@ function AvatarsTab() {
     setRegenerating(p => ({ ...p, [c.characterId]: false }));
   };
 
+  const startBulk = async (targets: AvatarChar[]) => {
+    if (!targets.length) return;
+    cancelRef.current = false;
+    setBulk({ status: "running", done: 0, total: targets.length, failed: [], current: null, cancelRequested: false });
+
+    const failed: string[] = [];
+    for (let i = 0; i < targets.length; i++) {
+      if (cancelRef.current) {
+        setBulk(p => ({ ...p, status: "cancelled", current: null }));
+        return;
+      }
+      const c = targets[i];
+      setBulk(p => ({ ...p, current: c.name }));
+      try {
+        const { avatarUrl } = await adminApi<{ avatarUrl: string }>("POST", `/admin/images/regenerate-avatar/${c.characterId}`);
+        setChars(prev => prev.map(ch => ch.characterId === c.characterId ? { ...ch, avatarUrl } : ch));
+      } catch {
+        failed.push(c.name);
+      }
+      setBulk(p => ({ ...p, done: i + 1, failed: [...failed] }));
+    }
+    setBulk(p => ({ ...p, status: "done", current: null, failed }));
+  };
+
+  const cancelBulk = () => {
+    cancelRef.current = true;
+    setBulk(p => ({ ...p, cancelRequested: true }));
+  };
+
   const filtered = chars.filter(c => !search.trim() || c.name.toLowerCase().includes(search.toLowerCase()));
+  const isRunning = bulk.status === "running";
+  const pct = bulk.total > 0 ? Math.round((bulk.done / bulk.total) * 100) : 0;
 
   return (
     <div className="space-y-4">
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search characters…"
-        className="w-full h-9 rounded-lg border border-border bg-card text-sm px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent/50" />
+      {/* Search + Bulk buttons */}
+      <div className="flex gap-2 items-center">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search characters…"
+          className="flex-1 h-9 rounded-lg border border-border bg-card text-sm px-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent/50" />
+        {!isRunning ? (
+          <button
+            onClick={() => startBulk(filtered)}
+            disabled={loading || filtered.length === 0}
+            className="shrink-0 h-9 px-3 rounded-lg bg-pink-500/20 border border-pink-500/40 text-pink-300 text-[10px] font-bold flex items-center gap-1 hover:bg-pink-500/30 disabled:opacity-40 transition-colors">
+            <RefreshCw size={11} /> Regen All ({filtered.length})
+          </button>
+        ) : (
+          <button
+            onClick={cancelBulk}
+            disabled={bulk.cancelRequested}
+            className="shrink-0 h-9 px-3 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 text-[10px] font-bold flex items-center gap-1 hover:bg-red-500/30 disabled:opacity-40 transition-colors">
+            <X size={11} /> Cancel
+          </button>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      {bulk.status !== "idle" && (
+        <div className="rounded-xl border border-pink-500/30 bg-card p-4 space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-pink-300">
+              {bulk.status === "running" && `Generating… ${bulk.done} / ${bulk.total}`}
+              {bulk.status === "done" && `✅ Done — ${bulk.done} regenerated${bulk.failed.length ? `, ${bulk.failed.length} failed` : ""}`}
+              {bulk.status === "cancelled" && `⛔ Cancelled — ${bulk.done} / ${bulk.total} done`}
+            </span>
+            <span className="text-muted-foreground">{pct}%</span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+            <div className="h-full bg-pink-500 rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+          </div>
+          {bulk.current && (
+            <p className="text-[10px] text-muted-foreground truncate">Currently: {bulk.current}</p>
+          )}
+          {bulk.failed.length > 0 && (
+            <div className="text-[10px] text-red-400">
+              Failed: {bulk.failed.join(", ")}
+            </div>
+          )}
+          {bulk.status !== "running" && (
+            <button onClick={() => setBulk(EMPTY_BULK)} className="text-[10px] text-muted-foreground hover:text-foreground underline">Dismiss</button>
+          )}
+        </div>
+      )}
+
+      {/* Grid */}
       {loading ? (
         <div className="grid grid-cols-2 gap-3">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-40 bg-card rounded-xl border border-border animate-pulse" />)}</div>
       ) : (
@@ -172,7 +266,7 @@ function AvatarsTab() {
                 <div className="text-xs font-bold truncate mb-1.5">{c.name}</div>
                 <button
                   onClick={() => regenerate(c)}
-                  disabled={regenerating[c.characterId]}
+                  disabled={regenerating[c.characterId] || isRunning}
                   className="w-full py-1.5 rounded-lg bg-accent/20 border border-accent/40 text-accent text-[10px] font-bold flex items-center justify-center gap-1 hover:bg-accent/30 disabled:opacity-50 transition-colors">
                   <RefreshCw size={10} className={regenerating[c.characterId] ? "animate-spin" : ""} />
                   {regenerating[c.characterId] ? "Generating…" : "Regenerate"}
