@@ -73,6 +73,8 @@ export interface GenerateSelfieOptions {
   contentLevelWords?: string;
   /** Character sub-genre/trait tags appended to the prompt for context */
   tags?: string[];
+  /** Sub-genres appended to prompt for visual context */
+  subGenres?: string[];
 }
 
 export interface GenerateAvatarOptions {
@@ -82,10 +84,11 @@ export interface GenerateAvatarOptions {
   imageSeed: string;
   nsfwEnabled?: boolean;
   avatarUrl?: string | null;
+  subGenres?: string[];
 }
 
 function buildPrompt(opts: GenerateSelfieOptions): string {
-  const { characterName, genre, teaserDescription, sceneDescription, contentLevelWords, tags } = opts;
+  const { characterName, genre, teaserDescription, sceneDescription, contentLevelWords, tags, subGenres } = opts;
 
   const artStylePrefix =
     genre === "Anime"
@@ -98,7 +101,8 @@ function buildPrompt(opts: GenerateSelfieOptions): string {
     ? teaserDescription.replace(/\n/g, " ").slice(0, 150)
     : `stunning companion`;
 
-  const tagContext = tags && tags.length > 0 ? tags.join(", ") : null;
+  const allTags = [...(tags ?? []), ...(subGenres ?? [])];
+  const tagContext = allTags.length > 0 ? allTags.join(", ") : null;
 
   const parts: (string | null | undefined)[] = [
     characterName,
@@ -232,6 +236,7 @@ export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Prom
     sceneDescription: "close-up portrait, looking at camera, soft studio lighting, high detail",
     nsfwEnabled: opts.nsfwEnabled ?? false,
     avatarUrl: opts.avatarUrl,
+    subGenres: opts.subGenres,
   });
 }
 

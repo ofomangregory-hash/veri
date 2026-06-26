@@ -216,19 +216,24 @@ export function Explore() {
                       {char.teaserDescription}
                     </p>
                   )}
-                  {char.tags && char.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {char.tags.slice(0, 3).map(tag => (
-                        <button
-                          key={tag}
-                          onClick={e => { e.stopPropagation(); addTagToSearch(tag); }}
-                          className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary/20 border border-secondary/30 text-secondary font-semibold hover:bg-secondary/30 transition-colors"
-                        >
-                          #{tag}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {(() => {
+                    const chips = (char.subGenres && char.subGenres.length > 0)
+                      ? char.subGenres
+                      : (char.tags ?? []).slice(0, 3);
+                    return chips.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {chips.map(tag => (
+                          <button
+                            key={tag}
+                            onClick={e => { e.stopPropagation(); addTagToSearch(tag); }}
+                            className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary/20 border border-secondary/30 text-secondary font-semibold hover:bg-secondary/30 transition-colors"
+                          >
+                            #{tag}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
               </button>
             ))
@@ -271,8 +276,21 @@ export function Explore() {
             <div className="px-5 pt-3 pb-28 space-y-4">
               <div>
                 <h2 className="text-2xl font-bold text-white tracking-wide">{selectedChar.name}</h2>
-                {selectedChar.tags && selectedChar.tags.length > 0 && (
+                {selectedChar.subGenres && selectedChar.subGenres.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
+                    {selectedChar.subGenres.map(sg => (
+                      <button
+                        key={sg}
+                        onClick={() => { setSelectedChar(null); addTagToSearch(sg); }}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-primary/20 border border-primary/40 text-primary font-semibold hover:bg-primary/30 transition-colors"
+                      >
+                        #{sg}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedChar.tags && selectedChar.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
                     {selectedChar.tags.map(tag => (
                       <button
                         key={tag}

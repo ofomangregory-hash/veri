@@ -52,6 +52,7 @@ function serializeCharacter(c: NormalizedCharacter) {
     teaserDescription: c.teaserDescription,
     initialGreeting: c.initialGreeting,
     tags: c.tags,
+    subGenres: c.subGenres ?? [],
     genre: c.genre ?? "Fantasy",
     age: c.age ?? null,
     triggerMetadataArray: triggerMeta,
@@ -98,12 +99,12 @@ router.get("/characters", async (req, res): Promise<void> => {
     ? items.filter(c => c.genre === genre || c.tags.some(t => t.toLowerCase().includes(genre.toLowerCase())))
     : items;
 
-  res.json(ListCharactersResponse.parse({
+  res.json({
     items: filtered.map(serializeCharacter),
     total: genre ? filtered.length : total,
     page: page ?? 1,
     limit: limit ?? 20,
-  }));
+  });
 });
 
 router.get("/characters/trending", async (req, res): Promise<void> => {
@@ -215,6 +216,10 @@ router.post("/characters", async (req, res): Promise<void> => {
     : false;
 
   const imageSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
+  const createBody = req.body as Record<string, unknown>;
+  const subGenres: string[] = Array.isArray(createBody.subGenres)
+    ? (createBody.subGenres as string[]).slice(0, 2)
+    : [];
   const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
 
   let finalAvatarUrl = parsed.data.avatarUrl ?? null;
@@ -225,6 +230,7 @@ router.post("/characters", async (req, res): Promise<void> => {
         genre: parsed.data.genre,
         teaserDescription: parsed.data.bio ?? null,
         imageSeed,
+        subGenres,
       });
     } catch (err) {
       logger.warn({ err }, "Avatar generation failed — using genre default");
@@ -241,6 +247,8 @@ router.post("/characters", async (req, res): Promise<void> => {
     teaserDescription: parsed.data.bio ?? null,
     initialGreeting: parsed.data.initialGreeting ?? null,
     tags: parsed.data.tags ?? [],
+    subGenres,
+    genre: parsed.data.genre,
     tagline: null,
     imageSeed,
     isNsfw,
@@ -289,6 +297,12 @@ router.patch("/characters/:characterId", async (req, res): Promise<void> => {
     return;
   }
 
+  const patchBody = req.body as Record<string, unknown>;
+  const genreUpdate = typeof patchBody.genre === "string" ? patchBody.genre : undefined;
+  const subGenresUpdate = Array.isArray(patchBody.subGenres)
+    ? (patchBody.subGenres as string[]).slice(0, 2)
+    : undefined;
+
   const updated = await updateSupabaseCharacter(params.data.characterId, {
     name: parsed.data.name ?? undefined,
     teaserDescription: parsed.data.bio ?? undefined,
@@ -297,6 +311,8 @@ router.patch("/characters/:characterId", async (req, res): Promise<void> => {
     tags: parsed.data.tags ?? undefined,
     avatarUrl: parsed.data.avatarUrl ?? undefined,
     systemPrompt: parsed.data.systemPrompt ?? undefined,
+    genre: genreUpdate,
+    subGenres: subGenresUpdate,
   });
 
   if (!updated) {
@@ -304,7 +320,7 @@ router.patch("/characters/:characterId", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(UpdateCharacterResponse.parse(serializeCharacter(updated)));
+  res.json(serializeCharacter(updated));
 });
 
 router.delete("/characters/:characterId", async (req, res): Promise<void> => {

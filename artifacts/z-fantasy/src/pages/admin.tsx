@@ -97,6 +97,10 @@ export function Admin() {
   const [bannerAdCtaUrl, setBannerAdCtaUrl] = useState("");
   const [priceOverrides, setPriceOverrides] = useState<Record<string, string>>({});
   const [charOverlayMap, setCharOverlayMap] = useState<Record<string, string>>({});
+  const [charGenreMap, setCharGenreMap] = useState<Record<string, string>>({});
+  const [charSubGenresMap, setCharSubGenresMap] = useState<Record<string, string[]>>({});
+  const [charSubGenreInputMap, setCharSubGenreInputMap] = useState<Record<string, string>>({});
+  const [charGenreSaving, setCharGenreSaving] = useState<Record<string, boolean>>({});
 
   // ── Economy price state (all editable from Supabase) ─────────────────────
   const [ecoMsgCost, setEcoMsgCost] = useState("1");
@@ -1035,6 +1039,68 @@ export function Admin() {
                         </button>
                       </div>
                     )}
+                    {/* Art Style & Sub Genres editor */}
+                    {isGodMode && (() => {
+                      const curGenre = charGenreMap[char.characterId] ?? char.genre ?? "";
+                      const rawSg = (char as Record<string, unknown>).subGenres;
+                      const curSubGenres: string[] = charSubGenresMap[char.characterId] ?? (Array.isArray(rawSg) ? rawSg as string[] : []);
+                      const curInput = charSubGenreInputMap[char.characterId] ?? "";
+                      const saving = charGenreSaving[char.characterId] ?? false;
+                      const addSg = (val: string) => {
+                        if (!val.trim() || curSubGenres.length >= 2) return;
+                        setCharSubGenresMap(p => ({ ...p, [char.characterId]: [...curSubGenres, val.trim()] }));
+                        setCharSubGenreInputMap(p => ({ ...p, [char.characterId]: "" }));
+                      };
+                      return (
+                        <div className="border border-border rounded-xl p-3 space-y-2 mb-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Art Style &amp; Character Types</p>
+                          <div className="flex gap-2">
+                            {(["Anime", "Realistic"] as const).map(style => (
+                              <button key={style}
+                                onClick={() => setCharGenreMap(p => ({ ...p, [char.characterId]: style }))}
+                                className={`flex-1 py-1.5 rounded-lg border text-xs font-bold transition-all ${
+                                  curGenre === style
+                                    ? "border-primary/60 bg-primary/15 text-primary"
+                                    : "border-border text-muted-foreground hover:border-primary/30"
+                                }`}>
+                                {style === "Anime" ? "🌸" : "📷"} {style}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 items-center min-h-[28px]">
+                            {curSubGenres.map((sg: string) => (
+                              <span key={sg} className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-secondary/20 border border-secondary/30 text-secondary text-[10px] font-semibold">
+                                {sg}
+                                <button onClick={() => setCharSubGenresMap(p => ({ ...p, [char.characterId]: curSubGenres.filter(x => x !== sg) }))} className="ml-0.5 leading-none hover:text-red-400">×</button>
+                              </span>
+                            ))}
+                            {curSubGenres.length < 2 && (
+                              <div className="flex gap-1 items-center">
+                                <input value={curInput}
+                                  onChange={e => setCharSubGenreInputMap(p => ({ ...p, [char.characterId]: e.target.value }))}
+                                  onKeyDown={e => { if (e.key === "Enter") addSg(curInput); }}
+                                  placeholder="Add type…" maxLength={32}
+                                  className="h-7 w-24 rounded-lg border border-accent/40 bg-card px-2 text-xs text-white focus:outline-none focus:border-accent" />
+                                <button onClick={() => addSg(curInput)} className="px-2 h-7 rounded-lg bg-accent/20 text-accent text-[10px] font-bold border border-accent/40 hover:bg-accent/30">Add</button>
+                              </div>
+                            )}
+                          </div>
+                          <button disabled={saving}
+                            onClick={async () => {
+                              setCharGenreSaving(p => ({ ...p, [char.characterId]: true }));
+                              try {
+                                await adminApi("PATCH", `/characters/${char.characterId}`, { genre: curGenre || undefined, subGenres: curSubGenres });
+                                toast({ title: "✅ Art style & types saved!" });
+                              } catch (e) { toast({ title: "Save failed", description: String(e), variant: "destructive" }); }
+                              setCharGenreSaving(p => ({ ...p, [char.characterId]: false }));
+                            }}
+                            className="w-full py-1.5 rounded-lg bg-primary/10 border border-primary/40 text-primary text-xs font-bold hover:bg-primary/20 disabled:opacity-50 flex items-center justify-center gap-1">
+                            {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+                            {saving ? "Saving…" : "Save Style & Types"}
+                          </button>
+                        </div>
+                      );
+                    })()}
                     <label className="text-xs text-muted-foreground flex items-center gap-1.5">
                       <MessageSquare size={12} /> Promotional Overlay Text
                     </label>

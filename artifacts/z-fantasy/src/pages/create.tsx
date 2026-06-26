@@ -148,6 +148,7 @@ export function Create() {
         body: JSON.stringify({
           name: resolvedName,
           genre: artStyle || "Realistic",
+          subGenres,
           age: age || undefined,
           bio: bio || undefined,
           initialGreeting: greeting || undefined,

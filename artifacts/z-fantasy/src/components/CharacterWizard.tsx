@@ -305,6 +305,7 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
         bio: data.bio || undefined,
         age: data.age || undefined,
         genre: data.artStyle || "Realistic",
+        subGenres: data.subGenres,
         tags,
         avatarUrl: data.avatarUrl || undefined,
         initialGreeting: data.initialGreeting || undefined,

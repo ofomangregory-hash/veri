@@ -13,6 +13,8 @@ export interface SupabaseCharacterRow {
   teaser_description: string | null;
   initial_greeting: string | null;
   tags: string[];
+  sub_genres: string[] | null;
+  genre: string | null;
   trigger_metadata_array: unknown[];
   tagline: string | null;
   character_advertisement: string | null;
@@ -30,6 +32,7 @@ export interface NormalizedCharacter {
   teaserDescription: string | null;
   initialGreeting: string | null;
   tags: string[];
+  subGenres: string[];
   genre: string | null;
   age: string | null;
   triggerMetadataArray: unknown[] | null;
@@ -69,7 +72,8 @@ export function serializeSupabaseCharacter(row: SupabaseCharacterRow): Normalize
     teaserDescription: row.teaser_description ?? null,
     initialGreeting: row.initial_greeting ?? null,
     tags: row.tags ?? [],
-    genre: deriveGenre(row.tags ?? []),
+    subGenres: row.sub_genres ?? [],
+    genre: row.genre ?? deriveGenre(row.tags ?? []),
     age: null,
     triggerMetadataArray: row.trigger_metadata_array ?? null,
     tagline: row.tagline ?? null,
@@ -88,6 +92,7 @@ function normalizeLocalCharacter(row: typeof charactersTable.$inferSelect): Norm
     teaserDescription: row.teaserDescription ?? null,
     initialGreeting: row.initialGreeting ?? null,
     tags: row.tags ?? [],
+    subGenres: [],
     genre: row.genre ?? null,
     age: row.age ?? null,
     triggerMetadataArray: Array.isArray(row.triggerMetadataArray) ? (row.triggerMetadataArray as unknown[]) : null,
@@ -197,6 +202,8 @@ export async function createSupabaseCharacter(values: {
   teaserDescription?: string | null;
   initialGreeting?: string | null;
   tags?: string[];
+  subGenres?: string[];
+  genre?: string;
   tagline?: string | null;
   imageSeed?: string | null;
   isNsfw?: boolean;
@@ -214,6 +221,8 @@ export async function createSupabaseCharacter(values: {
         teaser_description: values.teaserDescription ?? null,
         initial_greeting: values.initialGreeting ?? null,
         tags: values.tags ?? [],
+        sub_genres: values.subGenres ?? [],
+        genre: values.genre ?? null,
         tagline: values.tagline ?? null,
         image_seed: values.imageSeed ? parseInt(values.imageSeed) : null,
         trigger_metadata_array: [],
@@ -248,7 +257,7 @@ export async function createSupabaseCharacter(values: {
       teaserDescription: values.teaserDescription ?? null,
       initialGreeting: values.initialGreeting ?? null,
       tags: values.tags ?? [],
-      genre: "Modern",
+      genre: values.genre ?? "Modern",
       imageSeed: values.imageSeed ?? null,
     }).returning();
     return normalizeLocalCharacter(row);
@@ -266,6 +275,8 @@ export async function updateSupabaseCharacter(
     initialGreeting?: string | null;
     visibility?: "public" | "private" | "premium";
     tags?: string[];
+    subGenres?: string[];
+    genre?: string;
     avatarUrl?: string | null;
     systemPrompt?: string;
     tagline?: string | null;
@@ -282,6 +293,8 @@ export async function updateSupabaseCharacter(
     if (values.avatarUrl !== undefined) payload.avatar_url = values.avatarUrl;
     if (values.systemPrompt != null) payload.system_prompt = values.systemPrompt;
     if (values.tagline !== undefined) payload.tagline = values.tagline;
+    if (values.genre != null) payload.genre = values.genre;
+    if (values.subGenres != null) payload.sub_genres = values.subGenres;
     if (typeof values.isNsfw === "boolean") {
       const currentTags = (values.tags ?? []);
       const baseTags = currentTags.filter(t => t !== "#NSFW");
@@ -311,6 +324,7 @@ export async function updateSupabaseCharacter(
     if (values.initialGreeting !== undefined) localPayload.initialGreeting = values.initialGreeting;
     if (values.visibility != null) localPayload.visibility = values.visibility;
     if (values.tags != null) localPayload.tags = values.tags;
+    if (values.genre != null) localPayload.genre = values.genre;
     if (values.avatarUrl !== undefined) localPayload.avatarUrl = values.avatarUrl;
     if (values.systemPrompt != null) localPayload.systemPrompt = values.systemPrompt;
 
