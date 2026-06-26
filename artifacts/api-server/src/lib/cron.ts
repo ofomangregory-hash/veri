@@ -46,8 +46,10 @@ async function runAutoGiftClaim(): Promise<void> {
           actionType: "auto_daily_claim",
           ticketAmount: TICKETS_REWARD,
         });
+        console.log(`Auto claim success for ${user.id}`);
         claimedCount++;
       } catch (err) {
+        console.error(`Auto claim error for ${user.id}:`, err);
         logger.warn({ err, userId: user.id }, "Auto-claim failed for user");
       }
     }
@@ -128,6 +130,7 @@ async function runUnreadNotifications(): Promise<void> {
 
     logger.info({ count: rows.length }, "Unread notifications sent");
   } catch (err) {
+    console.error("runUnreadNotifications actual error:", err);
     logger.error({ err }, "runUnreadNotifications: failed");
   }
 }

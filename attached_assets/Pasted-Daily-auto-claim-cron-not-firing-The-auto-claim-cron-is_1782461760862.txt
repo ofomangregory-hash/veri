@@ -1,0 +1,40 @@
+Daily auto claim cron not firing
+
+The auto claim cron is registered on startup (Cron jobs started appears in logs) but Auto claim cron fired never appears, meaning it's either crashing silently or the function is broken inside. Fix it:
+
+Find the auto claim cron function
+Add console.log('Auto claim cron fired', new Date()) as the very first line
+Check the Supabase query inside — likely hitting a column that doesn't exist or a bad query
+The users table has these columns: last_daily_claim (timestamp with time zone), ticket_balance (integer), neon_card_balance (integer)
+Fix the query to use exact column names above
+Do not change claim amounts or timing
+Log Auto claim success for {telegram_id} for every user processed
+Log Auto claim error for {telegram_id}: {error} for any individual failure so we can see it in Railway
+
+2. runUnreadNotifications failing
+
+The push notification cron fires but immediately fails. Fix it:
+
+Find the runUnreadNotifications function
+Add console.error('runUnreadNotifications actual error:', error) in the catch block so the real error shows in Railway logs
+The conversations table has notify_after and last_notified_at columns — verify the query uses exactly these names
+Fix whatever column or query mismatch is causing the failure
+Return gracefully instead of throwing so it doesn't crash the cron
+
+3. OpenRouter — all models returning 404
+
+All OpenRouter model attempts are failing. Replace the model list with these currently working free models:
+
+meta-llama/llama-3.1-8b-instruct:free
+mistralai/mistral-7b-instruct:free
+google/gemma-2-9b-it:free
+qwen/qwen-2-7b-instruct:free
+
+Also add console.error('OpenRouter error:', status, body) logging so failures show the full response body in Railway logs. Timeout per model attempt: 10 seconds.
+4. HuggingFace image generation — verify it's working
+
+Check that the HuggingFace integration is correctly using the HF_API_TOKEN environment variable. Log HuggingFace prompt: {prompt} before every fetch call. If a model returns non-200, log the full status and response body. Fallback order must be: HuggingFace → Pollinations (short prompt) → avatar_url silently.
+Existing Supabase tables — use exact names, do not create new ones:
+
+users, characters, character_avatars, conversations, affection_words, affection_word_triggers, user_character_intimacy, trigger_words, transaction_logs, pending_grants, prices, system_configurations, user_restrictions, vault_items, tickets, helpdesk_messages, customer_support_messages, customer_service_threads, quests, quest_completions, quest_progress, referral_rewards, referral_logs, events, premium_tiers.
+Do not generate SQL. Do not create tables. Do not touch files not related to the above fixes.
