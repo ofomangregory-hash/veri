@@ -254,7 +254,7 @@ router.get("/admin/characters", async (req, res): Promise<void> => {
   }
 
   const page = parsed.data.page ?? 1;
-  const limit = 20;
+  const limit = 200;
   const offset = (page - 1) * limit;
 
   // Admin sees ALL characters (no visibility filter)

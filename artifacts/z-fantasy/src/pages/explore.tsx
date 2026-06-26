@@ -82,7 +82,10 @@ export function Explore() {
 
   const filteredChars = useMemo(() => {
     if (!charactersData?.items) return [];
-    return charactersData.items.filter(char =>
+    const unique = Array.from(
+      new Map(charactersData.items.map(c => [c.characterId, c])).values()
+    );
+    return unique.filter(char =>
       matchesFilters(char as CharacterItem, genreTab, plain, hashtags)
     );
   }, [charactersData, genreTab, plain, hashtags]);

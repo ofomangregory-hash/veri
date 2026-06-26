@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe, getAdminListCharactersQueryKey } from "@workspace/api-client-react";
 import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign, UserCircle, Ticket, CreditCard as CardIcon, Ban, TrendingUp, Filter, Calendar, Heart } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -67,10 +68,11 @@ function tierColor(tier: string) {
 }
 
 export function Admin() {
+  const queryClient = useQueryClient();
   const { data: me } = useGetMe();
   const { data: stats } = useGetAdminStats();
   const { data: usersData, refetch: refetchUsers } = useAdminListUsers({});
-  const { data: charsData } = useAdminListCharacters({});
+  const { data: charsData, refetch: refetchChars } = useAdminListCharacters({});
   const { toast } = useToast();
 
   const isGodMode = me?.isAdmin === true || me?.staffPrivileges === "full_admin";
@@ -2043,7 +2045,12 @@ export function Admin() {
     {showWizard && (
       <CharacterWizard
         onClose={() => setShowWizard(false)}
-        onCreated={() => { setShowWizard(false); loadConfigs(); }}
+        onCreated={() => {
+          setShowWizard(false);
+          loadConfigs();
+          void queryClient.invalidateQueries({ queryKey: getAdminListCharactersQueryKey() });
+          void refetchChars();
+        }}
         isSupremeAdmin={isSupremeAdmin}
       />
     )}

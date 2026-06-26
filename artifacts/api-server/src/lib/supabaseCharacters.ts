@@ -194,6 +194,7 @@ export async function getSupabaseCharacterById(characterId: string): Promise<Nor
 }
 
 export async function createSupabaseCharacter(values: {
+  characterId?: string;
   creatorId: string;
   name: string;
   visibility: "public" | "private" | "premium";
@@ -210,24 +211,26 @@ export async function createSupabaseCharacter(values: {
 }): Promise<NormalizedCharacter | null> {
   // ── Supabase path ──────────────────────────────────────────────────────────
   if (supabase) {
+    const insertPayload: Record<string, unknown> = {
+      creator_id: values.creatorId,
+      name: values.name,
+      visibility: values.visibility,
+      system_prompt: values.systemPrompt,
+      avatar_url: values.avatarUrl ?? null,
+      teaser_description: values.teaserDescription ?? null,
+      initial_greeting: values.initialGreeting ?? null,
+      tags: values.tags ?? [],
+      sub_genres: values.subGenres ?? [],
+      genre: values.genre ?? null,
+      tagline: values.tagline ?? null,
+      image_seed: values.imageSeed ? parseInt(values.imageSeed) : null,
+      trigger_metadata_array: [],
+      status_level: 1,
+    };
+    if (values.characterId) insertPayload.character_id = values.characterId;
     const { data, error } = await supabase
       .from("characters")
-      .insert({
-        creator_id: values.creatorId,
-        name: values.name,
-        visibility: values.visibility,
-        system_prompt: values.systemPrompt,
-        avatar_url: values.avatarUrl ?? null,
-        teaser_description: values.teaserDescription ?? null,
-        initial_greeting: values.initialGreeting ?? null,
-        tags: values.tags ?? [],
-        sub_genres: values.subGenres ?? [],
-        genre: values.genre ?? null,
-        tagline: values.tagline ?? null,
-        image_seed: values.imageSeed ? parseInt(values.imageSeed) : null,
-        trigger_metadata_array: [],
-        status_level: 1,
-      })
+      .insert(insertPayload)
       .select("*")
       .single();
 
