@@ -435,7 +435,7 @@ export function CharacterBio() {
 
       {/* New Chat Confirmation Modal */}
       {showNewChatConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-end justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-end justify-center p-4" style={{ paddingBottom: '140px' }}>
           <div className="w-full max-w-sm bg-card rounded-3xl border border-border p-6 space-y-4 shadow-2xl">
             <h3 className="font-bold text-white text-lg text-center">Start Fresh?</h3>
             <p className="text-sm text-muted-foreground text-center leading-relaxed">

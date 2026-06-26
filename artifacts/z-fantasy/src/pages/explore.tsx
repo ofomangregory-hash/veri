@@ -14,6 +14,7 @@ type CharacterItem = {
   teaserDescription?: string | null;
   initialGreeting?: string | null;
   tags?: string[];
+  subGenres?: string[] | null;
 };
 
 function parseSearch(query: string) {
@@ -30,6 +31,7 @@ function matchesFilters(char: CharacterItem, genreTab: string, plain: string, ha
   if (hashtags.length > 0) {
     const haystack = [
       ...(char.tags ?? []),
+      ...(char.subGenres ?? []),
       char.genre ?? "",
       char.teaserDescription ?? "",
       char.name,
