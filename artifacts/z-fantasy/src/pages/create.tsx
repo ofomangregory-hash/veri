@@ -198,8 +198,8 @@ export function Create() {
         </div>
       </div>
 
-      {/* Step content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      {/* Step content + nav buttons in one scrollable area */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-[120px]">
         <div className="mb-6">
           <h2 className="text-lg font-bold text-white">{currentStep.title}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">{currentStep.subtitle}</p>
@@ -439,11 +439,9 @@ export function Create() {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Navigation */}
-      <div className="shrink-0 px-4 pb-6 pt-3 border-t border-border bg-background">
-        <div className="flex gap-3">
+        {/* Navigation — inside scroll area so it always sits below content */}
+        <div className="flex gap-3 mt-8">
           {step > 1 && (
             <button
               onClick={prev}

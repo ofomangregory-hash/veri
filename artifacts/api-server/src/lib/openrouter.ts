@@ -1,10 +1,14 @@
 import { logger } from "./logger";
 
-const PRIMARY_MODEL = "mistralai/mistral-7b-instruct:free";
+const PRIMARY_MODEL = "mistralai/mistral-7b-instruct";
 const FALLBACK_MODELS = [
-  "meta-llama/llama-3.2-3b-instruct:free",
-  "google/gemma-2-9b-it:free",
+  "nousresearch/nous-capybara-7b",
+  "openchat/openchat-7b",
+  "gryphe/mythomist-7b",
 ];
+
+// Log API key presence on startup (never log the actual key)
+console.log(`OpenRouter API key: ${process.env.OPENROUTER_API_KEY ? "present" : "missing"}`);
 
 interface Message {
   role: string;
@@ -38,15 +42,16 @@ async function callModel(model: string, messages: Message[]): Promise<string> {
       temperature: 0.88,
       top_p: 0.9,
     }),
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(10000),
   });
 
   if (!response.ok) {
     const status = response.status;
     let bodyText = "";
     try { bodyText = await response.text(); } catch { /* ignore */ }
-    logger.warn({ model, status, body: bodyText.slice(0, 200) }, "OpenRouter HTTP error");
-    throw new Error(`OpenRouter ${status}: ${bodyText.slice(0, 120)}`);
+    console.error(`OpenRouter HTTP error: model=${model} status=${status} body=${bodyText}`);
+    logger.warn({ model, status, body: bodyText }, "OpenRouter HTTP error");
+    throw new Error(`OpenRouter ${status}: ${bodyText.slice(0, 200)}`);
   }
 
   const data = (await response.json()) as OpenRouterResponse;
