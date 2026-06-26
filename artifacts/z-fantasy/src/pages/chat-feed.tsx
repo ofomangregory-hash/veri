@@ -32,6 +32,32 @@ function getToken() {
   return (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
 }
 
+function formatConvTimestamp(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((today.getTime() - msgDay.getTime()) / 86400000);
+  if (diffDays === 0) return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return date.toLocaleDateString([], { weekday: "long" });
+  return date.toLocaleDateString([], { day: "numeric", month: "short" });
+}
+
+function getDateGroupLabel(dateStr: string | null | undefined): string {
+  if (!dateStr) return "Older";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((today.getTime() - msgDay.getTime()) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return date.toLocaleDateString([], { weekday: "long" });
+  return date.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+}
+
 export function ChatFeed() {
   const [activeTab, setActiveTab] = useState<Tab>("chats");
   const [showCharPicker, setShowCharPicker] = useState(false);
@@ -145,33 +171,57 @@ export function ChatFeed() {
                   </>
                 )}
               </div>
-            ) : (
-              filteredConvs.map(conv => (
-                <Link
-                  key={conv.conversationId}
-                  href={`/character/${conv.characterId}`}
-                  className="flex items-center gap-4 p-3 rounded-xl bg-card border border-border hover:border-secondary transition-colors relative overflow-hidden group"
-                >
-                  <div className="relative w-14 h-14 rounded-full overflow-hidden border-2 border-secondary group-hover:box-glow-purple transition-all shrink-0">
-                    <img
-                      src={conv.character?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${conv.character?.name}`}
-                      alt="Avatar"
-                      className="w-full h-full object-cover"
-                    />
-                    {conv.unread && <div className="absolute top-0 right-0 w-3 h-3 bg-primary rounded-full box-glow-pink border-2 border-card" />}
+            ) : (() => {
+              const groups: { label: string; items: typeof filteredConvs }[] = [];
+              for (const conv of filteredConvs) {
+                const label = getDateGroupLabel((conv as typeof conv & { lastMessageAt?: string | null }).lastMessageAt);
+                if (!groups.length || groups[groups.length - 1].label !== label) {
+                  groups.push({ label, items: [] });
+                }
+                groups[groups.length - 1].items.push(conv);
+              }
+              return groups.map(group => (
+                <div key={group.label}>
+                  <div className="flex items-center justify-center my-3">
+                    <span className="px-3 py-1 rounded-full bg-card border border-border text-[10px] text-muted-foreground font-medium tracking-wide">
+                      {group.label}
+                    </span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-center mb-1">
-                      <h3 className="font-bold text-white truncate">{conv.character?.name}</h3>
-                      <div className="flex items-center gap-1 text-xs text-primary font-medium">
-                        <Heart size={12} className="fill-primary" /> {conv.affectionPoints}
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate">{conv.lastMessage || "No messages yet."}</p>
+                  <div className="space-y-2">
+                    {group.items.map(conv => (
+                      <Link
+                        key={conv.conversationId}
+                        href={`/character/${conv.characterId}`}
+                        className="flex items-center gap-4 p-3 rounded-xl bg-card border border-border hover:border-secondary transition-colors relative overflow-hidden group"
+                      >
+                        <div className="relative w-14 h-14 rounded-full overflow-hidden border-2 border-secondary group-hover:box-glow-purple transition-all shrink-0">
+                          <img
+                            src={conv.character?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${conv.character?.name}`}
+                            alt="Avatar"
+                            className="w-full h-full object-cover"
+                          />
+                          {conv.unread && <div className="absolute top-0 right-0 w-3 h-3 bg-primary rounded-full box-glow-pink border-2 border-card" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start mb-1">
+                            <h3 className="font-bold text-white truncate">{conv.character?.name}</h3>
+                            <span className="text-[10px] text-muted-foreground shrink-0 ml-2 mt-0.5">
+                              {formatConvTimestamp((conv as typeof conv & { lastMessageAt?: string | null }).lastMessageAt)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2">
+                            <p className="text-sm text-muted-foreground truncate">{conv.lastMessage || "No messages yet."}</p>
+                            <div className="flex items-center gap-0.5 text-[10px] text-primary font-medium shrink-0">
+                              <Heart size={10} className="fill-primary" /> {conv.affectionPoints}
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
                   </div>
-                </Link>
-              ))
-            )}
+                </div>
+              ));
+            })()}
           </div>
         )}
 

@@ -41,22 +41,26 @@ export interface GenerateAvatarOptions {
 function buildPrompt(opts: GenerateSelfieOptions): string {
   const { characterName, genre, teaserDescription, sceneDescription, contentLevelWords } = opts;
 
-  const visualPrefix = GENRE_VISUAL_PREFIXES[genre] ?? DEFAULT_VISUAL_PREFIX;
+  const visualPrefix = (GENRE_VISUAL_PREFIXES[genre] ?? DEFAULT_VISUAL_PREFIX).replace(/,\s*$/, "");
 
   const subjectHint = teaserDescription
     ? teaserDescription.replace(/\n/g, " ").slice(0, 150)
-    : `stunning ${genre.toLowerCase()} companion named ${characterName}`;
+    : `stunning ${genre.toLowerCase()} companion`;
 
-  const promptParts = [
+  const parts: (string | null | undefined)[] = [
+    characterName,
     visualPrefix,
-    `${characterName},`,
-    subjectHint + ",",
-    sceneDescription + ",",
-    contentLevelWords ? contentLevelWords + "," : "",
+    subjectHint,
+    sceneDescription,
+    contentLevelWords || null,
     "portrait, solo, looking at viewer, masterpiece, best quality, ultra-detailed",
-  ].filter(Boolean);
+  ];
 
-  return promptParts.join(" ").replace(/\s{2,}/g, " ").trim();
+  const filtered = parts
+    .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    .map(p => p.replace(/,\s*$/, "").trim());
+
+  return filtered.join(", ").replace(/,\s*,/g, ",").replace(/,\s*$/, "").trim();
 }
 
 /** Strip characters that break URL construction before encodeURIComponent */
@@ -70,7 +74,7 @@ function sanitizePrompt(raw: string): string {
 
 async function tryPollinations(prompt: string, seed: string, nsfwEnabled: boolean): Promise<string | null> {
   try {
-    const clean = sanitizePrompt(prompt).substring(0, 100);
+    const clean = sanitizePrompt(prompt).substring(0, 100).replace(/[, ]+$/, "").trim();
     const encodedPrompt = encodeURIComponent(clean.trim());
     const seedNum = parseInt(seed, 10) || Math.floor(Math.random() * 9999999);
 

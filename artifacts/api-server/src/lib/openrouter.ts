@@ -1,10 +1,10 @@
 import { logger } from "./logger";
 
-const PRIMARY_MODEL = "mistralai/mistral-7b-instruct";
+const PRIMARY_MODEL = "meta-llama/llama-3.1-8b-instruct:free";
 const FALLBACK_MODELS = [
-  "nousresearch/nous-capybara-7b",
-  "openchat/openchat-7b",
-  "gryphe/mythomist-7b",
+  "mistralai/mistral-7b-instruct:free",
+  "google/gemma-2-9b-it:free",
+  "qwen/qwen-2-7b-instruct:free",
 ];
 
 // Log API key presence on startup (never log the actual key)
