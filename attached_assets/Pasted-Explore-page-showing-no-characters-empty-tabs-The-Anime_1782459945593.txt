@@ -1,0 +1,28 @@
+Explore page showing no characters (empty tabs)
+
+The Anime and Realistic tabs are showing empty despite characters existing in Supabase with correct genre values. Fix the character fetch: fetch ALL characters where visibility = 'public' first — do not filter by genre on the backend. Filter client-side by genre field for tab display. If a character has no genre or unrecognized genre value, default it to Anime tab. Log how many characters the API returns so we can verify in Railway logs. The -25 cost badge on the Design Custom card should show 25 💎 not -25 — remove the minus sign.
+2. Fix daily auto claim — stopped working
+
+Find the cron job or scheduled function handling daily auto claim. Add console.log('Auto claim cron fired', new Date()) at the top. Check what's failing — likely the cron is not registering on startup, a Supabase query is hitting a missing column, or the last_daily_claim timestamp comparison is broken. Verify these columns exist on the users table: last_daily_claim, ticket_balance, neon_card_balance. Fix whatever is broken without changing the claim amount or timing logic. Log Auto claim success for {telegram_id} for each user processed.
+3. conversations.ts — Start Fresh still failing
+
+At lines 229 and 806, immediately BEFORE each insert add:
+typescriptawait db.update(conversations)
+  .set({ archived: true, updated_at: new Date() })
+  .where(and(
+    eq(conversations.telegram_id, telegramId),
+    eq(conversations.character_id, characterId)
+  ));
+4. Fix getAdminUnreadCount and getAllCsThreads still failing
+
+In the customer service Supabase lib file, fix getAdminUnreadCount — verify customer_support_messages table query and that read column exists. Fix getAllCsThreads to query customer_service_threads correctly. Add console.error('actual error:', error) in catch blocks. Return empty array instead of throwing.
+5. Admin tab labels still not visible
+
+Fix admin tab bar so these 3 labels are clearly visible: "Quest Hub", "Referrals", "HelpDesk".
+6. Start Fresh modal button still cut off
+
+Add paddingBottom: 140px to the Start Fresh modal container so both buttons are fully visible above the nav bar on all screen sizes.
+Existing Supabase tables — use exact names, do not create new ones:
+
+users, characters, character_avatars, conversations, affection_words, affection_word_triggers, user_character_intimacy, trigger_words, transaction_logs, pending_grants, prices, system_configurations, user_restrictions, vault_items, tickets, helpdesk_messages, customer_support_messages, customer_service_threads, quests, quest_completions, quest_progress, referral_rewards, referral_logs, events, premium_tiers.
+Do not generate SQL. Do not create tables. Do not touch files not related to the above fixes.You said: foe 1 characters are showing now
