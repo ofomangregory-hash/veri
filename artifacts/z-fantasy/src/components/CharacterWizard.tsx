@@ -280,9 +280,10 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
     });
   }
 
-  // Only the name step is required — all other steps are optional preferences
   const canProceed = (): boolean => {
     if (step === "name") return data.name.length > 0;
+    if (step === "scene") return data.scenes.length >= 1;
+    if (step === "behavior") return data.behaviors.length >= 1;
     return true;
   };
 
@@ -352,7 +353,7 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4 no-scrollbar">
+      <div className="flex-1 overflow-y-auto px-4 no-scrollbar" style={{ paddingBottom: "140px" }}>
 
         {/* ── Step: Name ── */}
         {step === "name" && (
@@ -724,29 +725,30 @@ export function CharacterWizard({ onClose, onCreated, isSupremeAdmin = false }: 
             </div>
           </div>
         )}
-      </div>
 
-      {/* Footer nav */}
-      <div className="px-4 py-3 border-t border-border flex gap-3 shrink-0">
-        {stepIndex > 0 && (
-          <button onClick={goBack}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronLeft size={16} /> Back
-          </button>
-        )}
-
-        {step !== "review" ? (
-          <button onClick={goNext} disabled={!canProceed()}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-background font-bold text-sm disabled:opacity-40 transition-all box-glow-blue">
-            Continue <ChevronRight size={16} />
-          </button>
-        ) : (
-          <button onClick={create} disabled={creating || !data.name.trim()}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-white font-bold text-sm disabled:opacity-40 transition-all box-glow-pink">
-            {creating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
-            {creating ? "Creating..." : `Create ${data.name} (25 🃏)`}
-          </button>
-        )}
+        {/* ── Navigation buttons (inside scroll so they're never hidden) ── */}
+        <div className="flex gap-3 pt-5 mt-2">
+          {stepIndex > 0 ? (
+            <button onClick={goBack}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-border text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
+              <ChevronLeft size={16} /> Back
+            </button>
+          ) : (
+            <div />
+          )}
+          {step !== "review" ? (
+            <button onClick={goNext} disabled={!canProceed()}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-background font-bold text-sm disabled:opacity-40 transition-all box-glow-blue">
+              Continue <ChevronRight size={16} />
+            </button>
+          ) : (
+            <button onClick={create} disabled={creating || !data.name.trim()}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-white font-bold text-sm disabled:opacity-40 transition-all box-glow-pink">
+              {creating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {creating ? "Creating..." : `Create ${data.name} (25 🃏)`}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
