@@ -101,6 +101,8 @@ export function Admin() {
   const [charOverlayMap, setCharOverlayMap] = useState<Record<string, string>>({});
   const [charGenreMap, setCharGenreMap] = useState<Record<string, string>>({});
   const [charSubGenresMap, setCharSubGenresMap] = useState<Record<string, string[]>>({});
+  const [charQuickEdit, setCharQuickEdit] = useState<Record<string, { name: string; bio: string }>>({});
+  const [charQuickSaving, setCharQuickSaving] = useState<Record<string, boolean>>({});
   const [charSubGenreInputMap, setCharSubGenreInputMap] = useState<Record<string, string>>({});
   const [charGenreSaving, setCharGenreSaving] = useState<Record<string, boolean>>({});
 
@@ -1025,6 +1027,60 @@ export function Admin() {
                 </div>
                 {expandedCharId === char.characterId && (
                   <div className="border-t border-border p-3 bg-background space-y-2">
+                    {/* Quick name / bio edit */}
+                    {isGodMode && (
+                      <div className="space-y-2 pb-3 border-b border-border/50">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Quick Edit</p>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Name</label>
+                          <input
+                            value={charQuickEdit[char.characterId]?.name ?? char.name}
+                            onChange={e => setCharQuickEdit(p => ({
+                              ...p,
+                              [char.characterId]: { name: e.target.value, bio: p[char.characterId]?.bio ?? (char.teaserDescription ?? "") }
+                            }))}
+                            className="w-full h-8 rounded-lg border border-border bg-card px-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Bio</label>
+                          <textarea
+                            value={charQuickEdit[char.characterId]?.bio ?? (char.teaserDescription ?? "")}
+                            onChange={e => setCharQuickEdit(p => ({
+                              ...p,
+                              [char.characterId]: { name: p[char.characterId]?.name ?? char.name, bio: e.target.value }
+                            }))}
+                            rows={2}
+                            className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary/60 resize-none"
+                          />
+                        </div>
+                        <button
+                          disabled={charQuickSaving[char.characterId]}
+                          onClick={async () => {
+                            const edit = charQuickEdit[char.characterId];
+                            const name = (edit?.name ?? char.name).trim();
+                            const bio = (edit?.bio ?? char.teaserDescription ?? "").trim();
+                            setCharQuickSaving(p => ({ ...p, [char.characterId]: true }));
+                            try {
+                              await adminApi("PATCH", `/admin/characters/${char.characterId}`, {
+                                name,
+                                teaserDescription: bio || null,
+                              });
+                              toast({ title: "✅ Character updated!" });
+                              void refetchChars();
+                            } catch (e) {
+                              toast({ title: "Save failed", description: String(e), variant: "destructive" });
+                            }
+                            setCharQuickSaving(p => ({ ...p, [char.characterId]: false }));
+                          }}
+                          className="w-full py-1.5 rounded-lg bg-primary/10 border border-primary/40 text-primary text-xs font-bold hover:bg-primary/20 disabled:opacity-50 flex items-center justify-center gap-1 transition-colors"
+                        >
+                          {charQuickSaving[char.characterId]
+                            ? <><RefreshCw size={12} className="animate-spin" /> Saving…</>
+                            : <><Save size={12} /> Save Name & Bio</>}
+                        </button>
+                      </div>
+                    )}
                     {/* Quick publish actions */}
                     {isGodMode && (
                       <div className="flex gap-2 mb-2">
@@ -2220,7 +2276,7 @@ function UserDrawer({ drawerUser, drawerLoading, drawerTxns, editTickets, setEdi
               </button>
             </div>
             <div className="p-3 rounded-xl bg-muted/30 border border-border text-[10px] text-muted-foreground font-mono whitespace-pre-line leading-relaxed">
-              {"━━━━━━━━━━━━━━━━━━━━━━\n📣 Z-Fantasy Sweet Dreams\n━━━━━━━━━━━━━━━━━━━━━━"}
+              {"━━━━━━━━━━━━━━━━━━━━━━\n📣 Z-Fantasy Sweet Dreams\nFrom Z-FANTASY ADMIN\n━━━━━━━━━━━━━━━━━━━━━━"}
             </div>
             <div className="space-y-1">
               <textarea

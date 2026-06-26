@@ -1110,7 +1110,7 @@ router.post("/admin/message-user", adminOnly, async (req, res): Promise<void> =>
     res.status(400).json({ error: "telegram_id and message are required" });
     return;
   }
-  const header = "━━━━━━━━━━━━━━━━━━━━━━\n📣 Z-Fantasy Sweet Dreams\n━━━━━━━━━━━━━━━━━━━━━━\n\n";
+  const header = "━━━━━━━━━━━━━━━━━━━━━━\n📣 Z-Fantasy Sweet Dreams\nFrom Z-FANTASY ADMIN\n━━━━━━━━━━━━━━━━━━━━━━\n\n";
   const fullMessage = header + message.trim();
 
   const bot = getBot();
