@@ -129,9 +129,10 @@ async function runUnreadNotifications(): Promise<void> {
     }
 
     logger.info({ count: rows.length }, "Unread notifications sent");
-  } catch (err) {
-    console.error("runUnreadNotifications actual error:", err);
-    logger.error({ err }, "runUnreadNotifications: failed");
+  } catch (error: unknown) {
+    const e = error as { message?: string; code?: string };
+    console.error("runUnreadNotifications actual error:", e?.message, e?.code, error);
+    logger.error({ error }, "runUnreadNotifications: failed");
   }
 }
 

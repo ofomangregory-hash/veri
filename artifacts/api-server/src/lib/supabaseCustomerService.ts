@@ -159,8 +159,8 @@ export async function getAdminUnreadCount(): Promise<number> {
     const { count, error } = await supabase
       .from("customer_support_messages")
       .select("*", { count: "exact", head: true })
-      .eq("sender_type", "user")
-      .or("read.is.null,read.eq.false");
+      .eq("read", false)
+      .eq("direction", "inbound");
 
     if (error) {
       console.error("getAdminUnreadCount actual error:", error.message, error.code);
