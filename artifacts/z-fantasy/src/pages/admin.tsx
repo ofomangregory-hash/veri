@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe, getAdminListCharactersQueryKey } from "@workspace/api-client-react";
-import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign, UserCircle, Ticket, CreditCard as CardIcon, Ban, TrendingUp, Filter, Calendar, Heart } from "lucide-react";
+import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign, UserCircle, Ticket, CreditCard as CardIcon, Ban, TrendingUp, Filter, Calendar, Heart, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { CharacterWizard } from "@/components/CharacterWizard";
@@ -486,6 +486,15 @@ export function Admin() {
       await adminApi("PATCH", `/admin/characters/${characterId}/visibility`, { visibility });
       toast({ title: `✅ Character set to ${visibility}` });
     } catch (e) { toast({ title: "Failed", description: String(e), variant: "destructive" }); }
+  };
+
+  const deleteCharacter = async (characterId: string, name: string) => {
+    if (!window.confirm(`Delete "${name}" for ALL users? This cannot be undone.`)) return;
+    try {
+      await adminApi("DELETE", `/characters/${characterId}`);
+      toast({ title: `🗑️ "${name}" deleted` });
+      refetchChars();
+    } catch (e) { toast({ title: "Delete failed", description: String(e), variant: "destructive" }); }
   };
 
   const saveCharOverlay = async (characterId: string) => {
@@ -1034,6 +1043,12 @@ export function Admin() {
                       <Wand2 size={14} />
                     </button>
                   )}
+                  <button
+                    onClick={() => deleteCharacter(char.characterId, char.name)}
+                    className="p-1.5 text-red-400 hover:text-red-300 ml-0.5 rounded hover:bg-red-500/10 transition-colors"
+                    title="Delete character for all users">
+                    <Trash2 size={14} />
+                  </button>
                 </div>
                 {expandedCharId === char.characterId && (
                   <div className="border-t border-border p-3 bg-background space-y-2">
