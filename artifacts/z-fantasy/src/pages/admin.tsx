@@ -7,8 +7,9 @@ import { CharacterWizard } from "@/components/CharacterWizard";
 import { AdminHelpdeskTab } from "./admin/AdminHelpdeskTab";
 import { AdminQuestsTab } from "./admin/AdminQuestsTab";
 import { AdminReferralsTab } from "./admin/AdminReferralsTab";
+import { AdminCsTab } from "./admin/AdminCsTab";
 
-type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words" | "affection" | "active_chats" | "quests" | "referrals" | "helpdesk";
+type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words" | "affection" | "active_chats" | "quests" | "referrals" | "helpdesk" | "cs";
 
 interface SysConfig { key: string; value: unknown; updatedAt: string }
 
@@ -78,10 +79,11 @@ export function Admin() {
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
-    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words", "affection", "active_chats", "quests", "referrals", "helpdesk"]
+    ? ["stats", "users", "characters", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words", "affection", "active_chats", "quests", "referrals", "helpdesk", "cs"]
     : ["stats", "users", "characters"];
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
+  const [csUnreadCount, setCsUnreadCount] = useState(0);
 
   const [configs, setConfigs] = useState<SysConfig[]>([]);
   const [configsLoading, setConfigsLoading] = useState(false);
@@ -171,6 +173,19 @@ export function Admin() {
   const [activeChatsLoading, setActiveChatsLoading] = useState(false);
   const [activeChatsSearch, setActiveChatsSearch] = useState("");
   const [activeChatsPage, setActiveChatsPage] = useState(1);
+
+  useEffect(() => {
+    if (!isGodMode) return;
+    const fetchCsUnread = async () => {
+      try {
+        const data = await adminApi<{ count: number }>("GET", "/admin/cs/unread-count");
+        setCsUnreadCount(data.count ?? 0);
+      } catch {}
+    };
+    void fetchCsUnread();
+    const id = setInterval(fetchCsUnread, 30_000);
+    return () => clearInterval(id);
+  }, [isGodMode]);
 
   const loadActiveChats = useCallback(async (search = "", page = 1) => {
     setActiveChatsLoading(true);
@@ -662,6 +677,7 @@ export function Admin() {
     quests: "🎯 Quest Hub",
     referrals: "👥 Referrals",
     helpdesk: "🎫 HelpDesk",
+    cs: "📨 CS",
   };
 
   const filteredUsers = (usersData?.items ?? []).filter(u => {
@@ -695,11 +711,16 @@ export function Admin() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`shrink-0 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all whitespace-nowrap ${
+            className={`relative shrink-0 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all whitespace-nowrap ${
               activeTab === tab ? "bg-accent text-background box-glow-blue" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {tabLabel[tab]}
+            {tab === "cs" && csUnreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full bg-destructive text-white text-[9px] font-bold flex items-center justify-center px-0.5">
+                {csUnreadCount > 99 ? "99+" : csUnreadCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -1697,6 +1718,11 @@ export function Admin() {
       {/* ── Helpdesk ── */}
       {activeTab === "helpdesk" && isGodMode && (
         <AdminHelpdeskTab />
+      )}
+
+      {/* ── Customer Service ── */}
+      {activeTab === "cs" && isGodMode && (
+        <AdminCsTab />
       )}
 
       {/* ── Transactions (All) ── */}

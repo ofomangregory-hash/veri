@@ -17,6 +17,7 @@ export interface CsMessage {
   senderId: string;
   message: string;
   createdAt: string;
+  read: boolean;
 }
 
 export async function createCsThread(
@@ -70,7 +71,7 @@ export async function getAllCsThreads(
     let query = supabase
       .from("customer_service_threads")
       .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
+      .order("last_message_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (status && status !== "all") query = query.eq("status", status);
@@ -111,7 +112,7 @@ export async function addCsMessage(
   try {
     const { data, error } = await supabase
       .from("customer_support_messages")
-      .insert({ thread_id: threadId, sender_type: senderType, sender_id: senderId, message })
+      .insert({ thread_id: threadId, sender_type: senderType, sender_id: senderId, message, read: senderType === "agent" })
       .select()
       .single();
 
@@ -126,6 +127,46 @@ export async function addCsMessage(
   } catch (err) {
     logger.warn({ err }, "addCsMessage: failed");
     return null;
+  }
+}
+
+export async function markThreadRead(threadId: string): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase
+      .from("customer_support_messages")
+      .update({ read: true })
+      .eq("thread_id", threadId)
+      .eq("sender_type", "user");
+    if (error) {
+      console.error("markThreadRead actual error:", error.message, error.code, error.details);
+      logger.warn({ error }, "markThreadRead: failed");
+    }
+  } catch (err) {
+    console.error("markThreadRead caught:", err);
+    logger.warn({ err }, "markThreadRead: failed");
+  }
+}
+
+export async function getAdminUnreadCount(): Promise<number> {
+  if (!supabase) return 0;
+  try {
+    const { count, error } = await supabase
+      .from("customer_support_messages")
+      .select("*", { count: "exact", head: true })
+      .eq("sender_type", "user")
+      .or("read.is.null,read.eq.false");
+
+    if (error) {
+      console.error("getAdminUnreadCount actual error:", error.message, error.code);
+      logger.warn({ error }, "getAdminUnreadCount: failed");
+      return 0;
+    }
+    return count ?? 0;
+  } catch (err) {
+    console.error("getAdminUnreadCount caught:", err);
+    logger.warn({ err }, "getAdminUnreadCount: failed");
+    return 0;
   }
 }
 
@@ -157,5 +198,6 @@ function mapCsMessage(row: Record<string, unknown>): CsMessage {
     senderId: String(row.sender_id),
     message: String(row.message ?? ""),
     createdAt: String(row.created_at),
+    read: Boolean(row.read),
   };
 }

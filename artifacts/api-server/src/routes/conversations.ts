@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, sql, desc } from "drizzle-orm";
-import { db, conversationsTable, usersTable, transactionsTable } from "@workspace/db";
+import { db, conversationsTable, usersTable, transactionsTable, systemConfigurationsTable } from "@workspace/db";
 import {
   GetConversationParams,
   GetConversationResponse,
@@ -32,6 +32,22 @@ import { addVaultItem } from "../lib/supabaseVault";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
+
+// ─── Push-notification delay (cached 5 min) ───────────────────────────────────
+let _notifyDelayCache: { ms: number; at: number } | null = null;
+async function getNotifyDelayMs(): Promise<number> {
+  if (_notifyDelayCache && Date.now() - _notifyDelayCache.at < 5 * 60 * 1000) return _notifyDelayCache.ms;
+  try {
+    const [row] = await db.select().from(systemConfigurationsTable)
+      .where(eq(systemConfigurationsTable.key, "unread_message_notify_delay")).limit(1);
+    const minutes = Number((row?.value as Record<string, unknown>)?.minutes ?? 5);
+    const ms = Math.max(1, minutes) * 60 * 1000;
+    _notifyDelayCache = { ms, at: Date.now() };
+    return ms;
+  } catch {
+    return 5 * 60 * 1000;
+  }
+}
 
 // ─── Hourly image tracking (in-memory, resets every 60 min) ───────────────────
 const hourlyImageTracker = new Map<string, { count: number; resetAt: number }>();
@@ -233,6 +249,13 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
     }).returning();
   }
 
+  // Clear any pending push notification — user is actively viewing the conversation
+  if (conv.notifyAfter) {
+    void db.update(conversationsTable)
+      .set({ notifyAfter: null })
+      .where(eq(conversationsTable.conversationId, conv.conversationId));
+  }
+
   const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
 
   res.json(GetConversationResponse.parse({
@@ -423,6 +446,8 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     void recordAffectionTrigger(req.telegramUserId, params.data.characterId, matchedAffWord.word);
   }
 
+  const notifyDelayMs = await getNotifyDelayMs();
+
   await db.update(conversationsTable)
     .set({
       messageHistory: newHistory,
@@ -430,6 +455,7 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
       dailyAutoImageCount: (shouldAutoImage || !!triggeredWord) && !autoIsLocked ? sql`daily_auto_image_count + 1` : conv.dailyAutoImageCount,
       affectionPoints: affectionDelta !== 0 ? Math.min(1000, Math.max(0, conv.affectionPoints + affectionDelta)) : undefined,
       updatedAt: new Date(),
+      notifyAfter: new Date(Date.now() + notifyDelayMs),
     })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
 

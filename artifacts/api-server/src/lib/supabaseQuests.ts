@@ -39,9 +39,14 @@ export async function getActiveQuests(): Promise<Quest[]> {
       .eq("is_active", true)
       .order("sort_order", { ascending: true });
 
-    if (error) { logger.warn({ error }, "getActiveQuests: failed"); return []; }
+    if (error) {
+      console.error("getActiveQuests actual error:", error.message, error.code, error.details, error.hint);
+      logger.warn({ error }, "getActiveQuests: failed");
+      return [];
+    }
     return (data ?? []).map(mapQuest);
   } catch (err) {
+    console.error("getActiveQuests caught:", err);
     logger.warn({ err }, "getActiveQuests: failed");
     return [];
   }
@@ -55,9 +60,14 @@ export async function getAllQuests(): Promise<Quest[]> {
       .select("*")
       .order("sort_order", { ascending: true });
 
-    if (error) { logger.warn({ error }, "getAllQuests: failed"); return []; }
+    if (error) {
+      console.error("getAllQuests actual error:", error.message, error.code, error.details, error.hint);
+      logger.warn({ error }, "getAllQuests: failed");
+      return [];
+    }
     return (data ?? []).map(mapQuest);
   } catch (err) {
+    console.error("getAllQuests caught:", err);
     logger.warn({ err }, "getAllQuests: failed");
     return [];
   }

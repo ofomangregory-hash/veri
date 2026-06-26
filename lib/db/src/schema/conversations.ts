@@ -13,6 +13,7 @@ export const conversationsTable = pgTable("conversations", {
   dailyAutoImageCount: integer("daily_auto_image_count").notNull().default(0),
   archived: boolean("archived").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  notifyAfter: timestamp("notify_after", { withTimezone: true }),
 });
 
 export const insertConversationSchema = createInsertSchema(conversationsTable).omit({ conversationId: true });

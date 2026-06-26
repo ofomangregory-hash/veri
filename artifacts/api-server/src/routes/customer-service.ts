@@ -8,7 +8,12 @@ import {
   getThreadMessages,
   addCsMessage,
   closeCsThread,
+  markThreadRead,
+  getAdminUnreadCount,
 } from "../lib/supabaseCustomerService";
+import { getBot } from "../lib/telegram-bot";
+import { logger } from "../lib/logger";
+import { supabase } from "../lib/supabase";
 
 const router: IRouter = Router();
 router.use(authMiddleware);
@@ -63,6 +68,18 @@ router.get("/admin/cs/threads", async (req, res): Promise<void> => {
   res.json(result);
 });
 
+router.get("/admin/cs/unread-count", async (req, res): Promise<void> => {
+  if (!req.isAdmin) { res.status(403).json({ error: "Forbidden" }); return; }
+  const count = await getAdminUnreadCount();
+  res.json({ count });
+});
+
+router.patch("/admin/cs/threads/:threadId/read", async (req, res): Promise<void> => {
+  if (!req.isAdmin) { res.status(403).json({ error: "Forbidden" }); return; }
+  await markThreadRead(req.params.threadId);
+  res.json({ ok: true });
+});
+
 router.post("/admin/cs/threads/:threadId/reply", async (req, res): Promise<void> => {
   if (!req.isAdmin) { res.status(403).json({ error: "Forbidden" }); return; }
 
@@ -76,6 +93,26 @@ router.post("/admin/cs/threads/:threadId/reply", async (req, res): Promise<void>
     parsed.data.message,
   );
   if (!msg) { res.status(503).json({ error: "Failed to send reply" }); return; }
+
+  // Send Telegram bot message to the user
+  try {
+    const bot = getBot();
+    if (bot && supabase) {
+      const { data: thread } = await supabase
+        .from("customer_service_threads")
+        .select("user_id")
+        .eq("id", req.params.threadId)
+        .maybeSingle();
+      if (thread?.user_id) {
+        await bot.sendMessage(String(thread.user_id), `📨 *Support Reply*\n\n${parsed.data.message}`, {
+          parse_mode: "Markdown",
+        });
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "CS reply: failed to send Telegram notification");
+  }
+
   res.status(201).json(msg);
 });
 

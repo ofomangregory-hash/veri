@@ -39,6 +39,7 @@ export async function createHelpdeskTicket(
       .single();
 
     if (error) {
+      console.error("createHelpdeskTicket actual error:", error.message, error.code, error.details, error.hint);
       logger.warn({ error }, "createHelpdeskTicket: insert failed");
       return null;
     }
@@ -89,12 +90,14 @@ export async function getAllTickets(
     const { data, error, count } = await query;
 
     if (error) {
+      console.error("getAllTickets actual error:", error.message, error.code, error.details, error.hint);
       logger.warn({ error }, "getAllTickets: failed");
       return { tickets: [], total: 0 };
     }
 
     return { tickets: (data ?? []).map(mapTicket), total: count ?? 0 };
   } catch (err) {
+    console.error("getAllTickets caught:", err);
     logger.warn({ err }, "getAllTickets: failed");
     return { tickets: [], total: 0 };
   }

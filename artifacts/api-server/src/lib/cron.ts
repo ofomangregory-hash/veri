@@ -3,6 +3,7 @@ import { db, usersTable, transactionsTable, conversationsTable } from "@workspac
 import { sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { supabase } from "./supabase";
+import { getBot } from "./telegram-bot";
 
 async function runAutoGiftClaim(): Promise<void> {
   try {
@@ -78,6 +79,58 @@ async function runWeeklyAffectionReset(): Promise<void> {
   }
 }
 
+async function runUnreadNotifications(): Promise<void> {
+  const bot = getBot();
+  if (!bot) return;
+
+  try {
+    const due = await db.execute<{ conversation_id: string; telegram_id: string; character_id: string }>(
+      sql`SELECT conversation_id, telegram_id, character_id FROM conversations WHERE notify_after IS NOT NULL AND notify_after <= NOW() LIMIT 100`,
+    );
+
+    const rows = Array.isArray(due) ? due : (due as unknown as { rows: { conversation_id: string; telegram_id: string; character_id: string }[] }).rows;
+    if (!rows || rows.length === 0) return;
+
+    const ids = rows.map(r => r.conversation_id);
+    await db.execute(
+      sql`UPDATE conversations SET notify_after = NULL WHERE conversation_id = ANY(${ids})`,
+    );
+
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? "z_fantasy_bot";
+
+    for (const row of rows) {
+      try {
+        let charName = "Your companion";
+        if (supabase) {
+          const { data } = await supabase
+            .from("characters")
+            .select("name")
+            .eq("character_id", row.character_id)
+            .maybeSingle();
+          if (data?.name) charName = String(data.name);
+        }
+
+        const text = `💬 *Your companion is waiting for you\\!*\n\n${charName.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&")} has a message for you in Z\\-Fantasy Sweet Dreams\\.\nTap to continue your chat 👇`;
+
+        await bot.sendMessage(row.telegram_id, text, {
+          parse_mode: "MarkdownV2",
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "💬 Continue Chat", url: `https://t.me/${botUsername}?startapp=char_${row.character_id}` },
+            ]],
+          },
+        });
+      } catch (err) {
+        logger.warn({ err, userId: row.telegram_id }, "Failed to send unread notification");
+      }
+    }
+
+    logger.info({ count: rows.length }, "Unread notifications sent");
+  } catch (err) {
+    logger.error({ err }, "runUnreadNotifications: failed");
+  }
+}
+
 export function startCronJobs(): void {
   cron.schedule("0 0 * * *", async () => {
     try {
@@ -113,6 +166,9 @@ export function startCronJobs(): void {
   cron.schedule("0 0 * * 1", () => { void runWeeklyAffectionReset(); });
 
   cron.schedule("*/30 * * * *", () => { void runAutoGiftClaim(); });
+
+  // Every minute: send push notifications for unread AI messages
+  cron.schedule("* * * * *", () => { void runUnreadNotifications(); });
 
   logger.info("Cron jobs started");
 }

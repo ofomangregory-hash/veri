@@ -6,3 +6,4 @@
 - [Admin JSX esbuild fix](admin-jsx-esbuild.md) — esbuild JSX parser fails on deeply nested conditionals in admin.tsx; fix is to extract large tab content into separate components (PricingTab, PricingCell, PremiumTierCard, TxnRow)
 - [NSFW access pattern](nsfw-access.md) — NSFW uses #NSFW tag (no Supabase schema column needed); free users filtered in GET /characters via excludeNsfw; admin PATCH /admin/characters/:id in admin.ts uses updateSupabaseCharacter
 - [Conversations route order](conv-route-order.md) — GET /conversations/archived MUST come before GET /conversations/:characterId in Express; also all conv queries need archived=false filter + orderBy(desc(updatedAt)).limit(1)
+- [CS tab and push notifications](cs-tab-push.md) — Customer Service tab wired; push notifications use notifyAfter column on conversations; Supabase silent-fail pattern always needs console.error not just logger.warn

@@ -19,9 +19,14 @@ export async function getPremiumTiers(): Promise<PremiumTierRow[]> {
       .select("*")
       .order("tier_name", { ascending: true });
 
-    if (error) { logger.warn({ error }, "getPremiumTiers: failed"); return []; }
+    if (error) {
+      console.error("getPremiumTiers actual error:", error.message, error.code, error.details, error.hint);
+      logger.warn({ error }, "getPremiumTiers: failed");
+      return [];
+    }
     return (data ?? []).map(mapTier);
   } catch (err) {
+    console.error("getPremiumTiers caught:", err);
     logger.warn({ err }, "getPremiumTiers: failed");
     return [];
   }
