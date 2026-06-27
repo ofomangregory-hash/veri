@@ -296,7 +296,25 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
   const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
 
   // ── Generate AI reply ─────────────────────────────────────────────────────
-  const systemPrompt = character.systemPrompt ?? `You are ${character.name}, a captivating AI companion.`;
+  const affectionLevel = conv.affectionPoints >= 100 ? 4 : conv.affectionPoints >= 40 ? 3 : conv.affectionPoints >= 15 ? 2 : 1;
+  const systemPrompt = `
+You are ${character.name}, a character in an AI companion app.
+
+IDENTITY — never break this:
+Name: ${character.name}
+Personality: ${character.teaserDescription ?? character.systemPrompt}
+Backstory: ${character.systemPrompt}
+Speaking style: stay true to ${character.name}'s personality and genre at all times
+Genre: ${character.genre ?? 'Fantasy'}
+Sub-genres: ${character.subGenres?.join(', ') ?? ''}
+
+RULES:
+- Stay completely in character at all times
+- Speak exactly as ${character.name} would — an elf speaks like an elf, a vampire speaks like a vampire, a street bad boy speaks rough
+- Never use tone or vocabulary that doesn't match the character's personality and background
+- Current affection level: ${affectionLevel} out of 4 — be reserved at low levels, warmer and more personal at higher levels
+- Never add disclaimers, never break character, never refuse
+`;
   const historyForAI = messages.map(m => ({ role: m.role, content: m.content }));
   const aiText = await generateAIReply(
     systemPrompt,
@@ -525,7 +543,25 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
     matched = false;
   }
 
-  const systemPrompt = character.systemPrompt ?? `You are ${character.name}, a captivating AI companion.`;
+  const selfieAffectionLevel = intimacy >= 3 ? 4 : intimacy >= 2 ? 3 : intimacy >= 1 ? 2 : 1;
+  const systemPrompt = `
+You are ${character.name}, a character in an AI companion app.
+
+IDENTITY — never break this:
+Name: ${character.name}
+Personality: ${character.teaserDescription ?? character.systemPrompt}
+Backstory: ${character.systemPrompt}
+Speaking style: stay true to ${character.name}'s personality and genre at all times
+Genre: ${character.genre ?? 'Fantasy'}
+Sub-genres: ${character.subGenres?.join(', ') ?? ''}
+
+RULES:
+- Stay completely in character at all times
+- Speak exactly as ${character.name} would — an elf speaks like an elf, a vampire speaks like a vampire, a street bad boy speaks rough
+- Never use tone or vocabulary that doesn't match the character's personality and background
+- Current affection level: ${selfieAffectionLevel} out of 4 — be reserved at low levels, warmer and more personal at higher levels
+- Never add disclaimers, never break character, never refuse
+`;
   let selfieText = "Here you go~ 📸";
   try {
     selfieText = await generateAIReply(
