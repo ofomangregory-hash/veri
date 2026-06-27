@@ -67,29 +67,35 @@ async function tryPollinations(
     const parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
     const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
     const encodedPrompt = encodeURIComponent(cleanPrompt);
-    const seedNum = parseInt(imageSeed, 10) || Math.floor(Math.random() * 9999999);
-    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&nologo=true`;
+    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&nologo=true&model=flux`;
 
     console.log("Image prompt:", cleanPrompt);
     console.log('Pollinations URL:', url);
     logger.info({ url, characterName, nsfwEnabled }, "Attempting Pollinations image generation");
 
-    const response = await axios.get(url, {
-      responseType: "arraybuffer",
-      timeout: 30000,
+    const response = await fetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0",
         "Accept": "image/jpeg,image/png,image/*",
+        "Referer": "https://pollinations.ai",
       },
-      validateStatus: (status) => status === 200,
+      signal: AbortSignal.timeout(30000),
     });
 
-    if (!response.data || response.data.byteLength < 1000) {
-      logger.warn({ bytes: response.data?.byteLength }, "Pollinations returned too-small image — skipping");
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => "(unreadable)");
+      console.log('Pollinations 400 body:', bodyText);
+      logger.warn({ status: response.status, body: bodyText }, "Pollinations returned non-200");
       return null;
     }
 
-    const buffer = Buffer.from(response.data as ArrayBuffer);
+    const arrayBuffer = await response.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength < 1000) {
+      logger.warn({ bytes: arrayBuffer?.byteLength }, "Pollinations returned too-small image — skipping");
+      return null;
+    }
+
+    const buffer = Buffer.from(arrayBuffer);
     const telegraphUrl = await uploadToTelegraph(buffer, `img_${Date.now()}.jpg`);
     logger.info({ telegraphUrl }, "Pollinations image uploaded to Telegra.ph");
     return telegraphUrl;

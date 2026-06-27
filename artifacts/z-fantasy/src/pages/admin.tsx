@@ -1202,6 +1202,11 @@ export function Admin() {
                     </div>
                   </div>
                 )}
+                {/* Creator ID row */}
+                <div className="text-[10px] text-muted-foreground pt-1 border-t border-border/40 mt-1">
+                  <span className="uppercase tracking-wider font-bold">Creator ID:</span>{" "}
+                  <span className="font-mono text-foreground/70">{char.creatorId ?? "System/Admin"}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -2156,6 +2161,11 @@ export function Admin() {
         savingUser={savingUser}
         saveUserChanges={saveUserChanges}
         onClose={() => setDrawerOpen(false)}
+        userCreatedChars={(charsData?.items ?? [])
+          .filter((c: { creatorId?: string | null }) => c.creatorId === drawerUser?.id)
+          .map((c: { name: string; genre?: string | null; visibility: string; characterId: string }) => ({
+            name: c.name, genre: c.genre ?? "", visibility: c.visibility, characterId: c.characterId,
+          }))}
       />
     )}
 
@@ -2207,9 +2217,10 @@ interface UserDrawerProps {
   savingUser: boolean;
   saveUserChanges: () => void;
   onClose: () => void;
+  userCreatedChars: Array<{ name: string; genre: string; visibility: string; characterId: string }>;
 }
 
-function UserDrawer({ drawerUser, drawerLoading, drawerTxns, editTickets, setEditTickets, editNeon, setEditNeon, editTier, setEditTier, editStaff, setEditStaff, savingUser, saveUserChanges, onClose }: UserDrawerProps) {
+function UserDrawer({ drawerUser, drawerLoading, drawerTxns, editTickets, setEditTickets, editNeon, setEditNeon, editTier, setEditTier, editStaff, setEditStaff, savingUser, saveUserChanges, onClose, userCreatedChars }: UserDrawerProps) {
   const [dmOpen, setDmOpen] = useState(false);
   const [dmMessage, setDmMessage] = useState("");
   const [dmSending, setDmSending] = useState(false);
@@ -2278,6 +2289,7 @@ function UserDrawer({ drawerUser, drawerLoading, drawerTxns, editTickets, setEdi
               editTier={editTier} setEditTier={setEditTier}
               editStaff={editStaff} setEditStaff={setEditStaff}
               csMessages={csMessages}
+              userCreatedChars={userCreatedChars}
             />
           ) : null}
         </div>
@@ -2361,9 +2373,10 @@ interface UserDrawerContentProps {
   editTier: string; setEditTier: (v: string) => void;
   editStaff: string; setEditStaff: (v: string) => void;
   csMessages: Array<{ id: string; senderType: string; message: string; createdAt: string }>;
+  userCreatedChars: Array<{ name: string; genre: string; visibility: string; characterId: string }>;
 }
 
-function UserDrawerContent({ drawerUser, drawerTxns, editTickets, setEditTickets, editNeon, setEditNeon, editTier, setEditTier, editStaff, setEditStaff, csMessages }: UserDrawerContentProps) {
+function UserDrawerContent({ drawerUser, drawerTxns, editTickets, setEditTickets, editNeon, setEditNeon, editTier, setEditTier, editStaff, setEditStaff, csMessages, userCreatedChars }: UserDrawerContentProps) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
@@ -2469,6 +2482,31 @@ function UserDrawerContent({ drawerUser, drawerTxns, editTickets, setEditTickets
           </div>
         </div>
       )}
+      {/* Characters Created by this user */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5 pt-1">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-2">Characters Created</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+        {userCreatedChars.length === 0 ? (
+          <p className="text-[10px] text-muted-foreground text-center py-1">No characters created.</p>
+        ) : (
+          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+            {userCreatedChars.map(c => (
+              <div key={c.characterId} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-card border border-border text-xs">
+                <span className="font-semibold text-foreground truncate max-w-[130px]">{c.name}</span>
+                <span className="text-[10px] text-muted-foreground shrink-0">{c.genre}</span>
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                  c.visibility === "public" ? "border-green-500/50 text-green-400 bg-green-500/10"
+                  : c.visibility === "premium" ? "border-yellow-500/50 text-yellow-400 bg-yellow-500/10"
+                  : "border-border text-muted-foreground"
+                }`}>{c.visibility}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </>
   );
 }
