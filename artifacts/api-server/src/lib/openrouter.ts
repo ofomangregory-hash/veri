@@ -6,9 +6,9 @@ console.log('GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'present' : 'missing');
 
 const OPENROUTER_MODELS = [
   'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+  'mistralai/mistral-small-3.2-24b',
+  'deepseek/deepseek-v4-flash',
   'mistralai/mistral-nemo',
-  'openai/gpt-oss-120b:free',
-  'google/gemma-2-9b-it:free',
   'openrouter/free',
 ];
 
