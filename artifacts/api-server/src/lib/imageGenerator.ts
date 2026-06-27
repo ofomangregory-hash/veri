@@ -89,7 +89,7 @@ async function tryPollinations(
     }
 
     if (!response.ok) {
-      const bodyText = await response.text().catch(() => "(unreadable)");
+      const bodyText = await response.text();
       console.log('Pollinations 400 body:', bodyText);
       logger.warn({ status: response.status, body: bodyText }, "Pollinations returned non-200");
       return null;
