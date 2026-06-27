@@ -73,14 +73,20 @@ async function tryPollinations(
     console.log('Pollinations URL:', url);
     logger.info({ url, characterName, nsfwEnabled }, "Attempting Pollinations image generation");
 
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "image/jpeg,image/png,image/*",
-        "Referer": "https://pollinations.ai",
-      },
-      signal: AbortSignal.timeout(30000),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          "Accept": "image/jpeg,image/png,image/*",
+          "Referer": "https://pollinations.ai",
+        },
+        signal: AbortSignal.timeout(30000),
+      });
+    } catch (fetchErr) {
+      logger.warn({ message: (fetchErr as Error).message }, "Pollinations fetch failed");
+      return null;
+    }
 
     if (!response.ok) {
       const bodyText = await response.text().catch(() => "(unreadable)");
