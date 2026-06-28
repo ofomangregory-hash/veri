@@ -175,14 +175,6 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
   const character = await getSupabaseCharacterById(params.data.characterId);
   if (!character) { res.status(404).json({ error: "Character not found" }); return; }
 
-  console.log('[ARCHIVE] Running archive before insert for:', req.telegramUserId, params.data.characterId);
-  await db.update(conversationsTable)
-    .set({ archived: true, updatedAt: new Date() })
-    .where(and(
-      eq(conversationsTable.telegramId, req.telegramUserId),
-      eq(conversationsTable.characterId, params.data.characterId),
-    ));
-
   let [conv] = await db.select().from(conversationsTable)
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
@@ -273,14 +265,6 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     ))
     .orderBy(desc(conversationsTable.updatedAt))
     .limit(1);
-
-  console.log('[ARCHIVE] Running archive before insert for:', req.telegramUserId, params.data.characterId);
-  await db.update(conversationsTable)
-    .set({ archived: true, updatedAt: new Date() })
-    .where(and(
-      eq(conversationsTable.telegramId, req.telegramUserId),
-      eq(conversationsTable.characterId, params.data.characterId),
-    ));
 
   if (!conv) {
     [conv] = await db.insert(conversationsTable).values({
@@ -663,13 +647,16 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
   if (!messageTimestamp) { res.status(400).json({ error: "messageTimestamp required" }); return; }
   if (!UUID_RE.test(characterId)) { res.status(400).json({ error: "Invalid characterId" }); return; }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
-  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  const userId = req.telegramUserId;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) { res.status(404).json({ error: "User not found — no account for this Telegram ID" }); return; }
 
   const unlockCost = req.isAdmin ? 0 : await getPrice("image_unlock_nc", 15);
 
+  console.log('[VAULT UNLOCK] User id:', userId, 'balance:', user?.neonCardBalance, 'cost:', unlockCost);
+
   if (!req.isAdmin && user.neonCardBalance < unlockCost) {
-    res.status(402).json({ error: `Insufficient Neon Cards. Unlocking costs ${unlockCost} 💎` }); return;
+    res.status(402).json({ error: `Insufficient Neon Cards — you have ${user.neonCardBalance} 💎 but unlocking costs ${unlockCost} 💎` }); return;
   }
 
   const [conv] = await db.select().from(conversationsTable)
