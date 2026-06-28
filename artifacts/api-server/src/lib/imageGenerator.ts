@@ -66,7 +66,7 @@ async function tryPollinations(
   const parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
   const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
   const encodedPrompt = encodeURIComponent(cleanPrompt);
-  const seed = Math.floor(Math.random() * 1000000);
+  const seed = imageSeed ? parseInt(imageSeed) : Math.floor(Math.random() * 1000000);
   const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=512&height=512&nologo=true&seed=${seed}`;
 
   console.log("Image prompt:", cleanPrompt);
