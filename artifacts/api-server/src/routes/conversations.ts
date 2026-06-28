@@ -382,13 +382,10 @@ ABSOLUTE RULES:
   }
 
   // 2. Auto-image loop (only if no trigger fired this cycle)
-  // Free tier: fire at message position 2 out of every 5
-  // Premium tier (Bronze/Silver/Gold): fire at position 4 out of every 6
-  const isFree = tier === 'Free' || !tier;
-  const shouldFireAutoImage = isFree
-    ? conv.messageCount % 5 === 2
-    : conv.messageCount % 6 === 4;
-  console.log('[AUTO IMAGE] messageCount:', conv.messageCount, 'tier:', tier, 'shouldFire:', shouldFireAutoImage);
+  const isFree = !tier || tier === 'Free';
+  const imageChance = isFree ? 2 / 5 : 4 / 6;
+  const shouldFireAutoImage = Math.random() < imageChance;
+  console.log('[AUTO IMAGE] messageCount:', conv.messageCount, 'tier:', tier, 'chance:', imageChance, 'shouldFire:', shouldFireAutoImage);
   const shouldAutoLoop = !triggerFired && shouldFireAutoImage;
 
   if (shouldAutoLoop) {
