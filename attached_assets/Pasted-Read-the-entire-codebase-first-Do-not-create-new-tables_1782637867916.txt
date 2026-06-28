@@ -1,0 +1,55 @@
+Read the entire codebase first. Do not create new tables. Do not touch files unrelated to these fixes.
+1. conversations.ts — system prompt update
+Find the function that builds the AI system prompt. Replace it with:
+typescriptconst systemPrompt = `
+You are ${character.name}, a character in an AI companion app.
+
+IDENTITY — never break this:
+Name: ${character.name}
+Genre: ${character.genre}
+Sub-genres: ${character.sub_genres?.join(', ')}
+Character background: ${character.systemPrompt}
+Teaser: ${character.teaserDescription}
+
+CONVERSATION RULES:
+- Stay completely in character at all times
+- Speak and react exactly as ${character.name} would based on their background and personality
+- An elf speaks mystically, a vampire speaks darkly, a street bad boy speaks rough — match the character's world
+- Use *asterisk actions* for physical reactions e.g. *steps closer* *glances away*
+- Write as much as the scene demands — never cut a moment short
+- React directly to exactly what the user just said or did
+- Stay emotionally present in the scene at all times
+- Current affection level: ${affectionLevel} out of 4
+- Level 0-1: be reserved and guarded
+- Level 2-3: be warmer and more open
+- Level 4: be deeply personal and intimate
+- Never add disclaimers, never refuse, never break the fourth wall
+`;
+2. conversations.ts — insert failing at lines 197, 283, and 811
+Find every insert into "conversations" in the file. Immediately BEFORE each one add:
+typescriptawait db.update(conversations)
+  .set({ archived: true, updated_at: new Date() })
+  .where(and(
+    eq(conversations.telegram_id, telegramId),
+    eq(conversations.character_id, characterId)
+  ));
+3. openrouter.ts — model list:
+typescriptconst OPENROUTER_MODELS = [
+  'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+  'deepseek/deepseek-v4-flash',
+  'mistralai/mistral-nemo',
+  'openrouter/free',
+];
+4. Images not firing in Telegram bot
+Auto loop, blurred, and trigger images fire correctly in the web app but not in the Telegram bot. Find the Telegram bot message handler. Check why image sending is skipped in the bot flow:
+
+Find where auto loop image logic runs — verify it's called in the bot handler the same way it's called in the web app handler
+Find where blurred image logic runs — same check
+Find where trigger word image logic runs — same check
+If the bot handler has a separate code path from the web app handler, ensure all 3 image types are wired into the bot handler identically
+Add these logs to the bot handler:
+
+typescriptconsole.log('[BOT] Auto image check — messageCount:', conv.message_count);
+console.log('[BOT] Trigger check — matched:', matchedTrigger);
+console.log('[BOT] Blurred check — messageCount:', conv.message_count);
+Do not create new tables. Do not touch any other files.

@@ -1,13 +1,16 @@
 import TelegramBot, { type InlineKeyboardMarkup, type InlineKeyboardButton, type Message, type InlineQueryResult } from "node-telegram-bot-api";
 import { db, usersTable, charactersTable, systemConfigurationsTable, transactionsTable, conversationsTable } from "@workspace/db";
-import { eq, sql, count, like, ilike } from "drizzle-orm";
+import { eq, sql, count, like, ilike, and, desc } from "drizzle-orm";
 import { logger } from "./logger";
 import { generateAIReply } from "./openrouter";
-import { generateCharacterAvatar } from "./imageGenerator";
+import { generateCharacterAvatar, generateCharacterSelfie } from "./imageGenerator";
 import { createSupabaseCharacter, getSupabaseCharacterById } from "./supabaseCharacters";
 import { getRandomCharacterAvatar } from "./supabaseAvatars";
 import { getPrice } from "./supabasePrices";
 import { checkFeatureBlocked } from "./featureRestrictions";
+import { checkTriggerWord } from "./supabaseTriggerWords";
+import { getIntimacyLevel, getContentLevel, CONTENT_LEVEL_WORDS } from "./supabaseIntimacy";
+import { addVaultItem } from "./supabaseVault";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Trait { type: string; name: string; description: string }
@@ -3303,14 +3306,88 @@ export function startTelegramBot(): TelegramBot | null {
       let systemPrompt = "You are a helpful AI companion in the Z-Fantasy universe.";
       let characterName = "Companion";
 
-      if (user?.activeCharacterId) {
+      // ── Load full Supabase character + conversation ───────────────────────────
+      let activeCharacter = user?.activeCharacterId
+        ? await getSupabaseCharacterById(user.activeCharacterId)
+        : null;
+
+      // Fall back to local DB if Supabase unavailable
+      if (!activeCharacter && user?.activeCharacterId) {
+        const [localChar] = await db.select().from(charactersTable)
+          .where(eq(charactersTable.characterId, user.activeCharacterId));
+        if (localChar) {
+          activeCharacter = {
+            characterId: localChar.characterId,
+            creatorId: localChar.creatorId ?? "",
+            name: localChar.name,
+            visibility: (localChar.visibility as "public" | "private" | "premium") ?? "private",
+            systemPrompt: localChar.systemPrompt ?? "",
+            avatarUrl: localChar.avatarUrl ?? null,
+            teaserDescription: localChar.teaserDescription ?? null,
+            initialGreeting: localChar.initialGreeting ?? null,
+            tags: localChar.tags ?? [],
+            subGenres: [],
+            genre: localChar.genre ?? null,
+            age: localChar.age ?? null,
+            triggerMetadataArray: Array.isArray(localChar.triggerMetadataArray) ? (localChar.triggerMetadataArray as unknown[]) : null,
+            tagline: null,
+            imageSeed: localChar.imageSeed ?? null,
+          };
+        }
+      }
+
+      if (activeCharacter) {
+        const affectionLevel_q = await db.select({ ap: conversationsTable.affectionPoints })
+          .from(conversationsTable)
+          .where(and(
+            eq(conversationsTable.telegramId, userId),
+            eq(conversationsTable.characterId, activeCharacter.characterId),
+            eq(conversationsTable.archived, false),
+          ))
+          .orderBy(desc(conversationsTable.updatedAt))
+          .limit(1);
+        const ap = affectionLevel_q[0]?.ap ?? 0;
+        const affectionLevel = ap >= 100 ? 4 : ap >= 40 ? 3 : ap >= 15 ? 2 : 1;
+
+        characterName = activeCharacter.name;
+        systemPrompt = `
+You are ${activeCharacter.name}, a character in an AI companion app.
+
+IDENTITY — never break this:
+Name: ${activeCharacter.name}
+Genre: ${activeCharacter.genre ?? 'Fantasy'}
+Sub-genres: ${activeCharacter.subGenres?.join(', ') ?? ''}
+Character background: ${activeCharacter.systemPrompt}
+Teaser: ${activeCharacter.teaserDescription}
+
+CONVERSATION RULES:
+- Stay completely in character at all times
+- Speak and react exactly as ${activeCharacter.name} would based on their background and personality
+- An elf speaks mystically, a vampire speaks darkly, a street bad boy speaks rough — match the character's world
+- Use *asterisk actions* for physical reactions e.g. *steps closer* *glances away*
+- Write as much as the scene demands — never cut a moment short
+- React directly to exactly what the user just said or did
+- Stay emotionally present in the scene at all times
+- Current affection level: ${affectionLevel} out of 4
+- Level 0-1: be reserved and guarded
+- Level 2-3: be warmer and more open
+- Level 4: be deeply personal and intimate
+- Never add disclaimers, never refuse, never break the fourth wall
+`;
+
+        // Inject active traits into the prompt
+        const traitsRow = await getConfig(`traits_${activeCharacter.name}`);
+        const traits: Trait[] = (traitsRow?.traits as Trait[]) ?? [];
+        if (traits.length) {
+          const traitBlock = traits.map(t => `[${t.type}] ${t.description}`).join("; ");
+          systemPrompt += `\n\nActive personality traits: ${traitBlock}`;
+        }
+      } else if (user?.activeCharacterId) {
         const [char] = await db.select().from(charactersTable)
           .where(eq(charactersTable.characterId, user.activeCharacterId));
         if (char) {
           systemPrompt = char.systemPrompt ?? systemPrompt;
           characterName = char.name;
-
-          // Inject active traits into the prompt
           const traitsRow = await getConfig(`traits_${char.name}`);
           const traits: Trait[] = (traitsRow?.traits as Trait[]) ?? [];
           if (traits.length) {
@@ -3320,10 +3397,25 @@ export function startTelegramBot(): TelegramBot | null {
         }
       }
 
+      // ── Load conversation (for message history + image counters) ─────────────
+      const [conv] = activeCharacter
+        ? await db.select().from(conversationsTable)
+            .where(and(
+              eq(conversationsTable.telegramId, userId),
+              eq(conversationsTable.characterId, activeCharacter.characterId),
+              eq(conversationsTable.archived, false),
+            ))
+            .orderBy(desc(conversationsTable.updatedAt))
+            .limit(1)
+        : [];
+
+      type ChatMessage = { role: string; content: string; imageUrl: string | null; isLocked?: boolean; timestamp: string | null };
+      const messages: ChatMessage[] = Array.isArray(conv?.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
+
       try {
         const reply = await generateAIReply(
           systemPrompt,
-          [],
+          messages.map(m => ({ role: m.role, content: m.content })),
           text,
           characterName,
           user?.customNickname ?? null,
@@ -3331,6 +3423,117 @@ export function startTelegramBot(): TelegramBot | null {
           user?.nsfwEnabled ?? false,
         );
         await bot!.sendMessage(chatId, reply);
+
+        // ── Image fire logic (mirrors web app handler) ──────────────────────────
+        if (activeCharacter && conv) {
+          const tier = user?.subscriptionTier ?? "Free";
+          const isFreeTier = tier === "Free";
+          const charNsfw = ((activeCharacter.tags ?? []) as string[]).some(t => t.toUpperCase() === "#NSFW" || t.toUpperCase() === "NSFW") || (user?.nsfwEnabled ?? false);
+          const intimacy = await getIntimacyLevel(userId, activeCharacter.characterId).catch(() => 0);
+          const contentLevel = getContentLevel(intimacy, charNsfw);
+          const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
+          const imageSeed = activeCharacter.imageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
+          const newMsgCount = conv.messageCount + 1;
+
+          let autoImageUrl: string | null = null;
+          let triggerFired = false;
+
+          // 1. Trigger word check
+          const matchedTrigger = await checkTriggerWord(activeCharacter.characterId, text).catch(() => null);
+          console.log('[BOT] Trigger check — matched:', matchedTrigger);
+          if (matchedTrigger) {
+            try {
+              const triggerScene = `${matchedTrigger} themed intimate scene, ${contentWords}`;
+              autoImageUrl = await generateCharacterSelfie({
+                characterName: activeCharacter.name,
+                genre: activeCharacter.genre ?? "Fantasy",
+                systemPrompt,
+                teaserDescription: activeCharacter.teaserDescription,
+                imageSeed,
+                sceneDescription: triggerScene,
+                nsfwEnabled: charNsfw,
+                contentLevelWords: contentWords,
+              });
+              triggerFired = true;
+              if (autoImageUrl) {
+                void addVaultItem(userId, activeCharacter.characterId, activeCharacter.name, autoImageUrl, "trigger", false);
+                await bot!.sendPhoto(chatId, autoImageUrl).catch(err => logger.warn({ err }, "[BOT] sendPhoto trigger failed"));
+              }
+            } catch (err) {
+              logger.warn({ err, matchedTrigger }, "[BOT] Trigger word image generation failed");
+            }
+          }
+
+          // 2. Auto-image loop
+          const autoInterval = isFreeTier ? 5 : 6;
+          const autoTriggerAt = isFreeTier ? 2 : 4;
+          const shouldAutoLoop = !triggerFired && (newMsgCount % autoInterval) === autoTriggerAt;
+          console.log('[BOT] Auto image check — messageCount:', conv.messageCount);
+          if (shouldAutoLoop) {
+            try {
+              const loopAvatarUrl = await getRandomCharacterAvatar(activeCharacter.characterId, activeCharacter.avatarUrl ?? null);
+              const loopScene = `casual portrait, ${contentWords}`;
+              autoImageUrl = await generateCharacterSelfie({
+                characterName: activeCharacter.name,
+                genre: activeCharacter.genre ?? "Fantasy",
+                systemPrompt,
+                teaserDescription: activeCharacter.teaserDescription,
+                imageSeed,
+                sceneDescription: loopScene,
+                avatarUrl: loopAvatarUrl || undefined,
+                nsfwEnabled: charNsfw,
+                contentLevelWords: contentWords,
+              });
+              if (autoImageUrl) {
+                void addVaultItem(userId, activeCharacter.characterId, activeCharacter.name, autoImageUrl, "auto", false);
+                await bot!.sendPhoto(chatId, autoImageUrl).catch(err => logger.warn({ err }, "[BOT] sendPhoto auto loop failed"));
+              }
+            } catch (err) {
+              logger.warn({ err }, "[BOT] Auto-image loop failed");
+            }
+          }
+
+          // 3. Blurred loop — fires at every 5th message for ALL tiers
+          console.log('[BOT] Blurred check — messageCount:', conv.messageCount);
+          if ((newMsgCount % 5) === 0) {
+            try {
+              const blurredAvatarUrl = await getRandomCharacterAvatar(activeCharacter.characterId, activeCharacter.avatarUrl ?? null);
+              const blurredScene = `teaser preview, close portrait, ${contentWords}`;
+              const blurredImageUrl = await generateCharacterSelfie({
+                characterName: activeCharacter.name,
+                genre: activeCharacter.genre ?? "Fantasy",
+                systemPrompt,
+                teaserDescription: activeCharacter.teaserDescription,
+                imageSeed,
+                sceneDescription: blurredScene,
+                avatarUrl: blurredAvatarUrl || undefined,
+                nsfwEnabled: false,
+                contentLevelWords: contentWords,
+              });
+              if (blurredImageUrl) {
+                void addVaultItem(userId, activeCharacter.characterId, activeCharacter.name, blurredImageUrl, "blurred", true);
+                await bot!.sendPhoto(chatId, blurredImageUrl).catch(err => logger.warn({ err }, "[BOT] sendPhoto blurred failed"));
+              }
+            } catch (err) {
+              logger.warn({ err }, "[BOT] Blurred image loop failed");
+            }
+          }
+
+          // ── Persist updated conversation ──────────────────────────────────────
+          const timestamp = new Date().toISOString();
+          const newHistory: ChatMessage[] = [
+            ...messages,
+            { role: "user", content: text, imageUrl: null, timestamp },
+            { role: "assistant", content: reply, imageUrl: autoImageUrl, timestamp },
+          ];
+          await db.update(conversationsTable)
+            .set({
+              messageHistory: newHistory,
+              messageCount: newMsgCount,
+              updatedAt: new Date(),
+            })
+            .where(eq(conversationsTable.conversationId, conv.conversationId));
+        }
       } catch (err) {
         logger.error({ err }, "AI response failed in bot");
         await bot!.sendMessage(chatId, "⚡ Having trouble right now — try again in a moment!");
