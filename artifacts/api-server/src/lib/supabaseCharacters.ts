@@ -238,6 +238,7 @@ export async function createSupabaseCharacter(values: {
       return serializeSupabaseCharacter(data as SupabaseCharacterRow);
     }
 
+    console.log('createSupabaseCharacter error details:', JSON.stringify(error));
     logger.error({
       error,
       errorCode: error?.code,

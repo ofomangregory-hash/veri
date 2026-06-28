@@ -92,7 +92,7 @@ async function tryPollinations(
     if (!response.ok) {
       const bodyText = await response.text();
       console.log('Pollinations 400 body:', bodyText);
-      return avatarUrl ?? null;
+      return null;
     }
 
     const arrayBuffer = await response.arrayBuffer();
