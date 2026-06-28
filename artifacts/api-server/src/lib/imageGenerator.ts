@@ -91,8 +91,10 @@ async function tryPollinations(
 
     if (!response.ok) {
       const bodyText = await response.text();
+      console.log('Pollinations status:', response.status);
       console.log('Pollinations 400 body:', bodyText);
-      return null;
+      console.log('Pollinations headers:', JSON.stringify(Object.fromEntries(response.headers)));
+      throw new Error(`Pollinations failed: ${response.status}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
