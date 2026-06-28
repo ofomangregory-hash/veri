@@ -62,6 +62,7 @@ async function tryPollinations(
   subGenres: string[],
   imageSeed: string,
   nsfwEnabled: boolean,
+  avatarUrl?: string | null,
 ): Promise<string | null> {
   try {
     const parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
@@ -85,14 +86,13 @@ async function tryPollinations(
       });
     } catch (fetchErr) {
       logger.warn({ message: (fetchErr as Error).message }, "Pollinations fetch failed");
-      return null;
+      return avatarUrl ?? null;
     }
 
     if (!response.ok) {
       const bodyText = await response.text();
       console.log('Pollinations 400 body:', bodyText);
-      logger.warn({ status: response.status, body: bodyText }, "Pollinations returned non-200");
-      return null;
+      return avatarUrl ?? null;
     }
 
     const arrayBuffer = await response.arrayBuffer();
@@ -155,17 +155,11 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
   const stylePrefix = getStylePrefix(genre);
 
   // Primary: Pollinations with characterName first
-  const result = await tryPollinations(characterName, stylePrefix, subGenres, imageSeed, nsfwEnabled);
+  const result = await tryPollinations(characterName, stylePrefix, subGenres, imageSeed, nsfwEnabled, avatarUrl);
   if (result) return result;
 
-  // Fallback to character's saved avatar_url — never break chat flow
-  if (avatarUrl) {
-    logger.warn({ characterName }, "Pollinations failed — using avatar_url as fallback");
-    return avatarUrl;
-  }
-
   // Last resort: generic Pollinations with just the name and portrait
-  const genericResult = await tryPollinations(characterName, "portrait, detailed face", [], imageSeed, false);
+  const genericResult = await tryPollinations(characterName, "portrait, detailed face", [], imageSeed, false, avatarUrl);
   if (genericResult) return genericResult;
 
   // Absolute last resort: dicebear placeholder — never throw
