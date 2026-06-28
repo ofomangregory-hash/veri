@@ -1326,4 +1326,113 @@ router.post("/admin/images/auto-loop/reset/:characterId", adminOnly, async (req,
   res.json({ ok: true });
 });
 
+// ── Database Admin (God-Mode) ─────────────────────────────────────────────────
+
+const SUPABASE_TABLES = [
+  "characters", "users", "vault_items", "user_restrictions",
+  "affection_words", "affection_records", "intimacy_levels", "trigger_words",
+  "quest_definitions", "quest_progress", "referral_records",
+  "cs_threads", "cs_messages", "help_articles", "events",
+  "premium_tiers", "prices", "avatars", "feature_restrictions",
+  "character_images", "notifications", "broadcast_logs", "system_configs",
+];
+
+// GET /admin/db/tables — probe and return available Supabase tables
+router.get("/admin/db/tables", adminOnly, async (req, res): Promise<void> => {
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const available: string[] = [];
+  for (const table of SUPABASE_TABLES) {
+    try {
+      const { error } = await supabase.from(table).select("*", { count: "exact", head: true });
+      if (!error) available.push(table);
+    } catch { /* skip */ }
+  }
+  res.json({ tables: available });
+});
+
+// GET /admin/db/:table — fetch paginated rows with column metadata
+router.get("/admin/db/:table", adminOnly, async (req, res): Promise<void> => {
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const { table } = req.params;
+  if (!SUPABASE_TABLES.includes(table)) { res.status(400).json({ error: "Table not allowed" }); return; }
+
+  const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
+  const search = String(req.query.search ?? "").trim();
+  const searchCol = String(req.query.searchCol ?? "").trim();
+  const limit = 50;
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  try {
+    let query = supabase.from(table).select("*", { count: "exact" });
+    if (search && searchCol) {
+      query = query.ilike(searchCol, `%${search}%`);
+    }
+    const { data, count, error } = await query.range(from, to);
+    if (error) { res.status(500).json({ error: error.message }); return; }
+
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const columns = rows.length > 0
+      ? Object.keys(rows[0]).map(k => {
+          const v = rows[0][k];
+          const type = v === null ? "string" : Array.isArray(v) ? "array" : typeof v === "object" ? "object" : typeof v;
+          return { name: k, type };
+        })
+      : [];
+
+    res.json({ rows, columns, total: count ?? 0, page, limit });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// PATCH /admin/db/:table/:id — update a row
+router.patch("/admin/db/:table/:id", adminOnly, async (req, res): Promise<void> => {
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const { table, id } = req.params;
+  if (!SUPABASE_TABLES.includes(table)) { res.status(400).json({ error: "Table not allowed" }); return; }
+  const pk = String(req.query.pk ?? "id");
+  const body = req.body as Record<string, unknown>;
+
+  try {
+    const { data, error } = await supabase.from(table).update(body).eq(pk, id).select().maybeSingle();
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ row: data });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// POST /admin/db/:table — insert a new row
+router.post("/admin/db/:table", adminOnly, async (req, res): Promise<void> => {
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const { table } = req.params;
+  if (!SUPABASE_TABLES.includes(table)) { res.status(400).json({ error: "Table not allowed" }); return; }
+  const body = req.body as Record<string, unknown>;
+
+  try {
+    const { data, error } = await supabase.from(table).insert(body).select().maybeSingle();
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ row: data });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// DELETE /admin/db/:table/:id — delete a row
+router.delete("/admin/db/:table/:id", adminOnly, async (req, res): Promise<void> => {
+  if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
+  const { table, id } = req.params;
+  if (!SUPABASE_TABLES.includes(table)) { res.status(400).json({ error: "Table not allowed" }); return; }
+  const pk = String(req.query.pk ?? "id");
+
+  try {
+    const { error } = await supabase.from(table).delete().eq(pk, id);
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;
