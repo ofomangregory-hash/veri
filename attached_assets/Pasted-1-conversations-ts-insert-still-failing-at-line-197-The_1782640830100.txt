@@ -1,0 +1,33 @@
+1. conversations.ts — insert still failing at line 197
+The archive block is not running. Find the exact insert at line 197. Delete whatever archive block is there and replace with this — no conditions, no async gaps, runs unconditionally:
+typescriptconsole.log('[ARCHIVE] Running archive before insert for:', telegramId, characterId);
+await db.update(conversations)
+  .set({ archived: true, updated_at: new Date() })
+  .where(and(
+    eq(conversations.telegram_id, telegramId),
+    eq(conversations.character_id, characterId)
+  ));
+Do the same for every other insert into "conversations" in the file.
+2. Premium characters not showing in Telegram bot
+The characters table has a visibility column with values 'public' and 'premium'. The users table has id (not telegram_id) and subscription_tier.
+In the Telegram bot message handler, find where characters are fetched or filtered. The bot is currently only showing public characters to all users. Fix it:
+typescript// Fetch user to check tier
+const user = await db.query.users.findFirst({
+  where: eq(users.id, telegramId)
+});
+
+const isPremium = user?.subscription_tier && 
+  user.subscription_tier !== 'free';
+
+// Filter characters based on tier
+const visibleCharacters = characters.filter(c => 
+  c.visibility === 'public' || 
+  (isPremium && c.visibility === 'premium')
+);
+Apply the same logic anywhere in the bot handler where characters are listed or selected — character list, character picker, start conversation. Premium users (subscription_tier not null and not 'free') should see both public and premium characters. Free users see only public.
+Add this log:
+typescriptconsole.log('[BOT] User tier:', user?.subscription_tier, 'isPremium:', isPremium, 'visible chars:', visibleCharacters.length);
+3. createSupabaseCharacter — add full error details
+Find createSupabaseCharacter. Before the fallback log add:
+typescriptconsole.log('createSupabaseCharacter error details:', JSON.stringify(error));
+Do not create new tables. Do not touch any other files.

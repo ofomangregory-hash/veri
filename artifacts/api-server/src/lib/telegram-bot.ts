@@ -520,7 +520,14 @@ export function startTelegramBot(): TelegramBot | null {
           visibility: charactersTable.visibility,
         }).from(charactersTable).orderBy(charactersTable.name);
 
-        const visible = allChars.filter(c => c.visibility === "public" || isAdminUser);
+        const [charListUser] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+        const isCharListPremium = charListUser?.subscriptionTier && charListUser.subscriptionTier.toLowerCase() !== 'free';
+        const visible = allChars.filter(c =>
+          c.visibility === "public" ||
+          (isCharListPremium && c.visibility === "premium") ||
+          isAdminUser
+        );
+        console.log('[BOT] User tier:', charListUser?.subscriptionTier, 'isPremium:', isCharListPremium, 'visible chars:', visible.length);
 
         if (!visible.length) {
           await bot!.sendMessage(chatId, "No companions available yet. Check back soon! 💜");
@@ -615,11 +622,13 @@ export function startTelegramBot(): TelegramBot | null {
       await syncUser(userId, msg.from?.username);
 
       const adminUser = isAdmin(msg);
+      const [browseUser] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+      const isBrowsePremium = browseUser?.subscriptionTier && browseUser.subscriptionTier.toLowerCase() !== 'free';
+      console.log('[BOT] User tier:', browseUser?.subscriptionTier, 'isPremium:', isBrowsePremium, 'visible chars:', 'calculating');
+      const allBrowseChars = await db.select().from(charactersTable).orderBy(charactersTable.name);
       const characters = adminUser
-        ? await db.select().from(charactersTable).orderBy(charactersTable.name)
-        : await db.select().from(charactersTable)
-            .where(eq(charactersTable.visibility, "public"))
-            .orderBy(charactersTable.name);
+        ? allBrowseChars
+        : allBrowseChars.filter(c => c.visibility === "public" || (isBrowsePremium && c.visibility === "premium"));
 
       if (!characters.length) {
         await bot!.sendMessage(chatId, "No companions available yet 💜");
@@ -1994,11 +2003,13 @@ export function startTelegramBot(): TelegramBot | null {
         const browseUserId = String(query.from.id);
         const browseAdminId = process.env.ADMIN_TELEGRAM_ID;
         const isBrowseAdmin = browseUserId === browseAdminId || browseUserId === HARDCODED_ADMIN_ID || adminSessions.has(query.from.id);
+        const [browseNavUser] = await db.select().from(usersTable).where(eq(usersTable.id, browseUserId));
+        const isBrowseNavPremium = browseNavUser?.subscriptionTier && browseNavUser.subscriptionTier.toLowerCase() !== 'free';
+        const allNavChars = await db.select().from(charactersTable).orderBy(charactersTable.name);
         const characters = isBrowseAdmin
-          ? await db.select().from(charactersTable).orderBy(charactersTable.name)
-          : await db.select().from(charactersTable)
-              .where(eq(charactersTable.visibility, "public"))
-              .orderBy(charactersTable.name);
+          ? allNavChars
+          : allNavChars.filter(c => c.visibility === "public" || (isBrowseNavPremium && c.visibility === "premium"));
+        console.log('[BOT] User tier:', browseNavUser?.subscriptionTier, 'isPremium:', isBrowseNavPremium, 'visible chars:', characters.length);
 
         if (!characters.length) {
           await bot!.answerCallbackQuery(query.id, { text: "No companions available" });
@@ -2880,6 +2891,10 @@ export function startTelegramBot(): TelegramBot | null {
       const isAdminUser = (userId === adminId || userId === HARDCODED_ADMIN_ID) || adminSessions.has(query.from.id);
 
       try {
+        const [inlineUser] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+        const isInlinePremium = inlineUser?.subscriptionTier && inlineUser.subscriptionTier.toLowerCase() !== 'free';
+        console.log('[BOT] User tier:', inlineUser?.subscriptionTier, 'isPremium:', isInlinePremium, 'visible chars:', 'calculating');
+
         let characters;
         if (searchTerm) {
           characters = await db.select().from(charactersTable)
@@ -2892,7 +2907,11 @@ export function startTelegramBot(): TelegramBot | null {
             .limit(20);
         }
 
-        const visible = characters.filter(c => c.visibility === "public" || isAdminUser);
+        const visible = characters.filter(c =>
+          c.visibility === "public" ||
+          (isInlinePremium && c.visibility === "premium") ||
+          isAdminUser
+        );
 
         const results: InlineQueryResult[] = visible.map(char => {
           const traitsLine = "";

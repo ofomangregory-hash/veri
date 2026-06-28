@@ -175,6 +175,14 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
   const character = await getSupabaseCharacterById(params.data.characterId);
   if (!character) { res.status(404).json({ error: "Character not found" }); return; }
 
+  console.log('[ARCHIVE] Running archive before insert for:', req.telegramUserId, params.data.characterId);
+  await db.update(conversationsTable)
+    .set({ archived: true, updatedAt: new Date() })
+    .where(and(
+      eq(conversationsTable.telegramId, req.telegramUserId),
+      eq(conversationsTable.characterId, params.data.characterId),
+    ));
+
   let [conv] = await db.select().from(conversationsTable)
     .where(and(
       eq(conversationsTable.telegramId, req.telegramUserId),
@@ -185,14 +193,6 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
     .limit(1);
 
   if (!conv) {
-    console.log('[ARCHIVE] Running archive before insert for:', req.telegramUserId, params.data.characterId);
-    await db.update(conversationsTable)
-      .set({ archived: true, updatedAt: new Date() })
-      .where(and(
-        eq(conversationsTable.telegramId, req.telegramUserId),
-        eq(conversationsTable.characterId, params.data.characterId),
-      ));
-
     const greeting = character.initialGreeting ?? `Hello, I'm ${character.name}. I've been waiting for you...`;
     const initialMessage: ChatMessage = { role: "assistant", content: greeting, imageUrl: null, timestamp: new Date().toISOString() };
     [conv] = await db.insert(conversationsTable).values({
@@ -274,14 +274,15 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     .orderBy(desc(conversationsTable.updatedAt))
     .limit(1);
 
+  console.log('[ARCHIVE] Running archive before insert for:', req.telegramUserId, params.data.characterId);
+  await db.update(conversationsTable)
+    .set({ archived: true, updatedAt: new Date() })
+    .where(and(
+      eq(conversationsTable.telegramId, req.telegramUserId),
+      eq(conversationsTable.characterId, params.data.characterId),
+    ));
+
   if (!conv) {
-    console.log('[ARCHIVE] Running archive before insert for:', req.telegramUserId, params.data.characterId);
-    await db.update(conversationsTable)
-      .set({ archived: true, updatedAt: new Date() })
-      .where(and(
-        eq(conversationsTable.telegramId, req.telegramUserId),
-        eq(conversationsTable.characterId, params.data.characterId),
-      ));
     [conv] = await db.insert(conversationsTable).values({
       telegramId: req.telegramUserId,
       characterId: params.data.characterId,
