@@ -17,8 +17,6 @@ import {
 } from "@workspace/api-zod";
 import { authMiddleware } from "../middlewares/auth";
 import { getGenreDefaultAvatar } from "../lib/cloudinary";
-import { generateCharacterAvatar } from "../lib/imageGenerator";
-
 import { logger } from "../lib/logger";
 import {
   listSupabaseCharacters,
@@ -223,28 +221,15 @@ router.post("/characters", async (req, res): Promise<void> => {
     : [];
   const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
 
-  let finalAvatarUrl = parsed.data.avatarUrl ?? null;
-  if (!finalAvatarUrl) {
-    try {
-      finalAvatarUrl = await generateCharacterAvatar({
-        characterName: parsed.data.name,
-        genre: parsed.data.genre,
-        teaserDescription: parsed.data.bio ?? null,
-        imageSeed,
-        subGenres,
-      });
-    } catch (err) {
-      logger.warn({ err }, "Avatar generation failed — using genre default");
-      finalAvatarUrl = getGenreDefaultAvatar(parsed.data.genre);
-    }
-  }
+  // Save immediately with genre placeholder — avatar generated async after save
+  const initialAvatarUrl = parsed.data.avatarUrl ?? getGenreDefaultAvatar(parsed.data.genre);
 
   const character = await createSupabaseCharacter({
     creatorId: req.telegramUserId,
     name: parsed.data.name,
     visibility,
     systemPrompt,
-    avatarUrl: finalAvatarUrl,
+    avatarUrl: initialAvatarUrl,
     teaserDescription: parsed.data.bio ?? null,
     initialGreeting: parsed.data.initialGreeting ?? null,
     tags: parsed.data.tags ?? [],
@@ -272,6 +257,71 @@ router.post("/characters", async (req, res): Promise<void> => {
   });
 
   res.status(201).json(serializeCharacter(character));
+
+  // Generate avatar in the background — does not block the response
+  const characterId = character.characterId;
+  const characterName = character.name;
+  const characterGenre = character.genre ?? parsed.data.genre;
+  const seed = parseInt(imageSeed);
+
+  (async () => {
+    try {
+      const prompt = encodeURIComponent(
+        `${characterName}, ${characterGenre} style, character portrait, detailed face`
+      );
+      const pollinationsUrl = `https://image.pollinations.ai/prompt/${prompt}?model=flux&width=512&height=512&nologo=true&seed=${seed}`;
+
+      console.log('[CHARACTER AVATAR] Starting background generation for:', characterName);
+      const response = await fetch(pollinationsUrl, {
+        headers: { 'Referer': 'https://pollinations.ai' },
+        signal: AbortSignal.timeout(65000),
+      });
+
+      if (!response.ok) {
+        const bodyText = await response.text();
+        console.log('[CHARACTER AVATAR] Pollinations failed:', response.status, bodyText);
+        return;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      if (!arrayBuffer || arrayBuffer.byteLength < 1000) {
+        console.log('[CHARACTER AVATAR] Image too small, skipping upload');
+        return;
+      }
+
+      const FormData = (await import("form-data")).default;
+      const form = new FormData();
+      form.append("file", Buffer.from(arrayBuffer), {
+        filename: `avatar_${characterId}.jpg`,
+        contentType: "image/jpeg",
+      });
+
+      const uploadRes = await fetch("https://telegra.ph/upload", {
+        method: "POST",
+        headers: form.getHeaders(),
+        body: form as unknown as BodyInit,
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!uploadRes.ok) {
+        const bodyText = await uploadRes.text();
+        console.log('[CHARACTER AVATAR] Telegraph upload failed:', uploadRes.status, bodyText);
+        return;
+      }
+
+      const uploadData = await uploadRes.json() as Array<{ src: string }>;
+      if (!Array.isArray(uploadData) || !uploadData[0]?.src) {
+        console.log('[CHARACTER AVATAR] Telegraph returned unexpected response');
+        return;
+      }
+
+      const telegraphUrl = `https://telegra.ph${uploadData[0].src}`;
+      await updateSupabaseCharacter(characterId, { avatarUrl: telegraphUrl });
+      console.log('[CHARACTER AVATAR] Generated successfully for:', characterName, '->', telegraphUrl);
+    } catch (err: any) {
+      console.log('[CHARACTER AVATAR] Generation failed, keeping existing avatar:', err?.message);
+    }
+  })();
 });
 
 router.patch("/characters/:characterId", async (req, res): Promise<void> => {
