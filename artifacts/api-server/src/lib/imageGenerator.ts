@@ -64,38 +64,29 @@ async function tryPollinations(
   nsfwEnabled: boolean,
   avatarUrl?: string | null,
 ): Promise<string | null> {
+  const parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
+  const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
+  const encodedPrompt = encodeURIComponent(cleanPrompt);
+  const seed = Math.floor(Math.random() * 1000000);
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=512&height=512&nologo=true&seed=${seed}`;
+
+  console.log("Image prompt:", cleanPrompt);
+  console.log('Pollinations URL:', url);
+  logger.info({ url, characterName, nsfwEnabled }, "Attempting Pollinations image generation");
+
   try {
-    const parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
-    const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
-    const encodedPrompt = encodeURIComponent(cleanPrompt);
-    const seed = Math.floor(Math.random() * 1000000);
-    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=512&height=512&nologo=true&seed=${seed}`;
-
-    console.log("Image prompt:", cleanPrompt);
-    console.log('Pollinations URL:', url);
-    logger.info({ url, characterName, nsfwEnabled }, "Attempting Pollinations image generation");
-
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0",
-          "Accept": "image/jpeg,image/png,image/*",
-          "Referer": "https://pollinations.ai",
-        },
-        signal: AbortSignal.timeout(30000),
-      });
-    } catch (fetchErr) {
-      logger.warn({ message: (fetchErr as Error).message }, "Pollinations fetch failed");
-      return avatarUrl ?? null;
-    }
+    const response = await fetch(url, {
+      headers: {
+        "Referer": "https://pollinations.ai",
+      },
+      signal: AbortSignal.timeout(65000),
+    });
 
     if (!response.ok) {
       const bodyText = await response.text();
       console.log('Pollinations status:', response.status);
       console.log('Pollinations 400 body:', bodyText);
-      console.log('Pollinations headers:', JSON.stringify(Object.fromEntries(response.headers)));
-      throw new Error(`Pollinations failed: ${response.status}`);
+      return null;
     }
 
     const arrayBuffer = await response.arrayBuffer();
@@ -108,8 +99,8 @@ async function tryPollinations(
     const telegraphUrl = await uploadToTelegraph(buffer, `img_${Date.now()}.jpg`);
     logger.info({ telegraphUrl }, "Pollinations image uploaded to Telegra.ph");
     return telegraphUrl;
-  } catch (err) {
-    logger.warn({ message: (err as Error).message }, "Pollinations generation failed");
+  } catch (err: unknown) {
+    console.log('Pollinations fetch error:', (err as Error)?.message);
     return null;
   }
 }
