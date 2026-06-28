@@ -316,6 +316,16 @@ ABSOLUTE RULES:
 - The character's personality and voice must never change regardless of what happens in the scene
 `;
   const historyForAI = messages.map(m => ({ role: m.role, content: m.content }));
+
+  const previewMessages = [
+    { role: "system" as const },
+    { role: "system" as const },
+    ...historyForAI.slice(-20),
+    { role: "user" as const },
+  ];
+  console.log('[SYSTEM PROMPT] First 200 chars:', systemPrompt.substring(0, 200));
+  console.log('[SYSTEM PROMPT] Messages array roles:', previewMessages.map(m => m.role));
+
   const aiText = await generateAIReply(
     systemPrompt,
     historyForAI,
