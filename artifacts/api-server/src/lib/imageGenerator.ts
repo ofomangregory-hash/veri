@@ -95,8 +95,9 @@ async function tryPollinations(
       return null;
     }
 
-    const buffer = Buffer.from(arrayBuffer);
-    const telegraphUrl = await uploadToTelegraph(buffer, `img_${Date.now()}.jpg`);
+    console.log('Pollinations success — buffer size:', arrayBuffer.byteLength);
+    console.log('Uploading to Telegra.ph...');
+    const telegraphUrl = await uploadToTelegraph(arrayBuffer, `img_${Date.now()}.jpg`);
     logger.info({ telegraphUrl }, "Pollinations image uploaded to Telegra.ph");
     return telegraphUrl;
   } catch (err: any) {
@@ -107,32 +108,37 @@ async function tryPollinations(
   }
 }
 
-async function uploadToTelegraph(imageBuffer: Buffer, filename: string): Promise<string> {
-  const FormData = (await import("form-data")).default;
-  const form = new FormData();
-  form.append("file", imageBuffer, {
-    filename,
-    contentType: "image/jpeg",
-  });
+async function uploadToTelegraph(buffer: ArrayBuffer, filename: string): Promise<string> {
+  const blob = new Blob([buffer], { type: "image/jpeg" });
+  const formData = new FormData();
+  formData.append("file", blob, filename);
 
-  const response = await fetch("https://telegra.ph/upload", {
+  const res = await fetch("https://telegra.ph/upload", {
     method: "POST",
-    headers: form.getHeaders(),
-    body: form as unknown as BodyInit,
+    body: formData,
     signal: AbortSignal.timeout(30000),
   });
 
-  if (!response.ok) {
-    const bodyText = await response.text();
-    throw new Error(`Telegra.ph upload failed: ${response.status} — ${bodyText}`);
+  console.log("Telegra.ph response status:", res.status);
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.log("Telegra.ph error body:", body);
+    throw new Error(`Telegra.ph upload failed: ${res.status}`);
   }
 
-  const data = await response.json() as Array<{ src: string }>;
-  if (!Array.isArray(data) || !data[0]?.src) {
-    throw new Error("Telegra.ph upload returned unexpected response");
+  const json = await res.json();
+  console.log("Telegra.ph response JSON:", JSON.stringify(json));
+
+  if (Array.isArray(json) && json[0]?.src) {
+    return `https://telegra.ph${json[0].src}`;
   }
 
-  return `https://telegra.ph${data[0].src}`;
+  if (json?.src) {
+    return `https://telegra.ph${json.src}`;
+  }
+
+  throw new Error(`Telegra.ph upload returned unexpected response: ${JSON.stringify(json)}`);
 }
 
 export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Promise<string> {
