@@ -72,6 +72,7 @@ async function tryPollinations(
 
   console.log("Image prompt:", cleanPrompt);
   console.log('Pollinations URL:', url);
+  console.log('Fetch library:', typeof fetch);
   logger.info({ url, characterName, nsfwEnabled }, "Attempting Pollinations image generation");
 
   try {
@@ -81,10 +82,10 @@ async function tryPollinations(
       },
       signal: AbortSignal.timeout(65000),
     });
+    console.log('Pollinations response status:', response.status);
 
     if (!response.ok) {
       const bodyText = await response.text();
-      console.log('Pollinations status:', response.status);
       console.log('Pollinations 400 body:', bodyText);
       return null;
     }
@@ -99,8 +100,10 @@ async function tryPollinations(
     const telegraphUrl = await uploadToTelegraph(buffer, `img_${Date.now()}.jpg`);
     logger.info({ telegraphUrl }, "Pollinations image uploaded to Telegra.ph");
     return telegraphUrl;
-  } catch (err: unknown) {
-    console.log('Pollinations fetch error:', (err as Error)?.message);
+  } catch (err: any) {
+    console.log('Pollinations fetch error type:', err?.constructor?.name);
+    console.log('Pollinations fetch error:', err?.message);
+    console.log('Pollinations error response:', err?.response?.data);
     return null;
   }
 }
