@@ -50,7 +50,9 @@ export function Premium() {
   const [buyingTickets, setBuyingTickets] = useState<string | null>(null);
   const [tierConfigs, setTierConfigs] = useState<Record<string, { features: string[]; featured: boolean }>>(DEFAULT_TIER_CONFIGS);
   const [prices, setPrices] = useState<Record<string, Record<Period, number>>>(DEFAULT_PRICES);
-  const [neonPacks, setNeonPacks] = useState(NEON_PACKS_DEFAULT);
+  const [neonPacks, setNeonPacks] = useState(NEON_PACKS);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const createInvoice = useCreateInvoice();
   const { toast } = useToast();
 
@@ -221,6 +223,14 @@ export function Premium() {
   const customAmt = parseInt(customCards, 10);
   const customStars = !isNaN(customAmt) && customAmt >= 10 ? Math.ceil(customAmt / 2) : null;
   const customBonus = !isNaN(customAmt) && customAmt > 0 ? (customAmt > 500 ? 50 : customAmt > 250 ? 20 : 0) : 0;
+
+  console.log('[PREMIUM PAGE] Rendering, tiers:', JSON.stringify(tiers));
+  console.log('[PREMIUM PAGE] Loading:', loading);
+  console.log('[PREMIUM PAGE] Error:', error);
+
+  if (!tiers || tiers.length === 0) {
+    return <div>Loading premium plans...</div>;
+  }
 
   return (
     <div className="p-4 pb-24">
