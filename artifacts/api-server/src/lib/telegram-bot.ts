@@ -3475,8 +3475,11 @@ CONVERSATION RULES:
               });
               triggerFired = true;
               if (autoImageUrl) {
-                void addVaultItem(userId, activeCharacter.characterId, activeCharacter.name, autoImageUrl, "trigger", false);
-                await bot!.sendPhoto(chatId, autoImageUrl).catch(err => logger.warn({ err }, "[BOT] sendPhoto trigger failed"));
+                try {
+                  await bot!.sendPhoto(chatId, autoImageUrl);
+                  void addVaultItem(userId, activeCharacter.characterId, activeCharacter.name, autoImageUrl, "trigger", false);
+                  console.log('[VAULT] Saved to vault:', 'trigger', 'for:', userId);
+                } catch (err) { logger.warn({ err }, "[BOT] sendPhoto trigger failed"); }
               }
             } catch (err) {
               logger.warn({ err, matchedTrigger }, "[BOT] Trigger word image generation failed");
@@ -3504,8 +3507,11 @@ CONVERSATION RULES:
                 contentLevelWords: contentWords,
               });
               if (autoImageUrl) {
-                void addVaultItem(userId, activeCharacter.characterId, activeCharacter.name, autoImageUrl, "auto", false);
-                await bot!.sendPhoto(chatId, autoImageUrl).catch(err => logger.warn({ err }, "[BOT] sendPhoto auto loop failed"));
+                try {
+                  await bot!.sendPhoto(chatId, autoImageUrl);
+                  void addVaultItem(userId, activeCharacter.characterId, activeCharacter.name, autoImageUrl, "auto", false);
+                  console.log('[VAULT] Saved to vault:', 'auto', 'for:', userId);
+                } catch (err) { logger.warn({ err }, "[BOT] sendPhoto auto loop failed"); }
               }
             } catch (err) {
               logger.warn({ err }, "[BOT] Auto-image loop failed");
@@ -3530,8 +3536,11 @@ CONVERSATION RULES:
                 contentLevelWords: contentWords,
               });
               if (blurredImageUrl) {
-                void addVaultItem(userId, activeCharacter.characterId, activeCharacter.name, blurredImageUrl, "blurred", true);
-                await bot!.sendPhoto(chatId, blurredImageUrl).catch(err => logger.warn({ err }, "[BOT] sendPhoto blurred failed"));
+                try {
+                  await bot!.sendPhoto(chatId, blurredImageUrl);
+                  void addVaultItem(userId, activeCharacter.characterId, activeCharacter.name, blurredImageUrl, "blurred", true);
+                  console.log('[VAULT] Saved to vault:', 'blurred', 'for:', userId);
+                } catch (err) { logger.warn({ err }, "[BOT] sendPhoto blurred failed"); }
               }
             } catch (err) {
               logger.warn({ err }, "[BOT] Blurred image loop failed");

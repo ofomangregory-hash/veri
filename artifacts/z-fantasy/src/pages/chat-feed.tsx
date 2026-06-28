@@ -287,9 +287,9 @@ export function ChatFeed() {
                     <img
                       src={item.imageUrl}
                       alt="Vault Media"
-                      className={`w-full h-full object-cover transition-all ${!item.unlocked ? 'blur-md grayscale brightness-50' : 'group-hover:scale-110'}`}
+                      className={`w-full h-full object-cover transition-all ${item.isBlurred ? 'blur-md grayscale brightness-50' : 'group-hover:scale-110'}`}
                     />
-                    {!item.unlocked && (
+                    {item.isBlurred && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40">
                         <div className="p-3 bg-card/80 backdrop-blur-md rounded-full mb-3 box-glow-pink">
                           <Lock className="text-primary" size={24} />
@@ -303,7 +303,7 @@ export function ChatFeed() {
                         </button>
                       </div>
                     )}
-                    {item.unlocked && (
+                    {!item.isBlurred && (
                       <div className="absolute top-2 right-2 p-1.5 bg-black/50 backdrop-blur-md rounded-full text-accent">
                         <Unlock size={14} />
                       </div>
@@ -314,7 +314,7 @@ export function ChatFeed() {
                   </>
                 );
 
-                return item.unlocked && item.characterId ? (
+                return !item.isBlurred && item.characterId ? (
                   <Link
                     key={item.id}
                     href={`/chat/${item.characterId}`}
