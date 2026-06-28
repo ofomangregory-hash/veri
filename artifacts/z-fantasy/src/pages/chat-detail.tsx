@@ -263,7 +263,22 @@ export function ChatDetail() {
                       </div>
                     </div>
                   ) : (
-                    <img src={msg.imageUrl} alt="Attachment" className="w-full h-auto" />
+                    <img
+                      src={msg.imageUrl}
+                      alt="Character image"
+                      style={{
+                        width: '100%',
+                        maxWidth: '280px',
+                        borderRadius: '12px',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                      onError={(e) => {
+                        console.log('[CHAT MESSAGE] Image failed to load:', msg.imageUrl);
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                      onLoad={() => console.log('[CHAT MESSAGE] Image loaded OK:', msg.imageUrl)}
+                    />
                   )}
                 </div>
               )}
