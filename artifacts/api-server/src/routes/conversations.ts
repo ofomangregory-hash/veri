@@ -654,11 +654,12 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   console.log('[VAULT UNLOCK] User found:', !!user);
+  console.log('[VAULT UNLOCK] Raw user object:', JSON.stringify(user));
   if (!user) { res.status(404).json({ error: "User not found — no account for this Telegram ID" }); return; }
 
   const unlockCost = req.isAdmin ? 0 : await getPrice("image_unlock_nc", 15);
 
-  console.log('[VAULT UNLOCK] Balance:', user?.neonCardBalance);
+  console.log('[VAULT UNLOCK] Balance:', user.neonCardBalance);
   console.log('[VAULT UNLOCK] Cost:', unlockCost);
 
   const balanceOk = req.isAdmin || user.neonCardBalance >= unlockCost;
