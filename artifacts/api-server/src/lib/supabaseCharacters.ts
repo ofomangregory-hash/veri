@@ -222,10 +222,10 @@ export async function createSupabaseCharacter(values: {
       tags: values.tags ?? [],
       sub_genres: values.subGenres ?? [],
       genre: values.genre ?? null,
-      tagline: values.tagline ?? null,
       image_seed: values.imageSeed ? parseInt(values.imageSeed) : null,
       trigger_metadata_array: [],
-      status_level: 1,
+      age: null,
+      promotional_text: null,
     };
     if (values.characterId) insertPayload.character_id = values.characterId;
     const { data, error } = await supabase
@@ -296,7 +296,6 @@ export async function updateSupabaseCharacter(
     if (values.visibility != null) payload.visibility = values.visibility;
     if (values.avatarUrl !== undefined) payload.avatar_url = values.avatarUrl;
     if (values.systemPrompt != null) payload.system_prompt = values.systemPrompt;
-    if (values.tagline !== undefined) payload.tagline = values.tagline;
     if (values.genre != null) payload.genre = values.genre;
     if (values.subGenres != null) payload.sub_genres = values.subGenres;
     if (typeof values.isNsfw === "boolean") {

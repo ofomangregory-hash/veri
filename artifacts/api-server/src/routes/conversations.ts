@@ -833,13 +833,10 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     }
   }
 
-  res.json(SendGiftResponse.parse({
-    affectionPoints: newAP,
-    newLevel,
-    ticketsRemaining: refreshedUser?.ticketBalance ?? 0,
-    aiReaction: giftReaction.reaction,
-    scenarioImageUrl,
-  }));
+  const result = { affectionPoints: newAP, newLevel, ticketsRemaining: refreshedUser?.ticketBalance ?? 0, aiReaction: giftReaction.reaction, scenarioImageUrl };
+  console.log('[GIFT CLAIM] User:', req.telegramUserId);
+  console.log('[GIFT CLAIM] Result:', JSON.stringify(result));
+  res.json(SendGiftResponse.parse(result));
 });
 
 // ─── Archive Conversation / Fresh Start ───────────────────────────────────────

@@ -22,6 +22,7 @@ export async function addVaultItem(
 ): Promise<void> {
   if (!supabase) return;
   try {
+    console.log('[VAULT INSERT]', { user_id: userId, character_id: characterId, character_name: characterName, media_url: mediaUrl, media_type: mediaType, is_blurred: isBlurred });
     await supabase.from("vault_items").insert({
       user_id: userId,
       character_id: characterId,

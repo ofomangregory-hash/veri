@@ -4,11 +4,14 @@ import { logger } from "./logger";
 export interface PremiumTierRow {
   id: string;
   tierName: string;
+  label: string;
   period: "weekly" | "monthly" | "yearly";
+  price: number;
   priceStars: number;
-  features: string[];
   isFeatured: boolean;
-  updatedAt: string;
+  active: boolean;
+  messageLimit: number | null;
+  features: string[];
 }
 
 export async function getPremiumTiers(): Promise<PremiumTierRow[]> {
@@ -24,7 +27,9 @@ export async function getPremiumTiers(): Promise<PremiumTierRow[]> {
       logger.warn({ error }, "getPremiumTiers: failed");
       return [];
     }
-    return (data ?? []).map(mapTier);
+    const tiers = (data ?? []).map(mapTier);
+    console.log('[PREMIUM TIERS] Fetched:', JSON.stringify(tiers));
+    return tiers;
   } catch (err) {
     console.error("getPremiumTiers caught:", err);
     logger.warn({ err }, "getPremiumTiers: failed");
@@ -73,10 +78,13 @@ function mapTier(row: Record<string, unknown>): PremiumTierRow {
   return {
     id: String(row.id),
     tierName: String(row.tier_name),
+    label: row.label != null ? String(row.label) : String(row.tier_name),
     period: (row.period ?? "monthly") as PremiumTierRow["period"],
+    price: Number(row.price) || 0,
     priceStars: Number(row.price_stars) || 0,
-    features: Array.isArray(row.features) ? (row.features as string[]) : [],
     isFeatured: Boolean(row.is_featured),
-    updatedAt: String(row.updated_at),
+    active: row.active != null ? Boolean(row.active) : true,
+    messageLimit: row.message_limit != null ? Number(row.message_limit) : null,
+    features: Array.isArray(row.features) ? (row.features as string[]) : [],
   };
 }

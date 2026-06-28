@@ -1,0 +1,39 @@
+Read the entire codebase first. Fix all Supabase-related issues. Do not touch any other files.
+1. createSupabaseCharacter — fix insert columns
+Find where characters are inserted into Supabase. Remove any columns that don't exist. Only insert these exact columns:
+typescript{
+  character_id: character.id,
+  name: character.name,
+  genre: character.genre,
+  sub_genres: character.subGenres,
+  system_prompt: character.systemPrompt,
+  teaser_description: character.teaserDescription,
+  initial_greeting: character.initialGreeting,
+  avatar_url: character.avatarUrl,
+  visibility: character.visibility,
+  creator_id: character.creatorId,
+  tags: character.tags,
+  trigger_metadata_array: character.triggerMetadataArray,
+  age: character.age,
+  image_seed: character.imageSeed,
+  promotional_text: character.promotionalText,
+}
+Remove tagline and any other non-existent columns.
+2. updateSupabaseCharacter — same fix
+Remove tagline and any columns not in the characters table from the update object.
+3. Premium tiers — fix frontend fetch
+Find where premium tiers are fetched in the frontend. The premium_tiers table columns are: id, tier_name, label, period, price, price_stars, is_featured, active, message_limit, features. Make sure the frontend reads these exact column names. Add:
+typescriptconsole.log('[PREMIUM TIERS] Fetched:', JSON.stringify(tiers));
+4. Gift claim — add error logging
+Find the gift claim handler. Add:
+typescriptconsole.log('[GIFT CLAIM] User:', userId);
+console.log('[GIFT CLAIM] Result:', JSON.stringify(result));
+console.log('[GIFT CLAIM] Error:', JSON.stringify(error));
+5. Notifications — wire up
+Find anywhere the code tries to insert or read from notifications table. Make sure it uses these columns: user_id, title, message, is_read, created_at.
+6. Bot vault insert — fix column names
+Find where bot images are saved to vault after sending. Make sure the insert uses exact vault_items column names. Add:
+typescriptconsole.log('[VAULT INSERT]', { user_id, character_id, character_name, media_url, media_type, is_blurred });
+7. referral_records vs referral_logs
+Find any code referencing referral_records table and replace with referral_logs.
+Do not create new tables. Do not touch any other files.
