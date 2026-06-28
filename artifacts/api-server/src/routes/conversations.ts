@@ -641,6 +641,7 @@ ABSOLUTE RULES:
 
 // ─── Unlock Locked Image ──────────────────────────────────────────────────────
 router.post("/conversations/:characterId/unlock", async (req, res): Promise<void> => {
+  console.log('[VAULT UNLOCK] Request received');
   const { characterId } = req.params;
   const { messageTimestamp } = req.body as { messageTimestamp?: string };
 
@@ -648,14 +649,22 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
   if (!UUID_RE.test(characterId)) { res.status(400).json({ error: "Invalid characterId" }); return; }
 
   const userId = req.telegramUserId;
+  console.log('[VAULT UNLOCK] User id:', userId);
+  console.log('[VAULT UNLOCK] Vault item id (messageTimestamp):', messageTimestamp);
+
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  console.log('[VAULT UNLOCK] User found:', !!user);
   if (!user) { res.status(404).json({ error: "User not found — no account for this Telegram ID" }); return; }
 
   const unlockCost = req.isAdmin ? 0 : await getPrice("image_unlock_nc", 15);
 
-  console.log('[VAULT UNLOCK] User id:', userId, 'balance:', user?.neonCardBalance, 'cost:', unlockCost);
+  console.log('[VAULT UNLOCK] Balance:', user?.neonCardBalance);
+  console.log('[VAULT UNLOCK] Cost:', unlockCost);
 
-  if (!req.isAdmin && user.neonCardBalance < unlockCost) {
+  const balanceOk = req.isAdmin || user.neonCardBalance >= unlockCost;
+  console.log('[VAULT UNLOCK] Balance check passed:', balanceOk);
+
+  if (!balanceOk) {
     res.status(402).json({ error: `Insufficient Neon Cards — you have ${user.neonCardBalance} 💎 but unlocking costs ${unlockCost} 💎` }); return;
   }
 
@@ -682,9 +691,12 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
     .set({ messageHistory: messages })
     .where(eq(conversationsTable.conversationId, conv.conversationId));
 
+  console.log('[VAULT UNLOCK] Conversation message unlocked (is_blurred set to false), imageUrl:', unlockedImageUrl);
+
   // Also unlock in Supabase vault so vault stays consistent
   if (unlockedImageUrl) {
     void unlockVaultItemByUrl(req.telegramUserId, unlockedImageUrl);
+    console.log('[VAULT UNLOCK] Supabase vault unlock triggered for url:', unlockedImageUrl);
   }
 
   if (!req.isAdmin && unlockCost > 0) {
@@ -697,7 +709,7 @@ router.post("/conversations/:characterId/unlock", async (req, res): Promise<void
       ticketAmount: 0,
       neonCardAmount: -unlockCost,
     });
-    console.log('Image unlocked by:', req.telegramUserId, 'cost:', unlockCost);
+    console.log('[VAULT UNLOCK] Neon card balance deducted:', unlockCost, 'from user:', req.telegramUserId);
   }
 
   const UNLOCK_AP_BONUS = 2;

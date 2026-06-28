@@ -1329,12 +1329,13 @@ router.post("/admin/images/auto-loop/reset/:characterId", adminOnly, async (req,
 // ── Database Admin (God-Mode) ─────────────────────────────────────────────────
 
 const SUPABASE_TABLES = [
-  "characters", "users", "vault_items", "user_restrictions",
-  "affection_words", "affection_records", "intimacy_levels", "trigger_words",
-  "quest_definitions", "quest_progress", "referral_records",
-  "cs_threads", "cs_messages", "help_articles", "events",
-  "premium_tiers", "prices", "avatars", "feature_restrictions",
-  "character_images", "notifications", "broadcast_logs", "system_configs",
+  "users", "characters", "character_avatars", "conversations",
+  "affection_words", "affection_word_triggers", "user_character_intimacy",
+  "trigger_words", "transaction_logs", "pending_grants", "prices",
+  "system_configurations", "user_restrictions", "vault_items", "tickets",
+  "helpdesk_messages", "customer_support_messages", "customer_service_threads",
+  "quests", "quest_completions", "quest_progress", "referral_rewards",
+  "referral_logs", "events", "premium_tiers",
 ];
 
 // GET /admin/db/tables — probe and return available Supabase tables

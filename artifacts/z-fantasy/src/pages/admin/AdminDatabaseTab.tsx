@@ -39,9 +39,19 @@ function cellClass(type: string): string {
   return "text-foreground";
 }
 
+const TABLES = [
+  'users', 'characters', 'character_avatars', 'conversations',
+  'affection_words', 'affection_word_triggers', 'user_character_intimacy',
+  'trigger_words', 'transaction_logs', 'pending_grants', 'prices',
+  'system_configurations', 'user_restrictions', 'vault_items', 'tickets',
+  'helpdesk_messages', 'customer_support_messages', 'customer_service_threads',
+  'quests', 'quest_completions', 'quest_progress', 'referral_rewards',
+  'referral_logs', 'events', 'premium_tiers'
+];
+
 export function AdminDatabaseTab() {
-  const [tables, setTables] = useState<string[]>([]);
-  const [tablesLoading, setTablesLoading] = useState(true);
+  const [tables, setTables] = useState<string[]>(TABLES);
+  const [tablesLoading, setTablesLoading] = useState(false);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [data, setData] = useState<TableData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -81,14 +91,7 @@ export function AdminDatabaseTab() {
   }, []);
 
   useEffect(() => {
-    setTablesLoading(true);
-    adminApi<{ tables: string[] }>("GET", "/admin/db/tables")
-      .then(d => {
-        setTables(d.tables);
-        if (d.tables.length > 0) setSelectedTable(d.tables[0]);
-      })
-      .catch(e => setError(String(e)))
-      .finally(() => setTablesLoading(false));
+    if (TABLES.length > 0) setSelectedTable(TABLES[0]);
   }, []);
 
   useEffect(() => {
