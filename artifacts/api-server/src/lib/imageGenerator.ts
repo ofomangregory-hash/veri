@@ -1,4 +1,3 @@
-import axios from "axios";
 import { logger } from "./logger";
 
 const GENRE_STYLE_PREFIX: Record<string, string> = {
@@ -116,20 +115,24 @@ async function uploadToTelegraph(imageBuffer: Buffer, filename: string): Promise
     contentType: "image/jpeg",
   });
 
-  const response = await axios.post<Array<{ src: string }>>(
-    "https://telegra.ph/upload",
-    form,
-    {
-      headers: form.getHeaders(),
-      timeout: 30000,
-    },
-  );
+  const response = await fetch("https://telegra.ph/upload", {
+    method: "POST",
+    headers: form.getHeaders(),
+    body: form as unknown as BodyInit,
+    signal: AbortSignal.timeout(30000),
+  });
 
-  if (!response.data || !Array.isArray(response.data) || !response.data[0]?.src) {
+  if (!response.ok) {
+    const bodyText = await response.text();
+    throw new Error(`Telegra.ph upload failed: ${response.status} — ${bodyText}`);
+  }
+
+  const data = await response.json() as Array<{ src: string }>;
+  if (!Array.isArray(data) || !data[0]?.src) {
     throw new Error("Telegra.ph upload returned unexpected response");
   }
 
-  return `https://telegra.ph${response.data[0].src}`;
+  return `https://telegra.ph${data[0].src}`;
 }
 
 export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Promise<string> {
