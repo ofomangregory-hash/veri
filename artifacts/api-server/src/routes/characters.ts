@@ -272,52 +272,23 @@ router.post("/characters", async (req, res): Promise<void> => {
       const pollinationsUrl = `https://image.pollinations.ai/prompt/${prompt}?model=flux&width=512&height=512&nologo=true&seed=${seed}`;
 
       console.log('[CHARACTER AVATAR] Starting background generation for:', characterName);
-      const response = await fetch(pollinationsUrl, {
+      console.log('[CHARACTER AVATAR] URL:', pollinationsUrl);
+
+      const check = await fetch(pollinationsUrl, {
+        method: 'HEAD',
         headers: { 'Referer': 'https://pollinations.ai' },
         signal: AbortSignal.timeout(65000),
       });
 
-      if (!response.ok) {
-        const bodyText = await response.text();
-        console.log('[CHARACTER AVATAR] Pollinations failed:', response.status, bodyText);
+      console.log('[CHARACTER AVATAR] Pollinations status:', check.status);
+
+      if (!check.ok) {
+        console.log('[CHARACTER AVATAR] Pollinations check failed — keeping placeholder');
         return;
       }
 
-      const arrayBuffer = await response.arrayBuffer();
-      if (!arrayBuffer || arrayBuffer.byteLength < 1000) {
-        console.log('[CHARACTER AVATAR] Image too small, skipping upload');
-        return;
-      }
-
-      const FormData = (await import("form-data")).default;
-      const form = new FormData();
-      form.append("file", Buffer.from(arrayBuffer), {
-        filename: `avatar_${characterId}.jpg`,
-        contentType: "image/jpeg",
-      });
-
-      const uploadRes = await fetch("https://telegra.ph/upload", {
-        method: "POST",
-        headers: form.getHeaders(),
-        body: form as unknown as BodyInit,
-        signal: AbortSignal.timeout(30000),
-      });
-
-      if (!uploadRes.ok) {
-        const bodyText = await uploadRes.text();
-        console.log('[CHARACTER AVATAR] Telegraph upload failed:', uploadRes.status, bodyText);
-        return;
-      }
-
-      const uploadData = await uploadRes.json() as Array<{ src: string }>;
-      if (!Array.isArray(uploadData) || !uploadData[0]?.src) {
-        console.log('[CHARACTER AVATAR] Telegraph returned unexpected response');
-        return;
-      }
-
-      const telegraphUrl = `https://telegra.ph${uploadData[0].src}`;
-      await updateSupabaseCharacter(characterId, { avatarUrl: telegraphUrl });
-      console.log('[CHARACTER AVATAR] Generated successfully for:', characterName, '->', telegraphUrl);
+      await updateSupabaseCharacter(characterId, { avatarUrl: pollinationsUrl });
+      console.log('[CHARACTER AVATAR] Generated successfully for:', characterName, '->', pollinationsUrl);
     } catch (err: any) {
       console.log('[CHARACTER AVATAR] Generation failed, keeping existing avatar:', err?.message);
     }
