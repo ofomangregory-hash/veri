@@ -447,6 +447,7 @@ router.patch("/admin/characters/:characterId", async (req, res): Promise<void> =
   });
 
   if (!updated) {
+    console.error('[ADMIN PATCH /admin/characters] update failed for characterId:', characterId, 'body:', JSON.stringify(req.body));
     res.status(500).json({ error: "Failed to update character" });
     return;
   }

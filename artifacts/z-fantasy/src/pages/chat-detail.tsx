@@ -374,7 +374,11 @@ export function ChatDetail() {
                           display: 'block',
                           opacity: 0.6,
                         }}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          img.onerror = null;
+                          img.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${convMeta?.character?.name ?? 'character'}`;
+                        }}
                         onLoad={() => console.log('[BLURRED IMG] Loaded OK')}
                       />
                       <div style={{
@@ -416,7 +420,11 @@ export function ChatDetail() {
                           cursor: 'pointer',
                         }}
                         onClick={() => { const idx = chatViewerImages.findIndex(ci => ci.timestamp === msg.timestamp); if (idx >= 0) setChatViewer({ idx }); }}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          img.onerror = null;
+                          img.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${convMeta?.character?.name ?? 'character'}`;
+                        }}
                         onLoad={() => console.log('[CHAT] Image loaded OK')}
                       />
                     </div>
@@ -490,25 +498,11 @@ export function ChatDetail() {
             </div>
             <div className="flex-1 flex items-center justify-center relative px-4">
               {/* Image type label */}
-              <div style={{
-                position: 'absolute',
-                top: '16px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                color: 'white',
-                padding: '4px 12px',
-                borderRadius: '20px',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                textTransform: 'uppercase',
-                letterSpacing: '1px',
-                zIndex: 10,
-                whiteSpace: 'nowrap',
-              }}>
+              <div style={{ position: 'absolute', top: '12px', left: '12px', background: 'rgba(0,0,0,0.6)', borderRadius: '8px', padding: '4px 10px', color: 'white', fontSize: '12px', zIndex: 10 }}>
                 {currentMsg.isLocked ? '🔒 Locked' :
-                 currentMsg.mediaType === 'trigger' ? '⚡ Trigger' :
+                 currentMsg.mediaType === 'auto' ? '🔄 Auto' :
                  currentMsg.mediaType === 'selfie' ? '📸 Selfie' :
+                 currentMsg.mediaType === 'trigger' ? '⚡ Trigger' :
                  '🔄 Auto'}
               </div>
               {isViewerLocked ? (

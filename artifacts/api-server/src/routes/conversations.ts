@@ -185,6 +185,12 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
     .limit(1);
 
   if (!conv) {
+    await db.update(conversationsTable)
+      .set({ archived: true, updatedAt: new Date() })
+      .where(and(
+        eq(conversationsTable.telegramId, req.telegramUserId),
+        eq(conversationsTable.characterId, params.data.characterId),
+      ));
     const greeting = character.initialGreeting ?? `Hello, I'm ${character.name}. I've been waiting for you...`;
     const initialMessage: ChatMessage = { role: "assistant", content: greeting, imageUrl: null, timestamp: new Date().toISOString() };
     [conv] = await db.insert(conversationsTable).values({
@@ -278,6 +284,12 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     .limit(1);
 
   if (!conv) {
+    await db.update(conversationsTable)
+      .set({ archived: true, updatedAt: new Date() })
+      .where(and(
+        eq(conversationsTable.telegramId, req.telegramUserId),
+        eq(conversationsTable.characterId, params.data.characterId),
+      ));
     [conv] = await db.insert(conversationsTable).values({
       telegramId: req.telegramUserId,
       characterId: params.data.characterId,
@@ -393,10 +405,9 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
 
   // 2. Auto-image loop (only if no trigger fired this cycle)
   const isSupremeAdmin = tier === 'supreme_admin';
-  const isFree = !tier || tier === 'Free';
-  const imageChance = isFree ? 2 / 5 : 4 / 6;
-  const shouldFireAutoImage = isSupremeAdmin ? true : Math.random() < imageChance;
-  console.log('[AUTO IMAGE] messageCount:', conv.messageCount, 'tier:', tier, 'chance:', imageChance, 'shouldFire:', shouldFireAutoImage);
+  const isPaid = isSupremeAdmin || ['Bronze', 'Silver', 'Gold'].includes(tier ?? '');
+  const shouldFireAutoImage = isPaid ? (newMsgCount % 6) === 4 : (newMsgCount % 5) === 2;
+  console.log('[AUTO IMAGE] messageCount:', newMsgCount, 'tier:', tier, 'isPaid:', isPaid, 'shouldFire:', shouldFireAutoImage);
   const shouldAutoLoop = !triggerFired && shouldFireAutoImage;
 
   if (shouldAutoLoop) {

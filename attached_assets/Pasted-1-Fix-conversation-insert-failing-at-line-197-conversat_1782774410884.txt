@@ -1,0 +1,34 @@
+1. Fix conversation insert failing at line 197 — conversations.ts
+Find the insert at line 197. Immediately BEFORE it add:
+typescriptawait db.update(conversations)
+  .set({ archived: true, updated_at: new Date() })
+  .where(and(
+    eq(conversations.telegram_id, telegramId),
+    eq(conversations.character_id, characterId)
+  ));
+Check every other insert into conversations in the same file and add the same block before each one.
+2. Fix DeepSeek defaulting to Chinese
+In the OpenRouter handler, add this as the very first line of the uncensored system prompt injection:
+typescript`You must always respond in English only. Never use any other language regardless of what language the user writes in.`
+3. Remove debug panel from admin
+Remove the "Run Debug Fetch" button and its output panel entirely from the admin panel.
+4. Fix auto loop firing too frequently for supreme_admin tier
+supreme_admin should follow paid tier rules:
+typescriptconst isSupremeAdmin = user?.subscription_tier === 'supreme_admin';
+const isPaid = isSupremeAdmin || ['bronze', 'silver', 'gold'].includes(user?.subscription_tier ?? '');
+const shouldFireAuto = isPaid ? messageCount % 6 === 4 : messageCount % 5 === 2;
+5. Fix image type tag missing in fullscreen viewer
+Show image type tag on each image in the fullscreen viewer:
+typescript<div style={{ position: 'absolute', top: '12px', left: '12px', background: 'rgba(0,0,0,0.6)', borderRadius: '8px', padding: '4px 10px', color: 'white', fontSize: '12px' }}>
+  {item.media_type === 'auto' ? '🔄 Auto' : item.media_type === 'selfie' ? '📸 Selfie' : item.media_type === 'trigger' ? '⚡ Trigger' : '🔒 Locked'}
+</div>
+6. Fix admin character edit not working for all characters
+Find the PATCH endpoint for character updates. Verify it uses character_id correctly and handles all fields including genre, sub_genres, avatar_url. Add console.error logging on failure.
+7. Add Duplicate Character button in admin Characters tab
+Add a "Duplicate" button in the expanded character view. On click, creates a copy with name appended " (Copy)", visibility set to private, saves via POST /api/characters. Show success toast.
+8. Confirm fixes still holding — check these in the code and verify they are correctly implemented, do not change if working:
+
+Messages with text AND image both rendering correctly in chat
+Blurred image showing correctly with lock overlay, not blank box
+
+Do not create new tables. Do not touch files outside these fixes.
