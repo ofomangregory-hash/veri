@@ -70,13 +70,28 @@ async function tryPollinations(
     console.log("Image prompt:", cleanPrompt);
     console.log("Pollinations URL:", url);
 
-    const check = await fetch(url, {
+    // Small pre-delay to avoid burst rate-limiting across concurrent requests
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    let check = await fetch(url, {
       method: "HEAD",
       headers: { "Referer": "https://pollinations.ai" },
       signal: AbortSignal.timeout(65000),
     });
 
     console.log("Pollinations status:", check.status);
+
+    // Retry once on 429 after 2s back-off
+    if (check.status === 429) {
+      console.log("Pollinations 429 — waiting 2s and retrying...");
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      check = await fetch(url, {
+        method: "HEAD",
+        headers: { "Referer": "https://pollinations.ai" },
+        signal: AbortSignal.timeout(65000),
+      });
+      console.log("Pollinations retry status:", check.status);
+    }
 
     if (check.ok) {
       console.log("Pollinations success — returning URL directly");
@@ -107,10 +122,12 @@ export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Prom
 }
 
 export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Promise<string> {
-  const { characterName, genre, imageSeed, avatarUrl, subGenres = [] } = opts;
+  const { characterName, genre, avatarUrl, subGenres = [] } = opts;
 
   const stylePrefix = getStylePrefix(genre);
-  const seed = imageSeed ? parseInt(imageSeed) : Math.floor(Math.random() * 1000000);
+  // Always generate a fresh seed per call — never reuse a cached character-level seed
+  const seed = Math.floor(Math.random() * 10000000000);
+  console.log(`[IMAGE SEED] ${characterName} — fresh seed: ${seed}`);
 
   // Primary: Pollinations with character-specific prompt
   const result = await tryPollinations(characterName, stylePrefix, subGenres, seed);
