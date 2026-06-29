@@ -33,6 +33,8 @@ export function ChatDetail() {
   const [unlockTarget, setUnlockTarget] = useState<ChatMsg | null>(null);
   // Chat image fullscreen viewer
   const [chatViewer, setChatViewer] = useState<{ idx: number } | null>(null);
+  // Force re-render after refetch
+  const [lastRefetch, setLastRefetch] = useState(0);
   const chatViewerTouchX = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -84,6 +86,7 @@ export function ChatDetail() {
       setUnlockTarget(null);
       await queryClient.invalidateQueries();
       await refetch();
+      setLastRefetch(Date.now());
       console.log('[UNLOCK] Local state updated, image should reveal');
     },
     onError: (err: Error) => {
@@ -111,7 +114,8 @@ export function ChatDetail() {
       onSuccess: async () => {
         await queryClient.invalidateQueries();
         await refetch();
-        console.log('[SEND COMPLETE] Cache invalidated, refetching conversation');
+        setLastRefetch(Date.now());
+        console.log('[SEND COMPLETE] Cache invalidated, refetching conversation, lastRefetch updated');
       },
       onError: () => toast({ title: "Failed to send", variant: "destructive" })
     });
@@ -212,8 +216,14 @@ export function ChatDetail() {
     'with images:', messages.filter(m => m.imageUrl).length
   );
   const displayMessages = messages.filter(m => m.content || m.imageUrl);
-  console.log('[FILTER CHECK]', messages.length, displayMessages?.length);
-  const chatViewerImages = messages.filter(m => m.imageUrl);
+  console.log('[FILTER CHECK]', messages.length, displayMessages?.length, 'lastRefetch:', lastRefetch);
+  const chatViewerImages = displayMessages
+    .filter(m => !!m.imageUrl)
+    .map(m => ({
+      ...m,
+      imageUrl: m.imageUrl!,
+      mediaType: m.mediaType ?? 'auto',
+    }));
 
   // Clamp viewer index when the image list changes — must be before any early return
   useEffect(() => {
@@ -277,6 +287,7 @@ export function ChatDetail() {
                 <>
                   {msg.isLocked ? (
                     <div
+                      onClick={() => handleUnlockTap(msg)}
                       style={{
                         width: '100%',
                         marginTop: '4px',
@@ -284,31 +295,45 @@ export function ChatDetail() {
                         borderRadius: '12px',
                         overflow: 'hidden',
                         minHeight: '250px',
+                        backgroundColor: '#1a1a2e',
                         cursor: 'pointer',
                       }}
-                      onClick={() => handleUnlockTap(msg)}
                     >
                       <img
                         src={msg.imageUrl}
-                        alt="Locked"
+                        alt="Locked content"
                         style={{
                           filter: 'blur(20px)',
                           transform: 'scale(1.1)',
                           width: '100%',
-                          height: 'auto',
                           minHeight: '250px',
                           objectFit: 'cover',
                           display: 'block',
+                          opacity: 0.6,
                         }}
-                        className="select-none pointer-events-none brightness-50"
-                        draggable={false}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        onLoad={() => console.log('[BLURRED IMG] Loaded OK')}
                       />
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30">
-                        <div className="p-3 rounded-full bg-black/60 border border-primary/50">
-                          <Lock size={22} className="text-primary" />
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        background: 'rgba(0,0,0,0.4)',
+                      }}>
+                        <div style={{
+                          padding: '12px',
+                          borderRadius: '50%',
+                          backgroundColor: 'rgba(0,0,0,0.6)',
+                          border: '1px solid rgba(255,100,150,0.5)',
+                        }}>
+                          <Lock size={22} color="#ff6496" />
                         </div>
-                        <p className="text-white text-xs font-bold drop-shadow-lg">
-                          🔒 Unlock for {unlockCost} 💎
+                        <p style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
+                          🔒 Unlock • {unlockCost} Neon Cards
                         </p>
                       </div>
                     </div>
@@ -327,7 +352,7 @@ export function ChatDetail() {
                           display: 'block',
                           cursor: 'pointer',
                         }}
-                        onClick={() => { const idx = chatViewerImages.indexOf(msg); if (idx >= 0) setChatViewer({ idx }); }}
+                        onClick={() => { const idx = chatViewerImages.findIndex(ci => ci.timestamp === msg.timestamp); if (idx >= 0) setChatViewer({ idx }); }}
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                         onLoad={() => console.log('[CHAT] Image loaded OK')}
                       />

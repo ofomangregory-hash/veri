@@ -352,7 +352,7 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
   // ── Image fire logic ───────────────────────────────────────────────────────
   const newMsgCount = conv.messageCount + 1;
   const isFreeTier = tier === "Free";
-  const imageSeed = character.imageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
+  const imageSeed = String(Math.floor(Math.random() * 10000000000));
   const dailyImageLimit = await getDailyImageLimit(tier, isAdminUser);
   const overDailyLimit = conv.dailyAutoImageCount >= dailyImageLimit;
 
@@ -537,7 +537,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   const contentLevel = getContentLevel(intimacy, charNsfw);
   const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
 
-  const imageSeed = character.imageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
+  const imageSeed = String(Math.floor(Math.random() * 10000000000));
 
   let imageUrl: string;
   let matched = false;
@@ -837,7 +837,7 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
     const contentLevel = getContentLevel(newIntimacy, charNsfw);
     const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
-    const imageSeed = character.imageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
+    const imageSeed = String(Math.floor(Math.random() * 10000000000));
     try {
       scenarioImageUrl = await generateCharacterSelfie({
         characterName: character.name,

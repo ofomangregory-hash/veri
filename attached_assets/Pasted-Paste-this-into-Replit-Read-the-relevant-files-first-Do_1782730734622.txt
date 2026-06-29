@@ -1,0 +1,139 @@
+Paste this into Replit:
+Read the relevant files first. Do not touch any other files.
+1. Image type tag not showing in fullscreen viewer — chat-detail.tsx
+The mediaType field is not being included when building the chatViewerImages array. Find where that array is built from messages and add mediaType:
+typescriptconst chatViewerImages = displayMessages
+  .filter(m => m.imageUrl)
+  .map(m => ({
+    imageUrl: m.imageUrl!,
+    mediaType: m.mediaType ?? m.media_type ?? 'auto',
+    isLocked: m.isLocked ?? false,
+    timestamp: m.timestamp,
+  }));
+Also make sure mediaType is in the ChatMsg type and included in the messages map from the API response:
+typescriptmediaType: m.mediaType ?? m.media_type ?? null,
+2. Pollinations using same seed for every image — imageGenerator.ts
+Every image has the same seed per character meaning every message gets the exact same image. The seed is being generated once and cached instead of randomized per request.
+Fix — generate a fresh random seed inside the function on every single call:
+typescript// Generate fresh inside the function, never outside:
+const imageSeed = Math.floor(Math.random() * 10000000000);
+Find where seed is set and make sure it's inside the image generation function, called fresh every time.
+3. Images not staying in chat after send — chat-detail.tsx
+Images appear briefly then disappear, or only the 5th message (blurred) shows while earlier auto images vanish. This is because after the cache invalidation and refetch, the messages map is losing imageUrl on re-render.
+Find the messages map and make sure it runs on EVERY render with the latest data, not just on initial fetch. The map must not be memoized in a way that skips re-running when new data arrives:
+typescript// Do NOT wrap this in useMemo with stale deps:
+// const messages = useMemo(() => conv?.messages?.map(...), [conv]);
+
+// Instead map directly so it always reflects latest data:
+const messages = (conv?.messages ?? []).map((m: any) => ({
+  role: m.role,
+  content: m.content,
+  imageUrl: m.imageUrl ?? null,
+  isLocked: m.isLocked ?? false,
+  mediaType: m.mediaType ?? m.media_type ?? null,
+  timestamp: m.timestamp ?? null,
+}));
+
+console.log('[MESSAGES MAP] count:', messages.length, 
+  'with images:', messages.filter((m: any) => m.imageUrl).length
+);
+Also after cache invalidation and refetch, force a component re-render by adding a timestamp to state:
+typescriptconst [lastRefetch, setLastRefetch] = useState(0);
+
+// After refetch:
+await queryClient.invalidateQueries({ queryKey: ['conversation', characterId] });
+await refetch();
+setLastRefetch(Date.now());
+console.log('[REFETCH COMPLETE] forcing re-render');
+Include lastRefetch in the displayMessages filter so it re-runs:
+typescriptconst displayMessages = messages.filter(m => m.content || m.imageUrl);
+// eslint-disable-next-line react-hooks/exhaustive-deps
+4. Blank box showing for blurred image — chat-detail.tsx
+When a blurred image fires, a blank box shows instead of the blurred image with lock overlay. The image URL is valid but the <img> inside the blur container is failing silently.
+Add explicit error handling and a minimum height guarantee:
+typescript{msg.isLocked ? (
+  <div
+    onClick={() => handleUnlockTap(msg)}
+    style={{
+      width: '100%',
+      marginTop: '4px',
+      position: 'relative',
+      borderRadius: '12px',
+      overflow: 'hidden',
+      minHeight: '250px',
+      backgroundColor: '#1a1a2e',
+      cursor: 'pointer'
+    }}
+  >
+    <img
+      src={msg.imageUrl}
+      alt="Locked content"
+      style={{
+        filter: 'blur(20px)',
+        transform: 'scale(1.1)',
+        width: '100%',
+        minHeight: '250px',
+        objectFit: 'cover',
+        display: 'block',
+        opacity: 0.6
+      }}
+      onError={(e) => {
+        // Show dark placeholder if image fails
+        (e.target as HTMLImageElement).style.display = 'none';
+      }}
+      onLoad={() => console.log('[BLURRED IMG] Loaded OK')}
+    />
+    <div style={{
+      position: 'absolute',
+      inset: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '8px',
+      background: 'rgba(0,0,0,0.4)'
+    }}>
+      <div style={{
+        padding: '12px',
+        borderRadius: '50%',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        border: '1px solid rgba(255,100,150,0.5)'
+      }}>
+        <Lock size={22} color="#ff6496" />
+      </div>
+      <p style={{
+        color: 'white',
+        fontSize: '12px',
+        fontWeight: 'bold'
+      }}>
+        🔒 Unlock • {unlockCost} Neon Cards
+      </p>
+    </div>
+  </div>
+) : (
+  <div style={{ width: '100%', marginTop: '4px' }}>
+    <img
+      src={msg.imageUrl}
+      alt="Character image"
+      style={{
+        width: '100%',
+        height: 'auto',
+        minHeight: '250px',
+        maxHeight: '400px',
+        borderRadius: '12px',
+        objectFit: 'cover',
+        display: 'block'
+      }}
+      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+      onLoad={() => console.log('[AUTO IMG] Loaded OK:', msg.imageUrl?.slice(-20))}
+    />
+  </div>
+)}
+5. Admin character edit not working for all characters — admin.tsx
+The edit works for one character but not others. Use consistent id field across all operations:
+typescript// Always use this pattern — check both fields:
+const charId = char.character_id ?? char.id;
+
+// Apply this in toggleExpand, saveCharAllFields, 
+// charExtEdit state reads and writes everywhere
+Do not create new tables. Do not touch any other files.

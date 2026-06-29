@@ -229,8 +229,9 @@ export function Admin() {
     });
     // Initialize immediately (not in useEffect) so the first render has data
     if (!charExtEdit[charId]) {
-      const char = (charsData?.items ?? []).find((c: { characterId: string }) => c.characterId === charId) as
-        NonNullable<typeof charsData>["items"][0] & { background?: string | null; personality?: string | null; age?: string | number | null; subGenres?: string[] } | undefined;
+      const char = (charsData?.items ?? []).find((c: any) =>
+        c.characterId === charId || c.character_id === charId || c.id === charId
+      ) as NonNullable<typeof charsData>["items"][0] & { background?: string | null; personality?: string | null; age?: string | number | null; subGenres?: string[] } | undefined;
       console.log('[CHAR EDIT STATE] initializing for', charId, char ? 'found' : 'not found yet');
       if (char) {
         setCharExtEdit(p => ({
