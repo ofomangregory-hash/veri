@@ -5,6 +5,7 @@ import { Heart, Lock, Unlock, Plus, X, Search, Archive, MessageCircle, ChevronLe
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
+import { proxyImage } from "../lib/proxyImage";
 
 type ArchivedConv = {
   conversationId: string;
@@ -213,7 +214,7 @@ export function ChatFeed() {
                       >
                         <div className="relative w-14 h-14 rounded-full overflow-hidden border-2 border-secondary group-hover:box-glow-purple transition-all shrink-0">
                           <img
-                            src={conv.character?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${conv.character?.name}`}
+                            src={proxyImage(conv.character?.avatarUrl) || `https://api.dicebear.com/7.x/bottts/svg?seed=${conv.character?.name}`}
                             alt="Avatar"
                             className="w-full h-full object-cover"
                           />
@@ -263,7 +264,7 @@ export function ChatFeed() {
                 >
                   <div className="w-12 h-12 rounded-full overflow-hidden border border-border shrink-0">
                     <img
-                      src={conv.character?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${conv.character?.name}`}
+                      src={proxyImage(conv.character?.avatarUrl) || `https://api.dicebear.com/7.x/bottts/svg?seed=${conv.character?.name}`}
                       alt=""
                       className="w-full h-full object-cover"
                     />
@@ -312,7 +313,7 @@ export function ChatFeed() {
                     onClick={openViewer}
                   >
                     <img
-                      src={src}
+                      src={proxyImage(src)}
                       alt="Vault Media"
                       className={`w-full h-full object-cover transition-all ${item.isBlurred ? 'blur-md grayscale brightness-50' : 'group-hover:scale-110'}`}
                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -549,7 +550,7 @@ export function ChatFeed() {
                 <div className="relative w-full max-w-sm">
                   <div style={{ overflow: "hidden", borderRadius: 12 }}>
                     <img
-                      src={src ?? undefined}
+                      src={proxyImage(src)}
                       alt="Locked"
                       style={{ filter: "blur(20px)", transform: "scale(1.1)", width: "100%" }}
                       className="h-auto brightness-50 select-none pointer-events-none"
@@ -571,7 +572,7 @@ export function ChatFeed() {
                 </div>
               ) : (
                 <img
-                  src={src ?? undefined}
+                  src={proxyImage(src)}
                   alt={current.characterName}
                   className="max-w-full max-h-full object-contain rounded-xl"
                 />

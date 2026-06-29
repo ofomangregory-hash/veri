@@ -6,6 +6,7 @@ import { Send, Gift, Camera, ChevronLeft, ChevronRight, Heart, X, Lock, Unlock, 
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { proxyImage } from "../lib/proxyImage";
 
 function getToken() {
   return (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } })
@@ -362,7 +363,7 @@ export function ChatDetail() {
                       }}
                     >
                       <img
-                        src={msg.imageUrl}
+                        src={proxyImage(msg.imageUrl)}
                         alt="Locked content"
                         style={{
                           filter: 'blur(20px)',
@@ -402,7 +403,7 @@ export function ChatDetail() {
                   ) : (
                     <div style={{ width: '100%', marginTop: '4px' }}>
                       <img
-                        src={msg.imageUrl}
+                        src={proxyImage(msg.imageUrl)}
                         alt="Character image"
                         style={{
                           width: '100%',
@@ -514,7 +515,7 @@ export function ChatDetail() {
                 <div className="relative w-full max-w-sm">
                   <div style={{ overflow: "hidden", borderRadius: 12 }}>
                     <img
-                      src={currentMsg.imageUrl!}
+                      src={proxyImage(currentMsg.imageUrl)}
                       alt="Locked"
                       style={{ filter: "blur(20px)", transform: "scale(1.1)", width: "100%" }}
                       className="h-auto brightness-50 select-none pointer-events-none"
@@ -536,7 +537,7 @@ export function ChatDetail() {
                 </div>
               ) : (
                 <img
-                  src={currentMsg.imageUrl!}
+                  src={proxyImage(currentMsg.imageUrl)}
                   alt="Character image"
                   style={{
                     width: '100%',

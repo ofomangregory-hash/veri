@@ -5,6 +5,7 @@ import { Link, useLocation } from "wouter";
 import { Search, Sparkles, X, MessageCircle, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { proxyImage } from "../lib/proxyImage";
 
 type CharacterItem = {
   characterId: string;
@@ -208,7 +209,7 @@ export function Explore() {
                 className="group relative h-[220px] rounded-xl overflow-hidden bg-card border border-border hover:border-secondary transition-all hover:box-glow-purple flex flex-col justify-end text-left"
               >
                 <img
-                  src={char.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${char.name}`}
+                  src={proxyImage(char.avatarUrl) || `https://api.dicebear.com/7.x/bottts/svg?seed=${char.name}`}
                   alt={char.name}
                   className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
@@ -259,7 +260,7 @@ export function Explore() {
           >
             <div className="relative h-64 w-full overflow-hidden">
               <img
-                src={selectedChar.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${selectedChar.name}`}
+                src={proxyImage(selectedChar.avatarUrl) || `https://api.dicebear.com/7.x/bottts/svg?seed=${selectedChar.name}`}
                 alt={selectedChar.name}
                 className="w-full h-full object-cover"
               />

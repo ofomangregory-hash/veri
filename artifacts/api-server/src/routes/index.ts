@@ -14,6 +14,7 @@ import customerServiceRouter from "./customer-service";
 import questsRouter from "./quests";
 import referralsRouter from "./referrals";
 import eventsRouter from "./events";
+import proxyRouter from "./proxy";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(customerServiceRouter);
 router.use(questsRouter);
 router.use(referralsRouter);
 router.use(eventsRouter);
+router.use(proxyRouter);
 
 export default router;

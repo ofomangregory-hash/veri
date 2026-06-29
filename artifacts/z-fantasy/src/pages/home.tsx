@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Sparkles, ArrowRight, Star, Megaphone, Pencil, Check, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { proxyImage } from "../lib/proxyImage";
 import { useState, useCallback } from "react";
 
 function getToken() {
@@ -410,7 +411,7 @@ export function Home() {
                   className="group relative aspect-[3/4] rounded-xl overflow-hidden bg-card border border-border hover:border-primary transition-all hover:box-glow-pink flex flex-col justify-end"
                 >
                   <img 
-                    src={(char.avatarUrl && char.avatarUrl.trim()) ? char.avatarUrl : `https://api.dicebear.com/7.x/bottts/svg?seed=${char.name}`} 
+                    src={(char.avatarUrl && char.avatarUrl.trim()) ? proxyImage(char.avatarUrl) : `https://api.dicebear.com/7.x/bottts/svg?seed=${char.name}`} 
                     alt={char.name}
                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                   />
