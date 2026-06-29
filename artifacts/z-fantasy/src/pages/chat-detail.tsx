@@ -153,7 +153,7 @@ export function ChatDetail() {
     sendMsg.mutate({ characterId: id, data: { content: text } }, {
       onSuccess: () => {
         setLastRefetch(Date.now());
-        console.log('[SEND] Triggering refetch');
+        console.log('[SEND COMPLETE] Triggering full refetch');
       },
       onError: () => toast({ title: "Failed to send", variant: "destructive" })
     });
