@@ -1,8 +1,16 @@
-import { Router, type IRouter } from "express";
+import { Router, type Request, type Response, type NextFunction, type IRouter } from "express";
 
 const router: IRouter = Router();
 
 const ALLOWED_HOSTS = ["image.pollinations.ai"];
+
+// ── Public route — auth bypass ─────────────────────────────────────────────────
+// Browser <img> tags cannot send custom Authorization headers, so this endpoint
+// MUST remain unauthenticated. This middleware runs first and explicitly skips
+// any auth check, regardless of how the router is mounted upstream.
+router.use("/proxy-image", (_req: Request, _res: Response, next: NextFunction) => {
+  next();
+});
 
 router.get("/proxy-image", async (req, res): Promise<void> => {
   const url = req.query.url as string | undefined;
