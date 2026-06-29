@@ -311,7 +311,6 @@ export async function updateSupabaseCharacter(
     if (values.systemPrompt != null) payload.system_prompt = values.systemPrompt;
     if (values.genre != null) payload.genre = values.genre;
     if (values.subGenres != null) payload.sub_genres = values.subGenres;
-    if (values.background !== undefined) payload.background = values.background;
     if (values.personality !== undefined) payload.personality = values.personality;
     if (typeof values.age === "number") payload.age = values.age;
     if (values.tagline !== undefined) payload.tagline = values.tagline;
@@ -359,7 +358,6 @@ export async function updateSupabaseCharacter(
           genre: values.genre ?? localRow.genre ?? null,
           tagline: values.tagline !== undefined ? values.tagline : null,
           image_seed: values.imageSeed !== undefined ? (values.imageSeed ? parseInt(values.imageSeed, 10) : null) : null,
-          background: values.background !== undefined ? values.background : null,
           personality: values.personality !== undefined ? values.personality : null,
           age: typeof values.age === "number" ? values.age : null,
           trigger_metadata_array: [],
