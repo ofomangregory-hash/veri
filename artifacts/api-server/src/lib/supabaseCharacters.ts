@@ -334,6 +334,7 @@ export async function updateSupabaseCharacter(
     if (!error && data) {
       return serializeSupabaseCharacter(data as SupabaseCharacterRow);
     }
+    console.error('updateSupabaseCharacter error:', error.message, error.code, error.details, error.hint);
     logger.error({ error, characterId }, "updateSupabaseCharacter: Supabase update failed — falling back to local DB");
   }
 
