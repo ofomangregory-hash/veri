@@ -351,8 +351,9 @@ export const GetConversationResponse = zod.object({
   "messages": zod.array(zod.object({
   "role": zod.string(),
   "content": zod.string(),
-  "imageUrl": zod.string().nullish(),
-  "timestamp": zod.string().nullish()
+  "imageUrl": zod.string().nullable().optional(),
+  "isLocked": zod.boolean().optional(),
+  "timestamp": zod.string().nullable().optional()
 })),
   "character": zod.object({
   "characterId": zod.string(),

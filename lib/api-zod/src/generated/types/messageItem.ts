@@ -11,6 +11,7 @@ export interface MessageItem {
   content: string;
   /** @nullable */
   imageUrl?: string | null;
+  isLocked?: boolean;
   /** @nullable */
   timestamp?: string | null;
 }
