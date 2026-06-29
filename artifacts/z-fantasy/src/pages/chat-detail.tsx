@@ -48,6 +48,11 @@ export function ChatDetail() {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const data = await res.json();
+      console.log('[RAW API DATA]', JSON.stringify({
+        messageCount: data.messages?.length,
+        firstWithImage: data.messages?.find((m: any) => m.imageUrl),
+        lastMessage: data.messages?.[data.messages.length - 1]
+      }));
       const mapped = (data.messages ?? []).map((m: any) => ({
         role: m.role,
         content: m.content ?? '',
@@ -57,6 +62,12 @@ export function ChatDetail() {
         timestamp: m.timestamp ?? null,
       }));
       setMessages(mapped);
+      console.log('[RAW FETCH RESULT]', JSON.stringify({
+        totalMessages: mapped.length,
+        withImageUrl: mapped.filter((m: any) => m.imageUrl).length,
+        firstWithImage: mapped.find((m: any) => m.imageUrl),
+        lastMessage: mapped[mapped.length - 1]
+      }));
       setConvMeta({ character: data.character, affectionPoints: data.affectionPoints });
       console.log('[FETCH COMPLETE] messages:', mapped.length,
         'with images:', mapped.filter((m: any) => m.imageUrl).length);
