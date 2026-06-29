@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation, useSearch } from "wouter";
-import { ChevronLeft, Share2, MessageCircle, Tag, User, Globe, Lock, EyeOff, RefreshCw, ChevronRight, X, Image, Link2, Film } from "lucide-react";
+import { useGetMe } from "@workspace/api-client-react";
+import { ChevronLeft, Share2, MessageCircle, Tag, User, Globe, Lock, EyeOff, RefreshCw, ChevronRight, X, Image, Link2, Film, Plus, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 function getToken() {
@@ -78,6 +79,18 @@ export function CharacterBio() {
 
   const touchStartX = useRef<number | null>(null);
 
+  // Admin avatar management
+  const { data: me } = useGetMe();
+  const isAdmin = me?.isAdmin === true;
+  const [showAddAvatar, setShowAddAvatar] = useState(false);
+  const [newAvatarUrl, setNewAvatarUrl] = useState("");
+  const [addingAvatar, setAddingAvatar] = useState(false);
+  const [settingMain, setSettingMain] = useState<string | null>(null);
+
+  // Vault fullscreen viewer
+  const [vaultViewer, setVaultViewer] = useState<{ items: VaultItem[], idx: number } | null>(null);
+  const vaultViewerTouchX = useRef<number | null>(null);
+
   useEffect(() => {
     if (!id) return;
     const token = getToken();
@@ -142,6 +155,57 @@ export function CharacterBio() {
     setGalleryOpen(true);
   };
 
+  const handleAddAvatar = async () => {
+    if (!newAvatarUrl.trim() || !id) return;
+    setAddingAvatar(true);
+    try {
+      const token = getToken();
+      const res = await fetch(`/api/admin/characters/${id}/avatars`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ avatarUrl: newAvatarUrl.trim(), isPrimary: false }),
+      });
+      if (!res.ok) throw new Error("Failed to add avatar");
+      const newAvt = await res.json() as CharacterAvatar;
+      setAvatars(prev => [...prev, newAvt]);
+      setNewAvatarUrl("");
+      setShowAddAvatar(false);
+      toast({ title: "Avatar added!" });
+    } catch (err) {
+      toast({ title: "Failed to add avatar", description: String(err), variant: "destructive" });
+    } finally {
+      setAddingAvatar(false);
+    }
+  };
+
+  const handleSetMain = async (avatar: CharacterAvatar) => {
+    if (!id) return;
+    setSettingMain(avatar.id);
+    try {
+      const token = getToken();
+      const [r1, r2] = await Promise.all([
+        fetch(`/api/admin/avatars/${avatar.id}/primary`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ characterId: id }),
+        }),
+        fetch(`/api/admin/characters/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ avatarUrl: avatar.avatarUrl }),
+        }),
+      ]);
+      if (!r1.ok || !r2.ok) throw new Error(`Server error: ${!r1.ok ? r1.status : r2.status}`);
+      setAvatars(prev => prev.map(a => ({ ...a, isPrimary: a.id === avatar.id })));
+      setChar(prev => prev ? { ...prev, avatarUrl: avatar.avatarUrl } : prev);
+      toast({ title: "Main avatar updated!" });
+    } catch (err) {
+      toast({ title: "Failed to set main avatar", description: String(err), variant: "destructive" });
+    } finally {
+      setSettingMain(null);
+    }
+  };
+
   const galleryPrev = () => setGalleryIndex(i => (i - 1 + avatars.length) % avatars.length);
   const galleryNext = () => setGalleryIndex(i => (i + 1) % avatars.length);
 
@@ -200,6 +264,9 @@ export function CharacterBio() {
       </div>
     );
   }
+
+  const currentVaultItem = vaultViewer !== null ? vaultViewer.items[vaultViewer.idx] ?? null : null;
+  const currentVaultSrc = currentVaultItem ? (currentVaultItem.mediaUrl || currentVaultItem.imageUrl) : null;
 
   return (
     <div className="pb-32">
@@ -327,15 +394,21 @@ export function CharacterBio() {
               {vaultItems.length === 0 ? (
                 <p className="col-span-3 text-center text-xs text-muted-foreground py-6">No vault media for this character.</p>
               ) : (
-                vaultItems.map((item) => {
+                vaultItems.map((item, vi) => {
                   const url = item.mediaUrl || item.imageUrl;
                   return (
-                    <div key={item.id} className="aspect-square rounded-lg border border-border relative cursor-pointer" style={{ overflow: "hidden" }}>
+                    <div
+                      key={item.id}
+                      className="aspect-square rounded-lg border border-border relative cursor-pointer"
+                      style={{ overflow: "hidden" }}
+                      onClick={() => setVaultViewer({ items: vaultItems, idx: vi })}
+                    >
                       <img
                         src={url}
                         alt=""
                         style={item.isBlurred ? { filter: "blur(20px)", transform: "scale(1.1)" } : undefined}
                         className={`w-full h-full object-cover${item.isBlurred ? " brightness-50" : ""}`}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
                       {item.isBlurred && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/30">
@@ -387,18 +460,41 @@ export function CharacterBio() {
         )}
 
         {/* Avatar strip */}
-        {avatars.length > 1 && (
+        {(avatars.length >= 1 || isAdmin) && (
           <div className="p-4 rounded-2xl bg-card border border-border">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
               <Image size={11} /> Photos ({avatars.length})
             </p>
             <div className="flex gap-2 overflow-x-auto scrollbar-none">
               {avatars.map((a, i) => (
-                <button key={a.id} onClick={() => openGallery(i)}
-                  className="w-20 h-20 rounded-xl overflow-hidden border-2 border-border hover:border-secondary shrink-0 transition-all">
-                  <img src={a.avatarUrl} alt={`Avatar ${i + 1}`} className="w-full h-full object-cover" />
-                </button>
+                <div key={a.id} className="relative shrink-0">
+                  <button onClick={() => openGallery(i)}
+                    className="w-20 h-20 rounded-xl overflow-hidden border-2 border-border hover:border-secondary transition-all block">
+                    <img src={a.avatarUrl} alt={`Avatar ${i + 1}`} className="w-full h-full object-cover" />
+                  </button>
+                  {isAdmin && (
+                    <div className="absolute bottom-0 left-0 right-0 flex justify-center pb-0.5">
+                      <button
+                        onClick={() => handleSetMain(a)}
+                        disabled={settingMain === a.id || a.isPrimary}
+                        title={a.isPrimary ? "Current main" : "Set as main avatar"}
+                        className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-black/80 text-white border border-secondary/60 hover:border-secondary disabled:opacity-50 transition-colors"
+                      >
+                        {a.isPrimary ? <Check size={8} className="inline" /> : settingMain === a.id ? "…" : "Main"}
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
+              {isAdmin && (
+                <button
+                  onClick={() => setShowAddAvatar(true)}
+                  className="w-20 h-20 rounded-xl border-2 border-dashed border-secondary/60 flex items-center justify-center text-secondary shrink-0 hover:border-secondary hover:bg-secondary/5 transition-colors"
+                  title="Add avatar"
+                >
+                  <Plus size={24} />
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -479,9 +575,6 @@ export function CharacterBio() {
             <button onClick={() => setGalleryOpen(false)} className="p-2 text-white/70 hover:text-white">
               <X size={22} />
             </button>
-            <span className="text-sm font-semibold text-white/80">
-              Avatar {galleryIndex + 1} of {avatars.length}
-            </span>
             <div className="w-10" />
           </div>
 
@@ -510,18 +603,23 @@ export function CharacterBio() {
             )}
           </div>
 
-          {/* Dot indicators */}
-          {avatars.length > 1 && (
-            <div className="flex justify-center gap-1.5 py-4">
-              {avatars.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setGalleryIndex(i)}
-                  className={`w-2 h-2 rounded-full transition-all ${i === galleryIndex ? "bg-white w-4" : "bg-white/30"}`}
-                />
-              ))}
-            </div>
-          )}
+          {/* Dot indicators + counter at bottom center */}
+          <div className="flex flex-col items-center gap-2 py-4">
+            {avatars.length > 1 && (
+              <div className="flex justify-center gap-1.5">
+                {avatars.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setGalleryIndex(i)}
+                    className={`w-2 h-2 rounded-full transition-all ${i === galleryIndex ? "bg-white w-4" : "bg-white/30"}`}
+                  />
+                ))}
+              </div>
+            )}
+            <span className="text-white/70 text-sm font-semibold tabular-nums">
+              Avatar {galleryIndex + 1} of {avatars.length}
+            </span>
+          </div>
 
           {/* Thumbnail strip */}
           {avatars.length > 1 && (
@@ -539,6 +637,91 @@ export function CharacterBio() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Vault Fullscreen Viewer (Media tab) */}
+      {vaultViewer !== null && currentVaultItem !== null && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/95 flex flex-col"
+          onTouchStart={e => { vaultViewerTouchX.current = e.touches[0].clientX; }}
+          onTouchEnd={e => {
+            if (vaultViewerTouchX.current === null) return;
+            const dx = e.changedTouches[0].clientX - vaultViewerTouchX.current;
+            if (Math.abs(dx) > 40) {
+              if (dx < 0) setVaultViewer(v => v && { ...v, idx: Math.min(v.idx + 1, v.items.length - 1) });
+              else setVaultViewer(v => v && { ...v, idx: Math.max(v.idx - 1, 0) });
+            }
+            vaultViewerTouchX.current = null;
+          }}
+        >
+          <div className="flex items-center justify-end px-4 py-3 border-b border-white/10">
+            <button onClick={() => setVaultViewer(null)} className="p-2 text-white/70 hover:text-white transition-colors">
+              <X size={22} />
+            </button>
+          </div>
+          <div className="flex-1 flex items-center justify-center relative px-4">
+            {currentVaultItem.isBlurred ? (
+              <div className="relative w-full max-w-sm">
+                <div style={{ overflow: "hidden", borderRadius: 12 }}>
+                  <img src={currentVaultSrc ?? undefined} alt="Locked" style={{ filter: "blur(20px)", transform: "scale(1.1)", width: "100%" }} className="h-auto brightness-50 select-none pointer-events-none" />
+                </div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl">
+                  <div className="p-4 rounded-full bg-black/60 border border-primary/50">
+                    <Lock size={28} className="text-primary" />
+                  </div>
+                  <p className="text-white text-sm font-bold">Locked</p>
+                </div>
+              </div>
+            ) : (
+              <img src={currentVaultSrc ?? undefined} alt={currentVaultItem.characterName} className="max-w-full max-h-full object-contain rounded-xl" />
+            )}
+            {vaultViewer.items.length > 1 && (
+              <>
+                <button onClick={() => setVaultViewer(v => v && { ...v, idx: Math.max(v.idx - 1, 0) })} disabled={vaultViewer.idx === 0}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white hover:bg-black/80 disabled:opacity-30">
+                  <ChevronLeft size={20} />
+                </button>
+                <button onClick={() => setVaultViewer(v => v && { ...v, idx: Math.min(v.idx + 1, v.items.length - 1) })} disabled={vaultViewer.idx === vaultViewer.items.length - 1}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white hover:bg-black/80 disabled:opacity-30">
+                  <ChevronRight size={20} />
+                </button>
+              </>
+            )}
+          </div>
+          <div className="flex justify-center py-4">
+            <span className="text-white/70 text-sm font-semibold tabular-nums">{vaultViewer.idx + 1} of {vaultViewer.items.length}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Add Avatar Modal (admin only) */}
+      {showAddAvatar && (
+        <div className="fixed inset-0 z-[70] bg-black/80 flex items-end justify-center p-4" onClick={() => setShowAddAvatar(false)}>
+          <div className="w-full max-w-sm bg-card rounded-2xl border border-border p-6 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-white text-base">Add Avatar</h3>
+              <button onClick={() => setShowAddAvatar(false)} className="p-1 text-muted-foreground hover:text-white transition-colors"><X size={18} /></button>
+            </div>
+            <input
+              type="url"
+              value={newAvatarUrl}
+              onChange={e => setNewAvatarUrl(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAddAvatar()}
+              placeholder="https://example.com/avatar.jpg"
+              autoFocus
+              className="w-full h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
+            />
+            {newAvatarUrl && (
+              <img src={newAvatarUrl} alt="Preview" className="w-20 h-20 rounded-xl object-cover mx-auto border border-border" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            )}
+            <div className="flex gap-3">
+              <button onClick={() => setShowAddAvatar(false)} className="flex-1 py-2.5 rounded-xl border border-border text-muted-foreground text-sm font-bold hover:text-foreground transition-colors">Cancel</button>
+              <button onClick={handleAddAvatar} disabled={!newAvatarUrl.trim() || addingAvatar} className="flex-1 py-2.5 rounded-xl bg-accent text-white text-sm font-bold disabled:opacity-50 hover:bg-accent/90 transition-colors">
+                {addingAvatar ? "Adding…" : "Add Avatar"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

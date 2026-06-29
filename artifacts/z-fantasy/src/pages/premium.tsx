@@ -48,10 +48,11 @@ export function Premium() {
   const [customTickets, setCustomTickets] = useState("");
   const [buyingPack, setBuyingPack] = useState<string | null>(null);
   const [buyingTickets, setBuyingTickets] = useState<string | null>(null);
-  const [tierConfigs, setTierConfigs] = useState<Record<string, { features: string[]; featured: boolean }>>(DEFAULT_TIER_CONFIGS);
+  const [tierConfigs, setTierConfigs] = useState<Record<string, { features: string[]; featured: boolean; active?: boolean }>>({});
   const [prices, setPrices] = useState<Record<string, Record<Period, number>>>(DEFAULT_PRICES);
   const [neonPacks, setNeonPacks] = useState(NEON_PACKS);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [retryKey, setRetryKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const createInvoice = useCreateInvoice();
   const { toast } = useToast();
@@ -73,30 +74,29 @@ export function Premium() {
 
   useEffect(() => {
     const token = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData || "mock_init_data_for_dev";
-    fetch("/api/config/premium-tiers", { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then((data: Record<string, { features: string[]; featured: boolean; prices?: Record<string, number> }> | null) => {
+    setError(null);
+    setLoading(true);
+    fetch(`/api/config/premium-tiers?r=${retryKey}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error("fetch failed")))
+      .then((data: Record<string, { features: string[]; featured: boolean; active?: boolean; prices?: Record<string, number> }> | null) => {
         if (data) {
-          setTierConfigs(prev => {
-            const next = { ...prev };
-            for (const [tier, cfg] of Object.entries(data)) {
-              next[tier] = { features: cfg.features, featured: cfg.featured };
+          const next: Record<string, { features: string[]; featured: boolean; active?: boolean }> = {};
+          const nextPrices: Record<string, Record<Period, number>> = { ...DEFAULT_PRICES };
+          for (const [tier, cfg] of Object.entries(data)) {
+            next[tier] = { features: cfg.features, featured: cfg.featured, active: cfg.active ?? true };
+            if (cfg.prices && Object.keys(cfg.prices).length > 0) {
+              nextPrices[tier] = { ...DEFAULT_PRICES[tier], ...cfg.prices } as Record<Period, number>;
             }
-            return next;
-          });
-          setPrices(prev => {
-            const next = { ...prev };
-            for (const [tier, cfg] of Object.entries(data)) {
-              if (cfg.prices && Object.keys(cfg.prices).length > 0) {
-                next[tier] = { ...DEFAULT_PRICES[tier], ...cfg.prices } as Record<Period, number>;
-              }
-            }
-            return next;
-          });
+          }
+          setTierConfigs(next);
+          setPrices(nextPrices);
+        } else {
+          setError("Could not load plans. Please try again.");
         }
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => setError("Could not load plans. Please try again."))
+      .finally(() => setLoading(false));
+  }, [retryKey]);
 
   function openInvoiceSafe(link: string, onPaid?: () => void) {
     if (window.Telegram?.WebApp?.openInvoice) {
@@ -187,49 +187,65 @@ export function Premium() {
     }
   };
 
-  const tiers = [
-    {
-      id: InvoiceRequestTier.Bronze,
-      name: "Bronze",
-      color: "text-amber-500",
-      border: "border-amber-500",
-      glow: "hover:shadow-[0_0_25px_rgba(245,158,11,0.5)]",
-      icon: Shield,
-      features: tierConfigs.Bronze?.features ?? DEFAULT_TIER_CONFIGS.Bronze.features,
-      featured: tierConfigs.Bronze?.featured ?? false,
-    },
-    {
-      id: InvoiceRequestTier.Silver,
-      name: "Silver",
-      color: "text-slate-300",
-      border: "border-slate-300",
-      glow: "hover:shadow-[0_0_25px_rgba(203,213,225,0.5)]",
-      icon: Zap,
-      features: tierConfigs.Silver?.features ?? DEFAULT_TIER_CONFIGS.Silver.features,
-      featured: tierConfigs.Silver?.featured ?? false,
-    },
-    {
-      id: InvoiceRequestTier.Gold,
-      name: "Gold",
-      color: "text-yellow-400",
-      border: "border-yellow-400",
-      glow: "hover:shadow-[0_0_25px_rgba(250,204,21,0.5)]",
-      icon: Infinity,
-      features: tierConfigs.Gold?.features ?? DEFAULT_TIER_CONFIGS.Gold.features,
-      featured: tierConfigs.Gold?.featured ?? true,
-    },
-  ];
+  const TIER_STYLES: Record<string, { color: string; border: string; glow: string; icon: typeof Shield }> = {
+    Bronze: { color: "text-amber-500", border: "border-amber-500", glow: "hover:shadow-[0_0_25px_rgba(245,158,11,0.5)]", icon: Shield },
+    Silver: { color: "text-slate-300", border: "border-slate-300", glow: "hover:shadow-[0_0_25px_rgba(203,213,225,0.5)]", icon: Zap },
+    Gold:   { color: "text-yellow-400", border: "border-yellow-400", glow: "hover:shadow-[0_0_25px_rgba(250,204,21,0.5)]", icon: Infinity },
+  };
+  const TIER_IDS: Record<string, InvoiceRequestTier> = {
+    Bronze: InvoiceRequestTier.Bronze,
+    Silver: InvoiceRequestTier.Silver,
+    Gold:   InvoiceRequestTier.Gold,
+  };
+
+  const tiers = Object.entries(tierConfigs)
+    .filter(([, cfg]) => cfg.active !== false)
+    .map(([name, cfg]) => {
+      const style = TIER_STYLES[name] ?? { color: "text-white", border: "border-white", glow: "", icon: Shield };
+      return {
+        id: TIER_IDS[name] ?? InvoiceRequestTier.Bronze,
+        name,
+        color: style.color,
+        border: style.border,
+        glow: style.glow,
+        icon: style.icon,
+        features: cfg.features,
+        featured: cfg.featured,
+      };
+    })
+    .sort((a, b) => {
+      const order = ["Bronze", "Silver", "Gold"];
+      return (order.indexOf(a.name) ?? 99) - (order.indexOf(b.name) ?? 99);
+    });
 
   const customAmt = parseInt(customCards, 10);
   const customStars = !isNaN(customAmt) && customAmt >= 10 ? Math.ceil(customAmt / 2) : null;
   const customBonus = !isNaN(customAmt) && customAmt > 0 ? (customAmt > 500 ? 50 : customAmt > 250 ? 20 : 0) : 0;
 
-  console.log('[PREMIUM PAGE] Rendering, tiers:', JSON.stringify(tiers));
-  console.log('[PREMIUM PAGE] Loading:', loading);
-  console.log('[PREMIUM PAGE] Error:', error);
+  if (loading) {
+    return (
+      <div className="p-4 pb-24 space-y-4 mt-4">
+        <div className="h-10 w-40 bg-muted rounded-xl mx-auto animate-pulse" />
+        <div className="h-12 bg-muted rounded-xl animate-pulse" />
+        {[1, 2, 3].map(i => (
+          <div key={i} className="h-48 bg-muted rounded-2xl animate-pulse" />
+        ))}
+      </div>
+    );
+  }
 
-  if (!tiers || tiers.length === 0) {
-    return <div>Loading premium plans...</div>;
+  if (error && tiers.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-8 text-center">
+        <p className="text-muted-foreground text-sm">{error}</p>
+        <button
+          onClick={() => setRetryKey(k => k + 1)}
+          className="px-4 py-2 rounded-lg border border-border text-sm font-semibold hover:bg-card transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   return (

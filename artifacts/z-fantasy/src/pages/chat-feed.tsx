@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useListConversations, useGetMediaVault, useUnlockMedia, useListCharacters } from "@workspace/api-client-react";
-import { Heart, Lock, Unlock, Plus, X, Search, Archive, MessageCircle } from "lucide-react";
+import { Heart, Lock, Unlock, Plus, X, Search, Archive, MessageCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
@@ -67,6 +67,17 @@ export function ChatFeed() {
   const [, setLocation] = useLocation();
   const [archivedConvs, setArchivedConvs] = useState<ArchivedConv[]>([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
+  type VaultViewerItem = { id: string; imageUrl?: string | null; mediaUrl?: string | null; isBlurred: boolean; characterId?: string | null; characterName: string; };
+  const [vaultViewer, setVaultViewer] = useState<{ items: VaultViewerItem[], idx: number } | null>(null);
+  const vaultViewerTouchX = useRef<number | null>(null);
+  // Clamp viewer index if items are updated (e.g. after unlock)
+  useEffect(() => {
+    if (vaultViewer) {
+      const len = vaultViewer.items.length;
+      if (len === 0) setVaultViewer(null);
+      else setVaultViewer(v => v && { ...v, idx: Math.min(v.idx, len - 1) });
+    }
+  }, [vaultViewer?.items.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: conversations, isLoading: chatsLoading } = useListConversations();
   const { data: vaultItems, isLoading: vaultLoading, refetch: refetchVault } = useGetMediaVault();
@@ -76,6 +87,12 @@ export function ChatFeed() {
   });
   const unlockMutation = useUnlockMedia();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (vaultItems && vaultItems.length > 0) {
+      console.log('[VAULT ITEM]', JSON.stringify(vaultItems[0]));
+    }
+  }, [vaultItems]);
 
   const fetchArchived = async () => {
     setArchivedLoading(true);
@@ -282,12 +299,23 @@ export function ChatFeed() {
               </div>
             ) : (
               vaultItems.map(item => {
-                const inner = (
-                  <>
+                const src = (item as { mediaUrl?: string | null }).mediaUrl || item.imageUrl;
+                const openViewer = () => {
+                  const charItems = (vaultItems ?? []).filter(v => v.characterId === item.characterId);
+                  const idx = charItems.findIndex(v => v.id === item.id);
+                  setVaultViewer({ items: charItems as VaultViewerItem[], idx: Math.max(idx, 0) });
+                };
+                return (
+                  <div
+                    key={item.id}
+                    className="relative aspect-[3/4] rounded-xl overflow-hidden border border-border group cursor-pointer"
+                    onClick={openViewer}
+                  >
                     <img
-                      src={item.imageUrl}
+                      src={src}
                       alt="Vault Media"
                       className={`w-full h-full object-cover transition-all ${item.isBlurred ? 'blur-md grayscale brightness-50' : 'group-hover:scale-110'}`}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                     />
                     {item.isBlurred && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40">
@@ -295,7 +323,7 @@ export function ChatFeed() {
                           <Lock className="text-primary" size={24} />
                         </div>
                         <button
-                          onClick={e => { e.preventDefault(); e.stopPropagation(); handleUnlock(item.id); }}
+                          onClick={e => { e.stopPropagation(); handleUnlock(item.id); }}
                           disabled={unlockMutation.isPending}
                           className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-full uppercase tracking-wider box-glow-pink hover:bg-primary/90 disabled:opacity-50"
                         >
@@ -311,20 +339,6 @@ export function ChatFeed() {
                     <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/90 to-transparent">
                       <span className="text-[10px] text-white/80 font-medium">{item.characterName}</span>
                     </div>
-                  </>
-                );
-
-                return !item.isBlurred && item.characterId ? (
-                  <Link
-                    key={item.id}
-                    href={`/chat/${item.characterId}`}
-                    className="relative aspect-[3/4] rounded-xl overflow-hidden border border-border group"
-                  >
-                    {inner}
-                  </Link>
-                ) : (
-                  <div key={item.id} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-border group">
-                    {inner}
                   </div>
                 );
               })
@@ -506,6 +520,97 @@ export function ChatFeed() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Vault Fullscreen Viewer */}
+      {vaultViewer !== null && vaultViewer.items.length > 0 && (() => {
+        const current = vaultViewer.items[vaultViewer.idx];
+        const src = (current as { mediaUrl?: string | null }).mediaUrl || current.imageUrl;
+        return (
+          <div
+            className="fixed inset-0 z-[70] bg-black/95 flex flex-col"
+            onTouchStart={e => { vaultViewerTouchX.current = e.touches[0].clientX; }}
+            onTouchEnd={e => {
+              if (vaultViewerTouchX.current === null) return;
+              const dx = e.changedTouches[0].clientX - vaultViewerTouchX.current;
+              if (Math.abs(dx) > 40) {
+                if (dx < 0) setVaultViewer(v => v && { ...v, idx: Math.min(v.idx + 1, v.items.length - 1) });
+                else setVaultViewer(v => v && { ...v, idx: Math.max(v.idx - 1, 0) });
+              }
+              vaultViewerTouchX.current = null;
+            }}
+          >
+            <div className="flex items-center justify-end px-4 py-3 border-b border-white/10">
+              <button onClick={() => setVaultViewer(null)} className="p-2 text-white/70 hover:text-white transition-colors">
+                <X size={22} />
+              </button>
+            </div>
+            <div className="flex-1 flex items-center justify-center relative px-4">
+              {current.isBlurred ? (
+                <div className="relative w-full max-w-sm">
+                  <div style={{ overflow: "hidden", borderRadius: 12 }}>
+                    <img
+                      src={src ?? undefined}
+                      alt="Locked"
+                      style={{ filter: "blur(20px)", transform: "scale(1.1)", width: "100%" }}
+                      className="h-auto brightness-50 select-none pointer-events-none"
+                    />
+                  </div>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl">
+                    <div className="p-4 rounded-full bg-black/60 border border-primary/50 box-glow-pink">
+                      <Lock className="text-primary" size={28} />
+                    </div>
+                    <p className="text-white text-sm font-bold">🔒 Locked</p>
+                    <button
+                      onClick={() => { setVaultViewer(null); handleUnlock(current.id); }}
+                      disabled={unlockMutation.isPending}
+                      className="px-6 py-2.5 rounded-full bg-primary text-white text-sm font-bold box-glow-pink hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      <Unlock size={14} className="inline mr-1.5 -mt-0.5" /> Unlock (10 🃏)
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={src ?? undefined}
+                  alt={current.characterName}
+                  className="max-w-full max-h-full object-contain rounded-xl"
+                />
+              )}
+              {vaultViewer.items.length > 1 && (
+                <>
+                  <button
+                    onClick={() => setVaultViewer(v => v && { ...v, idx: Math.max(v.idx - 1, 0) })}
+                    disabled={vaultViewer.idx === 0}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white hover:bg-black/80 disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button
+                    onClick={() => setVaultViewer(v => v && { ...v, idx: Math.min(v.idx + 1, v.items.length - 1) })}
+                    disabled={vaultViewer.idx === vaultViewer.items.length - 1}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white hover:bg-black/80 disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </>
+              )}
+            </div>
+            <div className="flex flex-col items-center gap-3 py-4 px-4">
+              <span className="text-white/70 text-sm font-semibold tabular-nums">
+                {vaultViewer.idx + 1} of {vaultViewer.items.length}
+              </span>
+              {current.characterId && !current.isBlurred && (
+                <button
+                  onClick={() => { setVaultViewer(null); setLocation(`/chat/${current.characterId}`); }}
+                  className="px-6 py-2.5 rounded-full bg-card border border-secondary/60 text-secondary text-sm font-bold hover:bg-secondary/10 transition-colors flex items-center gap-2"
+                >
+                  <MessageCircle size={14} /> See in Chat
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -1,0 +1,49 @@
+Got it — two separate issues:
+Issue 1 — Unlock modal cut off behind nav bar:
+
+The "Unlock Image" modal is being hidden behind the bottom navigation panel. It needs to sit above it.
+Issue 2 — Auto loop images saving to vault but not appearing in chat:
+
+The image URL is in message_history (confirmed in logs) but not rendering in the chat bubbles. The message with imageUrl is being pushed but the chat UI isn't showing it inline.
+Send this to Replit:
+
+Fix these 2 things in chat-detail.tsx only. Do not touch any other files.
+1. Fix unlock modal cut off by nav bar
+
+The unlock modal bottom sheet is hidden behind the bottom navigation panel. Add bottom padding so it sits above the nav bar:
+typescript// Find the unlock modal container and add:
+style={{ 
+  paddingBottom: '80px', // push above nav bar
+  zIndex: 9999 
+}}
+Or if it uses a fixed position bottom sheet, set bottom: 80px instead of bottom: 0.
+2. Fix auto loop images not showing in chat bubbles
+
+Images are saving to vault and to message_history with imageUrl set correctly (confirmed in logs) but not rendering inline in chat. The issue is that image-only messages have content: "" (empty string) — the message bubble may be skipping rendering entirely when content is empty.
+Find the message render loop and fix it to render the image even when content is empty:
+typescript// Change condition from:
+{msg.content && <div className="bubble">{msg.content}</div>}
+
+// To — render bubble if content OR imageUrl exists:
+{(msg.content || msg.imageUrl) && (
+  <div className="bubble">
+    {msg.content && <p>{msg.content}</p>}
+    {msg.imageUrl && (
+      <img
+        src={msg.imageUrl}
+        alt="Character image"
+        style={{
+          width: '100%',
+          maxWidth: '100%',
+          borderRadius: '12px',
+          objectFit: 'cover',
+          display: 'block',
+          minHeight: '200px'
+        }}
+        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        onLoad={() => console.log('[CHAT] Image loaded:', msg.imageUrl)}
+      />
+    )}
+  </div>
+)}
+Do not touch any other files.

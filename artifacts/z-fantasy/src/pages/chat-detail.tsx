@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import { useGetConversation, useSendMessage, useSendGift, useRequestSelfie, useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Send, Gift, Camera, ChevronLeft, Heart, X, Lock, Unlock, RefreshCw } from "lucide-react";
+import { Send, Gift, Camera, ChevronLeft, ChevronRight, Heart, X, Lock, Unlock, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,6 +30,17 @@ export function ChatDetail() {
   const [archiving, setArchiving] = useState(false);
   // Unlock confirmation state
   const [unlockTarget, setUnlockTarget] = useState<ChatMsg | null>(null);
+  // Chat image fullscreen viewer
+  const [chatViewer, setChatViewer] = useState<{ idx: number } | null>(null);
+  const chatViewerTouchX = useRef<number | null>(null);
+  // Clamp index when image list changes (e.g. new message arrives)
+  useEffect(() => {
+    if (chatViewer && chatViewerImages.length > 0) {
+      setChatViewer(v => v && { idx: Math.min(v.idx, chatViewerImages.length - 1) });
+    } else if (chatViewer && chatViewerImages.length === 0) {
+      setChatViewer(null);
+    }
+  }, [chatViewerImages.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -191,6 +202,7 @@ export function ChatDetail() {
   if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
   const messages = (conv?.messages ?? []) as ChatMsg[];
+  const chatViewerImages = messages.filter(m => m.imageUrl);
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background">
@@ -236,14 +248,15 @@ export function ChatDetail() {
                 </div>
               )}
               {msg.imageUrl && (
-                <div className={`${msg.content ? "mt-2" : ""} rounded-xl overflow-hidden border border-border max-w-xs relative`}>
+                <div
+                  className={`${msg.content ? "mt-2" : ""} rounded-xl overflow-hidden border border-border max-w-xs relative cursor-pointer`}
+                  onClick={() => {
+                    const imgIdx = chatViewerImages.indexOf(msg);
+                    if (imgIdx >= 0) setChatViewer({ idx: imgIdx });
+                  }}
+                >
                   {isLocked ? (
-                    /* Blurred locked image — cloudy/frosted overlay per spec */
-                    <div
-                      className="relative cursor-pointer"
-                      onClick={() => handleUnlockTap(msg)}
-                      title={`Unlock for ${unlockCost} 💎`}
-                    >
+                    <div className="relative">
                       <div style={{ overflow: "hidden" }}>
                         <img
                           src={msg.imageUrl}
@@ -268,16 +281,14 @@ export function ChatDetail() {
                       alt="Character image"
                       style={{
                         width: '100%',
-                        maxWidth: '280px',
+                        maxWidth: '100%',
                         borderRadius: '12px',
                         objectFit: 'cover',
                         display: 'block',
+                        minHeight: '200px',
                       }}
-                      onError={(e) => {
-                        console.log('[CHAT MESSAGE] Image failed to load:', msg.imageUrl);
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                      onLoad={() => console.log('[CHAT MESSAGE] Image loaded OK:', msg.imageUrl)}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      onLoad={() => console.log('[CHAT] Image loaded:', msg.imageUrl)}
                     />
                   )}
                 </div>
@@ -322,6 +333,89 @@ export function ChatDetail() {
           <Send size={20} className="ml-0.5" />
         </button>
       </div>
+
+      {/* Chat Image Fullscreen Viewer */}
+      {chatViewer !== null && chatViewerImages.length > 0 && (() => {
+        const currentMsg = chatViewerImages[chatViewer.idx];
+        const isViewerLocked = currentMsg.isLocked === true;
+        return (
+          <div
+            className="fixed inset-0 z-[60] bg-black/95 flex flex-col"
+            onTouchStart={e => { chatViewerTouchX.current = e.touches[0].clientX; }}
+            onTouchEnd={e => {
+              if (chatViewerTouchX.current === null) return;
+              const dx = e.changedTouches[0].clientX - chatViewerTouchX.current;
+              if (Math.abs(dx) > 40) {
+                if (dx < 0) setChatViewer(v => v && { idx: Math.min(v.idx + 1, chatViewerImages.length - 1) });
+                else setChatViewer(v => v && { idx: Math.max(v.idx - 1, 0) });
+              }
+              chatViewerTouchX.current = null;
+            }}
+          >
+            <div className="flex items-center justify-end px-4 py-3 border-b border-white/10">
+              <button onClick={() => setChatViewer(null)} className="p-2 text-white/70 hover:text-white transition-colors">
+                <X size={22} />
+              </button>
+            </div>
+            <div className="flex-1 flex items-center justify-center relative px-4">
+              {isViewerLocked ? (
+                <div className="relative w-full max-w-sm">
+                  <div style={{ overflow: "hidden", borderRadius: 12 }}>
+                    <img
+                      src={currentMsg.imageUrl!}
+                      alt="Locked"
+                      style={{ filter: "blur(20px)", transform: "scale(1.1)", width: "100%" }}
+                      className="h-auto brightness-50 select-none pointer-events-none"
+                      draggable={false}
+                    />
+                  </div>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl">
+                    <div className="p-4 rounded-full bg-black/60 border border-primary/50 box-glow-pink">
+                      <Lock size={28} className="text-primary" />
+                    </div>
+                    <p className="text-white text-sm font-bold drop-shadow-lg">🔒 Locked Image</p>
+                    <button
+                      onClick={() => { setChatViewer(null); handleUnlockTap(currentMsg); }}
+                      className="mt-1 px-6 py-2.5 rounded-full bg-primary text-white text-sm font-bold box-glow-pink hover:bg-primary/90"
+                    >
+                      <Unlock size={14} className="inline mr-1.5 -mt-0.5" /> Unlock · {unlockCost} 💎
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={currentMsg.imageUrl!}
+                  alt="Chat image"
+                  className="max-w-full max-h-full object-contain rounded-xl"
+                />
+              )}
+              {chatViewerImages.length > 1 && (
+                <>
+                  <button
+                    onClick={() => setChatViewer(v => v && { idx: Math.max(v.idx - 1, 0) })}
+                    disabled={chatViewer.idx === 0}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white hover:bg-black/80 disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button
+                    onClick={() => setChatViewer(v => v && { idx: Math.min(v.idx + 1, chatViewerImages.length - 1) })}
+                    disabled={chatViewer.idx === chatViewerImages.length - 1}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white hover:bg-black/80 disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </>
+              )}
+            </div>
+            <div className="flex justify-center py-4">
+              <span className="text-white/70 text-sm font-semibold tabular-nums">
+                {chatViewer.idx + 1} of {chatViewerImages.length}
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Unlock Confirmation Modal */}
       <AnimatePresence>

@@ -263,15 +263,26 @@ router.get("/config/premium-tiers", async (_req, res): Promise<void> => {
   }
 
   // Merge Supabase prices (overrides hardcoded defaults)
+  // Track active status per tier from Supabase
+  const activeByTier: Record<string, boolean> = {};
   for (const t of supabaseTiers) {
     const tier = t.tierName;
     if (!result[tier]) result[tier] = { features: [], featured: false, prices: {} };
     result[tier]!.prices[t.period] = t.priceStars;
     if (t.features.length > 0) result[tier]!.features = t.features;
     if (t.isFeatured) result[tier]!.featured = t.isFeatured;
+    // active: if ANY row for this tier is active, consider it active
+    if (activeByTier[tier] === undefined) activeByTier[tier] = t.active;
+    else activeByTier[tier] = activeByTier[tier] || t.active;
   }
 
-  res.json(result);
+  // Add active field: default true for tiers not in Supabase
+  const resultWithActive: Record<string, { features: string[]; featured: boolean; prices: Record<string, number>; active: boolean }> = {};
+  for (const [tier, cfg] of Object.entries(result)) {
+    resultWithActive[tier] = { ...cfg, active: activeByTier[tier] ?? true };
+  }
+
+  res.json(resultWithActive);
 });
 
 // GET /economy-config — public, returns daily claim rewards per tier for frontend display

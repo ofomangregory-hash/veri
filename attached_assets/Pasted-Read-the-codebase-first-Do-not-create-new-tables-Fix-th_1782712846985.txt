@@ -1,0 +1,77 @@
+Read the codebase first. Do not create new tables. Fix these 6 things only.
+1. Fix auto image size in chat-detail.tsx
+
+The non-blurred auto image renders too small. Fix:
+typescript<img
+  src={msg.imageUrl}
+  alt="Character image"
+  style={{
+    width: '100%',
+    maxWidth: '100%',
+    borderRadius: '12px',
+    objectFit: 'cover',
+    display: 'block',
+    minHeight: '200px'
+  }}
+  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+  onLoad={() => console.log('[CHAT] Image loaded:', msg.imageUrl)}
+/>
+2. Fix vault images not loading in vault component
+
+Vault grid shows broken "Vault Media" placeholders. Log the first vault item to confirm field name, then fix:
+typescriptconsole.log('[VAULT ITEM]', JSON.stringify(vaultItems[0]));
+
+<img
+  src={item.mediaUrl || item.media_url}
+  alt={item.characterName || item.character_name || 'Vault Media'}
+  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }}
+  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+/>
+3. Vault fullscreen viewer
+
+Tapping any image in the vault opens a fullscreen modal:
+
+Shows the tapped image full screen
+Horizontally scrollable to see all other vault media for that character
+Blurred images stay blurred with lock overlay and unlock button
+Unblurred images show clearly
+"See in Chat" button at bottom — tapping it navigates to that character's chat
+Close button top right
+Shows X of Y indicator at bottom center
+
+4. Chat image fullscreen viewer
+
+Tapping an image in a character chat opens fullscreen modal:
+
+Shows tapped image full screen
+Scrollable to see all media received in that specific chat
+Blurred images stay blurred with lock overlay
+Close button top right
+Shows X of Y at bottom
+
+5. Avatar fullscreen viewer in CharacterBio.tsx
+
+Tapping the character avatar opens fullscreen modal:
+
+Shows tapped avatar full screen
+Horizontally scrollable to see all avatars for that character from character_avatars table
+Shows Avatar X of Y at bottom center
+Close button top right
+
+6. Avatar management in CharacterBio.tsx
+
+Add a + button next to avatars for adding more — opens image URL input or file picker, saves to character_avatars table via POST /api/admin/images/avatars with character_id and avatar_url
+Each avatar shows a "Set as Main" button/option — calls PATCH /api/admin/characters/:characterId to update avatar_url and sets is_primary: true on that avatar in character_avatars, sets all others to is_primary: false
+Only show + and "Set as Main" if user has admin/god-mode privileges
+
+7. Premium page — read everything from Supabase
+
+The premium page must read all tier data from Supabase premium_tiers table — no hardcoded values. Fetch:
+
+Tier name, label, price, period, features array, is_featured, active
+Display only active: true tiers
+Features list comes from features JSONB array in premium_tiers table
+Price and stars come from prices table using matching price key
+If fetch fails show loading state not blank screen
+
+Do not create new tables. Do not touch files outside these fixes.
