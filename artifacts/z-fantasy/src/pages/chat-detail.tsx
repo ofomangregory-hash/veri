@@ -192,6 +192,8 @@ export function ChatDetail() {
   const isGold = tier === "Gold";
 
   const messages = (conv?.messages ?? []) as ChatMsg[];
+  const displayMessages = messages.filter(m => m.content || m.imageUrl);
+  console.log('[RENDER MESSAGES]', displayMessages.map(m => ({ role: m.role, hasContent: !!m.content, hasImage: !!m.imageUrl })));
   const chatViewerImages = messages.filter(m => m.imageUrl);
 
   // Clamp viewer index when the image list changes — must be before any early return
@@ -233,7 +235,7 @@ export function ChatDetail() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
-        {messages.map((msg, i) => {
+        {displayMessages.map((msg, i) => {
           const isUser = msg.role === 'user';
           const isLocked = msg.isLocked === true && !isUser;
           return (
@@ -252,7 +254,8 @@ export function ChatDetail() {
                   )}
                   {msg.imageUrl && (
                     <div
-                      className={`${msg.content ? "mt-2" : ""} rounded-xl overflow-hidden border border-border max-w-xs relative cursor-pointer`}
+                      style={{ width: '100%', maxWidth: '100%', marginTop: msg.content ? '8px' : undefined }}
+                      className="rounded-xl overflow-hidden border border-border relative cursor-pointer"
                       onClick={() => {
                         const imgIdx = chatViewerImages.indexOf(msg);
                         if (imgIdx >= 0) setChatViewer({ idx: imgIdx });
@@ -264,8 +267,18 @@ export function ChatDetail() {
                             <img
                               src={msg.imageUrl}
                               alt="Locked"
-                              style={{ filter: "blur(20px)", transform: "scale(1.1)" }}
-                              className="w-full h-auto select-none pointer-events-none brightness-50"
+                              style={{
+                                filter: "blur(20px)",
+                                transform: "scale(1.1)",
+                                width: '100%',
+                                height: 'auto',
+                                minHeight: '250px',
+                                maxHeight: '400px',
+                                objectFit: 'cover',
+                                display: 'block',
+                                borderRadius: '12px',
+                              }}
+                              className="select-none pointer-events-none brightness-50"
                               draggable={false}
                             />
                           </div>
@@ -284,11 +297,12 @@ export function ChatDetail() {
                           alt="Character image"
                           style={{
                             width: '100%',
-                            maxWidth: '100%',
+                            height: 'auto',
+                            minHeight: '250px',
+                            maxHeight: '400px',
                             borderRadius: '12px',
                             objectFit: 'cover',
                             display: 'block',
-                            minHeight: '200px',
                           }}
                           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                           onLoad={() => console.log('[CHAT] Image loaded:', msg.imageUrl)}
