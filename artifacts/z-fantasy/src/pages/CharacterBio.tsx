@@ -3,6 +3,7 @@ import { useParams, useLocation, useSearch } from "wouter";
 import { useGetMe } from "@workspace/api-client-react";
 import { ChevronLeft, Share2, MessageCircle, Tag, User, Globe, Lock, EyeOff, RefreshCw, ChevronRight, X, Image, Link2, Film, Plus, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { proxyImage } from "@/lib/proxyImage";
 
 function getToken() {
   return (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } })
@@ -291,7 +292,7 @@ export function CharacterBio() {
             className="w-32 h-32 rounded-full overflow-hidden border-4 border-secondary box-glow-purple shadow-2xl focus:outline-none"
           >
             <img
-              src={char.avatarUrl ?? `https://api.dicebear.com/7.x/bottts/svg?seed=${char.name}`}
+              src={proxyImage(char.avatarUrl) ?? `https://api.dicebear.com/7.x/bottts/svg?seed=${char.name}`}
               alt={char.name}
               className="w-full h-full object-cover"
             />
@@ -470,7 +471,7 @@ export function CharacterBio() {
                 <div key={a.id} className="relative shrink-0">
                   <button onClick={() => openGallery(i)}
                     className="w-20 h-20 rounded-xl overflow-hidden border-2 border-border hover:border-secondary transition-all block">
-                    <img src={a.avatarUrl} alt={`Avatar ${i + 1}`} className="w-full h-full object-cover" />
+                    <img src={proxyImage(a.avatarUrl)} alt={`Avatar ${i + 1}`} className="w-full h-full object-cover" />
                   </button>
                   {isAdmin && (
                     <div className="absolute bottom-0 left-0 right-0 flex justify-center pb-0.5">
@@ -581,7 +582,7 @@ export function CharacterBio() {
           {/* Gallery image */}
           <div className="flex-1 flex items-center justify-center relative px-4">
             <img
-              src={avatars[galleryIndex].avatarUrl}
+              src={proxyImage(avatars[galleryIndex].avatarUrl)}
               alt={`Avatar ${galleryIndex + 1}`}
               className="max-w-full max-h-full object-contain rounded-xl"
             />
@@ -632,7 +633,7 @@ export function CharacterBio() {
                     i === galleryIndex ? "border-secondary" : "border-white/20 opacity-60"
                   }`}
                 >
-                  <img src={a.avatarUrl} alt="" className="w-full h-full object-cover" />
+                  <img src={proxyImage(a.avatarUrl)} alt="" className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>

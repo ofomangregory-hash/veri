@@ -326,6 +326,13 @@ export function Admin() {
   const [charDrawerTags, setCharDrawerTags] = useState("");
   const [charDrawerVisibility, setCharDrawerVisibility] = useState<"public" | "private" | "premium">("private");
   const [charDrawerNsfw, setCharDrawerNsfw] = useState(false);
+  const [charDrawerGenre, setCharDrawerGenre] = useState("Modern");
+  const [charDrawerSubGenres, setCharDrawerSubGenres] = useState("");
+  const [charDrawerAge, setCharDrawerAge] = useState("");
+  const [charDrawerPersonality, setCharDrawerPersonality] = useState("");
+  const [charDrawerBackground, setCharDrawerBackground] = useState("");
+  const [charDrawerTagline, setCharDrawerTagline] = useState("");
+  const [charDrawerImageSeed, setCharDrawerImageSeed] = useState("");
   const [savingChar, setSavingChar] = useState(false);
 
   const openUserDrawer = async (userId: string) => {
@@ -385,6 +392,13 @@ export function Admin() {
     setCharDrawerTags((char.tags ?? []).filter(t => t !== "#NSFW").join(", "));
     setCharDrawerVisibility((char.visibility as "public" | "private" | "premium") ?? "private");
     setCharDrawerNsfw((char.tags ?? []).includes("#NSFW"));
+    setCharDrawerGenre((char as unknown as { genre?: string }).genre ?? "Modern");
+    setCharDrawerSubGenres(((char as unknown as { subGenres?: string[] }).subGenres ?? []).join(", "));
+    setCharDrawerAge(String((char as unknown as { age?: string | number | null }).age ?? ""));
+    setCharDrawerPersonality((char as unknown as { personality?: string | null }).personality ?? "");
+    setCharDrawerBackground((char as unknown as { background?: string | null }).background ?? "");
+    setCharDrawerTagline((char as unknown as { tagline?: string | null }).tagline ?? "");
+    setCharDrawerImageSeed(String((char as unknown as { imageSeed?: string | number | null }).imageSeed ?? ""));
     setCharDrawerOpen(true);
   };
 
@@ -402,6 +416,13 @@ export function Admin() {
         visibility: charDrawerVisibility,
         tags,
         isNsfw: charDrawerNsfw,
+        genre: charDrawerGenre || undefined,
+        subGenres: charDrawerSubGenres ? charDrawerSubGenres.split(",").map(s => s.trim()).filter(Boolean) : [],
+        age: charDrawerAge ? parseInt(charDrawerAge, 10) : undefined,
+        personality: charDrawerPersonality || null,
+        background: charDrawerBackground || null,
+        tagline: charDrawerTagline || null,
+        imageSeed: charDrawerImageSeed || null,
       });
       toast({ title: `✅ Character updated` });
       setCharDrawerOpen(false);
@@ -2397,6 +2418,13 @@ export function Admin() {
         charDrawerTags={charDrawerTags} setCharDrawerTags={setCharDrawerTags}
         charDrawerVisibility={charDrawerVisibility} setCharDrawerVisibility={setCharDrawerVisibility}
         charDrawerNsfw={charDrawerNsfw} setCharDrawerNsfw={setCharDrawerNsfw}
+        charDrawerGenre={charDrawerGenre} setCharDrawerGenre={setCharDrawerGenre}
+        charDrawerSubGenres={charDrawerSubGenres} setCharDrawerSubGenres={setCharDrawerSubGenres}
+        charDrawerAge={charDrawerAge} setCharDrawerAge={setCharDrawerAge}
+        charDrawerPersonality={charDrawerPersonality} setCharDrawerPersonality={setCharDrawerPersonality}
+        charDrawerBackground={charDrawerBackground} setCharDrawerBackground={setCharDrawerBackground}
+        charDrawerTagline={charDrawerTagline} setCharDrawerTagline={setCharDrawerTagline}
+        charDrawerImageSeed={charDrawerImageSeed} setCharDrawerImageSeed={setCharDrawerImageSeed}
         savingChar={savingChar}
         saveCharChanges={saveCharChanges}
         onClose={() => setCharDrawerOpen(false)}
@@ -2737,6 +2765,13 @@ interface CharDrawerPanelProps {
   charDrawerTags: string; setCharDrawerTags: (v: string) => void;
   charDrawerVisibility: "private" | "public" | "premium"; setCharDrawerVisibility: (v: "private" | "public" | "premium") => void;
   charDrawerNsfw: boolean; setCharDrawerNsfw: (v: (prev: boolean) => boolean) => void;
+  charDrawerGenre: string; setCharDrawerGenre: (v: string) => void;
+  charDrawerSubGenres: string; setCharDrawerSubGenres: (v: string) => void;
+  charDrawerAge: string; setCharDrawerAge: (v: string) => void;
+  charDrawerPersonality: string; setCharDrawerPersonality: (v: string) => void;
+  charDrawerBackground: string; setCharDrawerBackground: (v: string) => void;
+  charDrawerTagline: string; setCharDrawerTagline: (v: string) => void;
+  charDrawerImageSeed: string; setCharDrawerImageSeed: (v: string) => void;
   savingChar: boolean;
   saveCharChanges: () => void;
   onClose: () => void;
@@ -2879,7 +2914,7 @@ function AvatarsSection({ characterId, token }: { characterId: string; token: st
   );
 }
 
-function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charDrawerBio, setCharDrawerBio, charDrawerGreeting, setCharDrawerGreeting, charDrawerAvatar, setCharDrawerAvatar, charDrawerPrompt, setCharDrawerPrompt, charDrawerTags, setCharDrawerTags, charDrawerVisibility, setCharDrawerVisibility, charDrawerNsfw, setCharDrawerNsfw, savingChar, saveCharChanges, onClose }: CharDrawerPanelProps) {
+function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charDrawerBio, setCharDrawerBio, charDrawerGreeting, setCharDrawerGreeting, charDrawerAvatar, setCharDrawerAvatar, charDrawerPrompt, setCharDrawerPrompt, charDrawerTags, setCharDrawerTags, charDrawerVisibility, setCharDrawerVisibility, charDrawerNsfw, setCharDrawerNsfw, charDrawerGenre, setCharDrawerGenre, charDrawerSubGenres, setCharDrawerSubGenres, charDrawerAge, setCharDrawerAge, charDrawerPersonality, setCharDrawerPersonality, charDrawerBackground, setCharDrawerBackground, charDrawerTagline, setCharDrawerTagline, charDrawerImageSeed, setCharDrawerImageSeed, savingChar, saveCharChanges, onClose }: CharDrawerPanelProps) {
   const token = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
   const [avatarGenerating, setAvatarGenerating] = useState(false);
   const generateAvatarUrl = async () => {
@@ -2903,7 +2938,7 @@ function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charD
         style={{ animation: "slideInRight 0.25s ease-out" }}>
         <div className="flex items-center gap-3 p-4 border-b border-border shrink-0">
           <div className="w-10 h-10 rounded-full overflow-hidden border border-border shrink-0">
-            <img src={charDrawerAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${charDrawerName}`}
+            <img src={(charDrawerAvatar ? (charDrawerAvatar.includes("pollinations") ? `/api/proxy-image?url=${encodeURIComponent(charDrawerAvatar)}` : charDrawerAvatar) : null) || `https://api.dicebear.com/7.x/bottts/svg?seed=${charDrawerName}`}
               alt={charDrawerName} className="w-full h-full object-cover" />
           </div>
           <div className="flex-1 min-w-0">
@@ -2932,6 +2967,47 @@ function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charD
               className="bg-card border-border h-10 text-sm" placeholder="Hey, I've been waiting for you..." />
           </div>
           <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Tagline</label>
+            <Input value={charDrawerTagline} onChange={e => setCharDrawerTagline(e.target.value)}
+              className="bg-card border-border h-10 text-sm" placeholder="Short catchy one-liner…" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Genre</label>
+              <select
+                value={charDrawerGenre}
+                onChange={e => setCharDrawerGenre(e.target.value)}
+                className="w-full h-10 rounded-md border border-border bg-card px-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+              >
+                {["Modern", "Fantasy", "Sci-Fi", "Historical", "Anime", "Cyberpunk", "Romance", "Horror", "Adventure", "Mystery", "Slice of Life"].map(g => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Age</label>
+              <Input value={charDrawerAge} onChange={e => setCharDrawerAge(e.target.value)}
+                className="bg-card border-border h-10 text-sm" placeholder="e.g. 22" type="number" min="18" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Sub-Genres (comma-separated)</label>
+            <Input value={charDrawerSubGenres} onChange={e => setCharDrawerSubGenres(e.target.value)}
+              className="bg-card border-border h-10 text-sm" placeholder="Tsundere, Kuudere, Hacker…" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Personality</label>
+            <textarea value={charDrawerPersonality} onChange={e => setCharDrawerPersonality(e.target.value)}
+              rows={3} placeholder="Sarcastic but caring, loves technology, protective of loved ones…"
+              className="w-full rounded-md border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-primary/60" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Background / Lore</label>
+            <textarea value={charDrawerBackground} onChange={e => setCharDrawerBackground(e.target.value)}
+              rows={3} placeholder="Grew up in the slums of Neo-Tokyo, trained as an elite hacker…"
+              className="w-full rounded-md border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-primary/60" />
+          </div>
+          <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">Avatar URL</label>
             <div className="flex gap-1.5">
               <Input value={charDrawerAvatar} onChange={e => setCharDrawerAvatar(e.target.value)}
@@ -2949,6 +3025,12 @@ function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charD
             <label className="text-xs font-semibold text-foreground">Tags (comma-separated)</label>
             <Input value={charDrawerTags} onChange={e => setCharDrawerTags(e.target.value)}
               className="bg-card border-border h-10 text-sm" placeholder="Hacker, Tsundere, Anime" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground">Image Seed</label>
+            <Input value={charDrawerImageSeed} onChange={e => setCharDrawerImageSeed(e.target.value)}
+              className="bg-card border-border h-10 text-sm" placeholder="Leave blank for random" type="number" />
+            <p className="text-[10px] text-muted-foreground">Controls the Pollinations image generation seed — same seed = consistent look.</p>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">System Prompt Override</label>
