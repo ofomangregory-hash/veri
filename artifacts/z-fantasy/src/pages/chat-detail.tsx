@@ -40,6 +40,7 @@ export function ChatDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  console.log('[QUERY KEY IN USE]', JSON.stringify(['chat', id]));
   const { data: conv, isLoading, refetch } = useGetConversation(id!, {
     query: {
       enabled: !!id,
@@ -90,10 +91,18 @@ export function ChatDetail() {
     },
     onSuccess: async () => {
       setUnlockTarget(null);
-      queryClient.removeQueries({ queryKey: ['chat', id] });
+      queryClient.removeQueries({
+        predicate: (query) => {
+          const key = JSON.stringify(query.queryKey);
+          return key.includes(id) || key.includes('conversation') || key.includes('chat');
+        }
+      });
       await refetch();
       setLastRefetch(Date.now());
-      console.log('[CACHE CLEARED] Fresh fetch after unlock');
+      console.log('[CACHE CLEARED] Wildcard removal for id:', id);
+      console.log('[POST REFETCH] messages with imageUrl:',
+        conv?.messages?.filter((m: any) => m.imageUrl).length
+      );
     },
     onError: (err: Error) => {
       setUnlockTarget(null);
@@ -118,10 +127,18 @@ export function ChatDetail() {
     setInput("");
     sendMsg.mutate({ characterId: id, data: { content: text } }, {
       onSuccess: async () => {
-        queryClient.removeQueries({ queryKey: ['chat', id] });
+        queryClient.removeQueries({
+          predicate: (query) => {
+            const key = JSON.stringify(query.queryKey);
+            return key.includes(id) || key.includes('conversation') || key.includes('chat');
+          }
+        });
         await refetch();
         setLastRefetch(Date.now());
-        console.log('[CACHE CLEARED] Fresh fetch after send');
+        console.log('[CACHE CLEARED] Wildcard removal for id:', id);
+        console.log('[POST REFETCH] messages with imageUrl:',
+          conv?.messages?.filter((m: any) => m.imageUrl).length
+        );
       },
       onError: () => toast({ title: "Failed to send", variant: "destructive" })
     });
