@@ -210,6 +210,7 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
       role: m.role,
       content: m.content,
       imageUrl: m.imageUrl ?? null,
+      isLocked: m.isLocked ?? false,
       timestamp: m.timestamp ?? null,
     })),
     character: serializeCharacter(character),
@@ -449,21 +450,24 @@ ABSOLUTE RULES:
   const assistantMsg: ChatMessage = {
     role: "assistant",
     content: aiText,
-    imageUrl: autoImageUrl,
+    imageUrl: autoImageUrl || null,
+    isLocked: autoIsLocked || false,
     timestamp,
-    ...(autoIsLocked ? { isLocked: true } : {}),
   };
+  console.log('[MESSAGE HISTORY PUSH]', JSON.stringify(assistantMsg));
   const newHistory: ChatMessage[] = [...messages, userMsg, assistantMsg];
 
   // Blurred image appended as a separate assistant entry (independent of AI reply)
   if (blurredImageUrl) {
-    newHistory.push({
+    const blurredMsg: ChatMessage = {
       role: "assistant",
       content: "",
       imageUrl: blurredImageUrl,
       isLocked: true,
       timestamp,
-    });
+    };
+    console.log('[MESSAGE HISTORY PUSH]', JSON.stringify(blurredMsg));
+    newHistory.push(blurredMsg);
   }
 
   const notifyDelayMs = await getNotifyDelayMs();
@@ -616,10 +620,11 @@ ABSOLUTE RULES:
     const selfieMsg: ChatMessage = {
       role: "assistant",
       content: selfieText,
-      imageUrl,
+      imageUrl: imageUrl || null,
       isLocked: false,
       timestamp: new Date().toISOString(),
     };
+    console.log('[MESSAGE HISTORY PUSH]', JSON.stringify(selfieMsg));
     await db.update(conversationsTable)
       .set({ messageHistory: [...messages, selfieMsg], updatedAt: new Date() })
       .where(eq(conversationsTable.conversationId, conv.conversationId));
