@@ -1,0 +1,87 @@
+In chat-detail.tsx only. Fix these 2 rendering issues. Do not touch any other files.
+1. Blurred image disappears after unlock instead of revealing
+After unlock the message's isLocked is set to false client-side but the image container disappears. The condition {msg.imageUrl && msg.isLocked && (...)} hides the element when isLocked becomes false, but nothing shows the image in its place.
+Fix — handle all three states explicitly:
+typescript{msg.imageUrl && (
+  <>
+    {msg.isLocked ? (
+      // Locked state — blurred with overlay
+      <div
+        style={{
+          width: '100%',
+          marginTop: '4px',
+          position: 'relative',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          minHeight: '250px',
+          cursor: 'pointer'
+        }}
+        onClick={() => handleUnlockTap(msg)}
+      >
+        <img
+          src={msg.imageUrl}
+          alt="Locked"
+          style={{
+            filter: 'blur(20px)',
+            transform: 'scale(1.1)',
+            width: '100%',
+            height: 'auto',
+            minHeight: '250px',
+            objectFit: 'cover',
+            display: 'block'
+          }}
+          className="select-none pointer-events-none brightness-50"
+          draggable={false}
+        />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30">
+          <div className="p-3 rounded-full bg-black/60 border border-primary/50">
+            <Lock size={22} className="text-primary" />
+          </div>
+          <p className="text-white text-xs font-bold drop-shadow-lg">
+            🔒 Unlock for {unlockCost} 💎
+          </p>
+        </div>
+      </div>
+    ) : (
+      // Unlocked state — show image clearly
+      <div style={{ width: '100%', marginTop: '4px' }}>
+        <img
+          src={msg.imageUrl}
+          alt="Character image"
+          style={{
+            width: '100%',
+            height: 'auto',
+            minHeight: '250px',
+            maxHeight: '400px',
+            borderRadius: '12px',
+            objectFit: 'cover',
+            display: 'block'
+          }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          onLoad={() => console.log('[CHAT] Image loaded OK')}
+        />
+      </div>
+    )}
+  </>
+)}
+This single block handles both locked and unlocked — the image never disappears, it just changes state.
+2. Auto loop image not rendering — find the filter
+The MESSAGE HISTORY PUSH log confirms imageUrl is set on every assistant message. The frontend is receiving it but not rendering it. There is a filter somewhere removing or skipping messages with imageUrl before they reach the render loop.
+Search the file for any of these patterns and log what they produce:
+typescriptconsole.log('[FILTER CHECK]', messages.length, displayMessages?.length);
+The most likely culprits — find and fix whichever applies:
+typescript// Pattern A — filtering out messages without text content
+.filter(m => m.content)  
+// Fix: .filter(m => m.content || m.imageUrl)
+
+// Pattern B — only rendering user messages and assistant messages separately
+// and the image block only exists in one path but not the other
+
+// Pattern C — the imageUrl block exists but is inside a ternary that
+// only runs for certain message types
+Add this log at the TOP of the render loop before any conditions:
+typescriptdisplayMessages?.forEach((m, i) => {
+  if (m.imageUrl) console.log(`[RENDER CHECK msg ${i}]`, { hasImage: true, isLocked: m.isLocked, content: m.content?.slice(0,20) });
+});
+Report what the log shows — if it logs the messages with images then the data is reaching render but the JSX is wrong. If it never logs, the filter is removing them before render.
+Do not touch any other files.

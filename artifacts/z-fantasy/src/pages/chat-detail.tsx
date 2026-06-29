@@ -193,6 +193,7 @@ export function ChatDetail() {
 
   const messages = (conv?.messages ?? []) as ChatMsg[];
   const displayMessages = messages.filter(m => m.content || m.imageUrl);
+  console.log('[FILTER CHECK]', messages.length, displayMessages?.length);
   const chatViewerImages = messages.filter(m => m.imageUrl);
 
   // Clamp viewer index when the image list changes — must be before any early return
@@ -235,9 +236,9 @@ export function ChatDetail() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
         {displayMessages.map((msg, i) => {
+          if (msg.imageUrl) console.log(`[RENDER CHECK msg ${i}]`, { hasImage: true, isLocked: msg.isLocked, content: msg.content?.slice(0, 20) });
           console.log(`[MSG ${i}]`, { role: msg.role, content: msg.content?.slice(0, 30), imageUrl: !!msg.imageUrl, isLocked: msg.isLocked });
           const isUser = msg.role === 'user';
-          const isLocked = msg.isLocked === true && !isUser;
           return (
             <div key={i} className="flex flex-col w-full">
               {/* Text bubble — constrained width */}
@@ -252,67 +253,68 @@ export function ChatDetail() {
                   </div>
                 </div>
               )}
-              {/* Unlocked image — full width, outside bubble */}
-              {msg.imageUrl && !isLocked && (
-                <div style={{ width: '100%', marginTop: msg.content ? '4px' : '0' }}>
-                  <img
-                    src={msg.imageUrl}
-                    alt="Character image"
-                    style={{
-                      width: '100%',
-                      height: 'auto',
-                      minHeight: '250px',
-                      maxHeight: '400px',
-                      borderRadius: '12px',
-                      objectFit: 'cover',
-                      display: 'block',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => { const idx = chatViewerImages.indexOf(msg); if (idx >= 0) setChatViewer({ idx }); }}
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    onLoad={() => console.log('[CHAT] Image loaded OK')}
-                  />
-                </div>
-              )}
-              {/* Locked blurred image — full width, outside narrow bubble */}
-              {isLocked && msg.imageUrl && (
-                <div
-                  style={{
-                    width: '100%',
-                    position: 'relative',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    minHeight: '250px',
-                    maxHeight: '400px',
-                    cursor: 'pointer',
-                    marginTop: msg.content ? '8px' : '0',
-                  }}
-                  onClick={() => handleUnlockTap(msg)}
-                >
-                  <img
-                    src={msg.imageUrl}
-                    alt="Locked"
-                    style={{
-                      filter: 'blur(20px)',
-                      transform: 'scale(1.1)',
-                      width: '100%',
-                      height: 'auto',
-                      minHeight: '250px',
-                      objectFit: 'cover',
-                      display: 'block',
-                    }}
-                    className="select-none pointer-events-none brightness-50"
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30">
-                    <div className="p-3 rounded-full bg-black/60 border border-primary/50 box-glow-pink">
-                      <Lock size={22} className="text-primary" />
+              {/* Image — single block handles locked and unlocked states */}
+              {msg.imageUrl && !isUser && (
+                <>
+                  {msg.isLocked ? (
+                    <div
+                      style={{
+                        width: '100%',
+                        marginTop: '4px',
+                        position: 'relative',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        minHeight: '250px',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => handleUnlockTap(msg)}
+                    >
+                      <img
+                        src={msg.imageUrl}
+                        alt="Locked"
+                        style={{
+                          filter: 'blur(20px)',
+                          transform: 'scale(1.1)',
+                          width: '100%',
+                          height: 'auto',
+                          minHeight: '250px',
+                          objectFit: 'cover',
+                          display: 'block',
+                        }}
+                        className="select-none pointer-events-none brightness-50"
+                        draggable={false}
+                      />
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30">
+                        <div className="p-3 rounded-full bg-black/60 border border-primary/50">
+                          <Lock size={22} className="text-primary" />
+                        </div>
+                        <p className="text-white text-xs font-bold drop-shadow-lg">
+                          🔒 Unlock for {unlockCost} 💎
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-white text-xs font-bold drop-shadow-lg">
-                      🔒 Unlock for {unlockCost} 💎
-                    </p>
-                  </div>
-                </div>
+                  ) : (
+                    <div style={{ width: '100%', marginTop: '4px' }}>
+                      <img
+                        src={msg.imageUrl}
+                        alt="Character image"
+                        style={{
+                          width: '100%',
+                          height: 'auto',
+                          minHeight: '250px',
+                          maxHeight: '400px',
+                          borderRadius: '12px',
+                          objectFit: 'cover',
+                          display: 'block',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => { const idx = chatViewerImages.indexOf(msg); if (idx >= 0) setChatViewer({ idx }); }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        onLoad={() => console.log('[CHAT] Image loaded OK')}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           );
