@@ -662,6 +662,57 @@ router.post("/admin/seed", authMiddleware, adminOnly, async (req, res): Promise<
   res.json({ seeded, skipped, total: defaultCharacters.length });
 });
 
+// ─── Supabase Backfill ────────────────────────────────────────────────────────
+
+router.post("/admin/backfill-supabase", adminOnly, async (req, res): Promise<void> => {
+  const allLocalChars = await db.select().from(charactersTable);
+  let inserted = 0;
+  let skipped = 0;
+  let failed = 0;
+  const errors: { characterId: string; name: string; reason: string }[] = [];
+
+  for (const char of allLocalChars) {
+    // Check if already in Supabase
+    const existing = await getSupabaseCharacterById(char.characterId);
+    if (existing) {
+      skipped++;
+      continue;
+    }
+
+    // Insert into Supabase
+    try {
+      const result = await createSupabaseCharacter({
+        characterId: char.characterId,
+        creatorId: char.creatorId ?? "0",
+        name: char.name,
+        visibility: (char.visibility as "public" | "private" | "premium") ?? "private",
+        systemPrompt: char.systemPrompt ?? "",
+        avatarUrl: char.avatarUrl ?? null,
+        teaserDescription: char.teaserDescription ?? null,
+        initialGreeting: char.initialGreeting ?? null,
+        tags: (char.tags as string[]) ?? [],
+        genre: char.genre ?? undefined,
+        imageSeed: char.imageSeed ?? null,
+      });
+      if (result) {
+        inserted++;
+        logger.info({ characterId: char.characterId, name: char.name }, "backfill-supabase: inserted");
+      } else {
+        failed++;
+        errors.push({ characterId: char.characterId, name: char.name, reason: "createSupabaseCharacter returned null" });
+      }
+    } catch (err: unknown) {
+      failed++;
+      const reason = err instanceof Error ? err.message : String(err);
+      errors.push({ characterId: char.characterId, name: char.name, reason });
+      logger.error({ err, characterId: char.characterId }, "backfill-supabase: insert failed");
+    }
+  }
+
+  logger.info({ inserted, skipped, failed, total: allLocalChars.length }, "backfill-supabase: complete");
+  res.json({ inserted, skipped, failed, total: allLocalChars.length, errors });
+});
+
 // ─── Earnings ─────────────────────────────────────────────────────────────────
 
 router.get("/admin/earnings", async (req, res): Promise<void> => {

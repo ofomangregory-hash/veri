@@ -140,6 +140,8 @@ export function Admin() {
   const [bannerPickerOpen, setBannerPickerOpen] = useState(false);
   const [expandedCharId, setExpandedCharId] = useState<string | null>(null);
   const [duplicatingChar, setDuplicatingChar] = useState<string | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ inserted: number; skipped: number; failed: number; total: number; errors: { characterId: string; name: string; reason: string }[] } | null>(null);
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
 
@@ -977,6 +979,28 @@ export function Admin() {
       {activeTab === "characters" && (
         <div className="space-y-6">
           <div className="flex items-center gap-2 justify-end flex-wrap">
+            {isGodMode && (
+              <button
+                onClick={async () => {
+                  setBackfilling(true);
+                  setBackfillResult(null);
+                  try {
+                    const res = await adminApi("POST", "/admin/backfill-supabase");
+                    setBackfillResult(res as typeof backfillResult);
+                    toast({ title: `✅ Backfill done — ${(res as { inserted: number }).inserted} inserted` });
+                  } catch (e) {
+                    toast({ title: "Backfill failed", description: String(e), variant: "destructive" });
+                  } finally {
+                    setBackfilling(false);
+                  }
+                }}
+                disabled={backfilling}
+                className="flex items-center gap-2 text-xs text-purple-400 border border-purple-500/50 px-3 py-1.5 rounded-lg hover:bg-purple-500/10 transition-colors disabled:opacity-50"
+              >
+                {backfilling ? <RefreshCw size={14} className="animate-spin" /> : <span>☁️</span>}
+                {backfilling ? "Backfilling…" : "Backfill Supabase"}
+              </button>
+            )}
             <button onClick={runSeed} disabled={seeding}
               className="flex items-center gap-2 text-xs text-yellow-400 border border-yellow-500/50 px-3 py-1.5 rounded-lg hover:bg-yellow-500/10 transition-colors disabled:opacity-50">
               {seeding ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
@@ -999,6 +1023,20 @@ export function Admin() {
           {seedResult && (
             <div className="text-xs text-center text-muted-foreground bg-card border border-border rounded-lg px-3 py-2">
               Last seed: <span className="text-green-400 font-bold">{seedResult.seeded} added</span> · <span className="text-muted-foreground">{seedResult.skipped} already existed</span> · {seedResult.total} total defaults
+            </div>
+          )}
+          {backfillResult && (
+            <div className="text-xs bg-card border border-purple-500/30 rounded-lg px-3 py-2 space-y-1">
+              <div className="text-center">
+                ☁️ Backfill: <span className="text-green-400 font-bold">{backfillResult.inserted} inserted</span> · <span className="text-muted-foreground">{backfillResult.skipped} already in Supabase</span> · <span className={backfillResult.failed > 0 ? "text-red-400 font-bold" : "text-muted-foreground"}>{backfillResult.failed} failed</span> · {backfillResult.total} total
+              </div>
+              {backfillResult.errors.length > 0 && (
+                <div className="text-red-400 font-mono text-[10px] space-y-0.5 mt-1">
+                  {backfillResult.errors.map(e => (
+                    <div key={e.characterId}>⚠ {e.name}: {e.reason}</div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
