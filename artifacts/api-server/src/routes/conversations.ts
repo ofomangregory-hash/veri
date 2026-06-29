@@ -380,7 +380,10 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
       autoIsLocked = forceBlurred;
       triggerFired = true;
       if (!forceBlurred) dailyCountIncrement++;
-      if (autoImageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, autoImageUrl, "trigger", forceBlurred);
+      if (autoImageUrl) {
+        console.log('[VAULT SAVE] URL:', autoImageUrl, 'type: trigger');
+        void addVaultItem(req.telegramUserId, params.data.characterId, character.name, autoImageUrl, "trigger", forceBlurred);
+      }
       console.log('Trigger image fired:', triggeredWord, params.data.characterId);
       if (forceBlurred) console.log('Daily limit hit — sending blurred instead');
     } catch (err) {
@@ -414,7 +417,10 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
       });
       autoIsLocked = forceBlurred;
       if (!forceBlurred) dailyCountIncrement++;
-      if (autoImageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, autoImageUrl, "auto", forceBlurred);
+      if (autoImageUrl) {
+        console.log('[VAULT SAVE] URL:', autoImageUrl, 'type: auto');
+        void addVaultItem(req.telegramUserId, params.data.characterId, character.name, autoImageUrl, "auto", forceBlurred);
+      }
       console.log('Auto image fired for:', req.telegramUserId, params.data.characterId);
       if (forceBlurred) console.log('Daily limit hit — sending blurred instead');
     } catch (err) {
@@ -442,7 +448,10 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
         nsfwEnabled: false,
         contentLevelWords: contentWords,
       });
-      if (blurredImageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, blurredImageUrl, "blurred", true);
+      if (blurredImageUrl) {
+        console.log('[VAULT SAVE] URL:', blurredImageUrl, 'type: blurred');
+        void addVaultItem(req.telegramUserId, params.data.characterId, character.name, blurredImageUrl, "blurred", true);
+      }
       console.log('Blurred image fired for:', req.telegramUserId, params.data.characterId);
     } catch (err) {
       logger.warn({ err }, "Blurred image loop failed");
@@ -634,7 +643,10 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
     await db.update(conversationsTable)
       .set({ messageHistory: cleanSelfieHistory, updatedAt: new Date() })
       .where(eq(conversationsTable.conversationId, conv.conversationId));
-    if (imageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, imageUrl, "selfie", false);
+    if (imageUrl) {
+      console.log('[VAULT SAVE] URL:', imageUrl, 'type: selfie');
+      void addVaultItem(req.telegramUserId, params.data.characterId, character.name, imageUrl, "selfie", false);
+    }
   }
 
   await db.update(usersTable).set({
