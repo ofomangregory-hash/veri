@@ -78,6 +78,11 @@ async function ensureDevUser(): Promise<void> {
 }
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // Skip auth for image proxy — called by <img> tags which cannot send auth headers
+  if (req.path.includes('/proxy-image') || req.originalUrl.includes('/proxy-image')) {
+    return next();
+  }
+
   try {
     // ── DEV / PREVIEW BYPASS ──────────────────────────────────────────────────
     if (isDevPreviewRequest(req)) {
