@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, Link } from "wouter";
-import { useGetConversation, useSendMessage, useSendGift, useRequestSelfie, useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSendMessage, useSendGift, useRequestSelfie, useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Send, Gift, Camera, ChevronLeft, ChevronRight, Heart, X, Lock, Unlock, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -33,23 +33,44 @@ export function ChatDetail() {
   const [unlockTarget, setUnlockTarget] = useState<ChatMsg | null>(null);
   // Chat image fullscreen viewer
   const [chatViewer, setChatViewer] = useState<{ idx: number } | null>(null);
-  // Force re-render after refetch
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [convMeta, setConvMeta] = useState<{ character?: any; affectionPoints?: number } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [lastRefetch, setLastRefetch] = useState(0);
   const chatViewerTouchX = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  console.log('[QUERY KEY IN USE]', JSON.stringify(['chat', id]));
-  const { data: conv, isLoading, refetch } = useGetConversation(id!, {
-    query: {
-      enabled: !!id,
-      queryKey: ['chat', id],
-      staleTime: 0,
-      gcTime: 0,
-      refetchOnWindowFocus: false,
+  const fetchMessages = async () => {
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/conversations/${id}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      const mapped = (data.messages ?? []).map((m: any) => ({
+        role: m.role,
+        content: m.content ?? '',
+        imageUrl: m.imageUrl ?? null,
+        isLocked: m.isLocked ?? false,
+        mediaType: m.mediaType ?? m.media_type ?? null,
+        timestamp: m.timestamp ?? null,
+      }));
+      setMessages(mapped);
+      setConvMeta({ character: data.character, affectionPoints: data.affectionPoints });
+      console.log('[FETCH COMPLETE] messages:', mapped.length,
+        'with images:', mapped.filter((m: any) => m.imageUrl).length);
+    } catch (err) {
+      console.error('[FETCH ERROR]', err);
+    } finally {
+      setIsLoading(false);
     }
-  });
+  };
+
+  useEffect(() => {
+    fetchMessages();
+  }, [id, lastRefetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { data: me } = useGetMe();
 
   const sendMsg = useSendMessage();
@@ -89,20 +110,13 @@ export function ChatDetail() {
       }
       return res.json() as Promise<{ ok: boolean; imageUrl: string | null; neonCardBalance: number }>;
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, messageTimestamp) => {
       setUnlockTarget(null);
-      queryClient.removeQueries({
-        predicate: (query) => {
-          const key = JSON.stringify(query.queryKey);
-          return key.includes(id) || key.includes('conversation') || key.includes('chat');
-        }
-      });
-      await refetch();
+      setMessages(prev => prev.map(m =>
+        m.timestamp === messageTimestamp ? { ...m, isLocked: false } : m
+      ));
       setLastRefetch(Date.now());
-      console.log('[CACHE CLEARED] Wildcard removal for id:', id);
-      console.log('[POST REFETCH] messages with imageUrl:',
-        conv?.messages?.filter((m: any) => m.imageUrl).length
-      );
+      console.log('[UNLOCK] Local update + refetch triggered');
     },
     onError: (err: Error) => {
       setUnlockTarget(null);
@@ -119,26 +133,16 @@ export function ChatDetail() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [conv?.messages]);
+  }, [messages]);
 
   const handleSend = () => {
     if (!input.trim() || !id) return;
     const text = input;
     setInput("");
     sendMsg.mutate({ characterId: id, data: { content: text } }, {
-      onSuccess: async () => {
-        queryClient.removeQueries({
-          predicate: (query) => {
-            const key = JSON.stringify(query.queryKey);
-            return key.includes(id) || key.includes('conversation') || key.includes('chat');
-          }
-        });
-        await refetch();
+      onSuccess: () => {
         setLastRefetch(Date.now());
-        console.log('[CACHE CLEARED] Wildcard removal for id:', id);
-        console.log('[POST REFETCH] messages with imageUrl:',
-          conv?.messages?.filter((m: any) => m.imageUrl).length
-        );
+        console.log('[SEND] Triggering refetch');
       },
       onError: () => toast({ title: "Failed to send", variant: "destructive" })
     });
@@ -150,7 +154,7 @@ export function ChatDetail() {
     sendGift.mutate({ characterId: id, data: { giftType } }, {
       onSuccess: (res) => {
         toast({ title: "Gift Sent!", description: `+${res.affectionPoints} AP. ${res.aiReaction}` });
-        refetch();
+        setLastRefetch(Date.now());
       },
       onError: (err: unknown) => {
         const msg = (err as { message?: string })?.message ?? "";
@@ -172,7 +176,7 @@ export function ChatDetail() {
     reqSelfie.mutate({ characterId: id, data: { description } }, {
       onSuccess: () => {
         toast({ title: "Selfie Requested!", description: "Generating your image…" });
-        refetch();
+        setLastRefetch(Date.now());
       },
       onError: (err: unknown) => {
         const msg = (err as { message?: string })?.message ?? "";
@@ -199,8 +203,7 @@ export function ChatDetail() {
         const err = await res.json().catch(() => ({ error: "Failed" }));
         throw new Error(err.error ?? "Failed");
       }
-      await queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-      refetch();
+      setLastRefetch(Date.now());
       setShowNewChatModal(false);
       toast({ title: "🔄 Fresh start!", description: "New conversation started." });
     } catch (e) {
@@ -224,20 +227,6 @@ export function ChatDetail() {
   const tier = me?.subscriptionTier ?? "Free";
   const isGold = tier === "Gold";
 
-  const messages = (conv?.messages ?? []).map((m: any) => ({
-    role: m.role,
-    content: m.content,
-    imageUrl: m.imageUrl ?? null,
-    isLocked: m.isLocked ?? false,
-    timestamp: m.timestamp ?? null,
-    mediaType: m.mediaType ?? m.media_type ?? null,
-  })) as ChatMsg[];
-  console.log('[FRONTEND RECEIVED] messages with imageUrl:', 
-    messages.filter(m => m.imageUrl).length
-  );
-  console.log('[FETCH] Messages loaded:', messages.length,
-    'with images:', messages.filter(m => m.imageUrl).length
-  );
   const displayMessages = messages.filter(m => m.content || m.imageUrl);
   console.log('[FILTER CHECK]', messages.length, displayMessages?.length, 'lastRefetch:', lastRefetch);
   const chatViewerImages = displayMessages
@@ -266,16 +255,16 @@ export function ChatDetail() {
         <Link href="/chat" className="p-2 -ml-2 text-muted-foreground hover:text-white">
           <ChevronLeft size={24} />
         </Link>
-        <Link href={conv?.character?.characterId ? `/character/${conv.character.characterId}?from=chat&conversationId=${id}` : "#"}
+        <Link href={convMeta?.character?.characterId ? `/character/${convMeta.character.characterId}?from=chat&conversationId=${id}` : "#"}
           className="w-10 h-10 rounded-full overflow-hidden border border-secondary box-glow-purple shrink-0 cursor-pointer hover:opacity-80 transition-opacity">
-          <img src={conv?.character?.avatarUrl || ""} alt="Avatar" className="w-full h-full object-cover" />
+          <img src={convMeta?.character?.avatarUrl || ""} alt="Avatar" className="w-full h-full object-cover" />
         </Link>
         <div className="flex-1 min-w-0">
-          <h2 className="font-bold text-white truncate">{conv?.character?.name}</h2>
+          <h2 className="font-bold text-white truncate">{convMeta?.character?.name}</h2>
           <div className="text-xs text-primary flex items-center gap-1.5 font-medium">
-            <Heart size={10} className="fill-primary" /> {conv?.affectionPoints || 0} AP
+            <Heart size={10} className="fill-primary" /> {convMeta?.affectionPoints || 0} AP
             <span className="text-muted-foreground">·</span>
-            <span className="text-purple-400">{Math.min(100, Math.floor((conv?.affectionPoints || 0) / 500 * 100))}% 💜</span>
+            <span className="text-purple-400">{Math.min(100, Math.floor((convMeta?.affectionPoints || 0) / 500 * 100))}% 💜</span>
           </div>
         </div>
         <button onClick={() => setShowNewChatModal(true)}
