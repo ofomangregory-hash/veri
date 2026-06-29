@@ -377,9 +377,10 @@ ABSOLUTE RULES:
   }
 
   // 2. Auto-image loop (only if no trigger fired this cycle)
+  const isSupremeAdmin = tier === 'supreme_admin';
   const isFree = !tier || tier === 'Free';
   const imageChance = isFree ? 2 / 5 : 4 / 6;
-  const shouldFireAutoImage = Math.random() < imageChance;
+  const shouldFireAutoImage = isSupremeAdmin ? true : Math.random() < imageChance;
   console.log('[AUTO IMAGE] messageCount:', conv.messageCount, 'tier:', tier, 'chance:', imageChance, 'shouldFire:', shouldFireAutoImage);
   const shouldAutoLoop = !triggerFired && shouldFireAutoImage;
 
@@ -445,30 +446,18 @@ ABSOLUTE RULES:
   }
 
   // ── Build message history ─────────────────────────────────────────────────
+  // Single assistant message per user turn — blurredImageUrl takes priority
   const timestamp = new Date().toISOString();
   const userMsg: ChatMessage = { role: "user", content: parsed.data.content, imageUrl: null, timestamp };
   const assistantMsg: ChatMessage = {
     role: "assistant",
     content: aiText,
-    imageUrl: autoImageUrl || null,
-    isLocked: autoIsLocked || false,
+    imageUrl: blurredImageUrl || autoImageUrl || null,
+    isLocked: blurredImageUrl ? true : (autoIsLocked || false),
     timestamp,
   };
   console.log('[MESSAGE HISTORY PUSH]', JSON.stringify(assistantMsg));
   const newHistory: ChatMessage[] = [...messages, userMsg, assistantMsg];
-
-  // Blurred image appended as a separate assistant entry (independent of AI reply)
-  if (blurredImageUrl) {
-    const blurredMsg: ChatMessage = {
-      role: "assistant",
-      content: "",
-      imageUrl: blurredImageUrl,
-      isLocked: true,
-      timestamp,
-    };
-    console.log('[MESSAGE HISTORY PUSH]', JSON.stringify(blurredMsg));
-    newHistory.push(blurredMsg);
-  }
 
   const notifyDelayMs = await getNotifyDelayMs();
 

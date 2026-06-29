@@ -240,38 +240,38 @@ export function ChatDetail() {
           const isLocked = msg.isLocked === true && !isUser;
           return (
             <div key={i} className="flex flex-col w-full">
-              {/* Text bubble + unlocked image — constrained to 85% width */}
-              {(msg.content || (msg.imageUrl && !isLocked)) && (
+              {/* Text bubble — constrained width */}
+              {msg.content && (
                 <div className={`flex flex-col max-w-[85%] ${isUser ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-                  {msg.content && (
-                    <div className={`p-3 rounded-2xl ${
-                      isUser
-                        ? 'bg-primary text-primary-foreground rounded-tr-sm box-glow-pink'
-                        : 'bg-card text-card-foreground border border-border rounded-tl-sm'
-                    }`}>
-                      {msg.content}
-                    </div>
-                  )}
-                  {msg.imageUrl && !isLocked && (
-                    <img
-                      src={msg.imageUrl}
-                      alt="Character image"
-                      style={{
-                        width: '100%',
-                        height: 'auto',
-                        minHeight: '250px',
-                        maxHeight: '400px',
-                        borderRadius: '12px',
-                        objectFit: 'cover',
-                        display: 'block',
-                        marginTop: msg.content ? '8px' : '0',
-                        cursor: 'pointer',
-                      }}
-                      onClick={() => { const idx = chatViewerImages.indexOf(msg); if (idx >= 0) setChatViewer({ idx }); }}
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      onLoad={() => console.log('[CHAT] Auto image loaded:', msg.imageUrl)}
-                    />
-                  )}
+                  <div className={`p-3 rounded-2xl ${
+                    isUser
+                      ? 'bg-primary text-primary-foreground rounded-tr-sm box-glow-pink'
+                      : 'bg-card text-card-foreground border border-border rounded-tl-sm'
+                  }`}>
+                    {msg.content}
+                  </div>
+                </div>
+              )}
+              {/* Unlocked image — full width, outside bubble */}
+              {msg.imageUrl && !isLocked && (
+                <div style={{ width: '100%', marginTop: msg.content ? '4px' : '0' }}>
+                  <img
+                    src={msg.imageUrl}
+                    alt="Character image"
+                    style={{
+                      width: '100%',
+                      height: 'auto',
+                      minHeight: '250px',
+                      maxHeight: '400px',
+                      borderRadius: '12px',
+                      objectFit: 'cover',
+                      display: 'block',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => { const idx = chatViewerImages.indexOf(msg); if (idx >= 0) setChatViewer({ idx }); }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    onLoad={() => console.log('[CHAT] Image loaded OK')}
+                  />
                 </div>
               )}
               {/* Locked blurred image — full width, outside narrow bubble */}
@@ -413,9 +413,10 @@ export function ChatDetail() {
                     height: '100%',
                     objectFit: 'contain',
                     display: 'block',
+                    maxHeight: '80vh',
                   }}
                   onError={(e) => {
-                    console.log('[VIEWER] Image failed to load:', currentMsg?.imageUrl);
+                    console.log('[VIEWER] Image failed:', currentMsg?.imageUrl);
                     (e.target as HTMLImageElement).alt = 'Image unavailable';
                   }}
                   onLoad={() => console.log('[VIEWER] Image loaded OK')}
@@ -471,8 +472,7 @@ export function ChatDetail() {
                 right: 0,
                 padding: '20px 20px 80px 20px',
                 zIndex: 9999,
-                backgroundColor: 'var(--card)',
-                borderTop: '1px solid rgba(var(--primary-rgb, 255,0,127),0.4)',
+                backgroundColor: 'var(--background)',
                 borderTopLeftRadius: '16px',
                 borderTopRightRadius: '16px',
               }}

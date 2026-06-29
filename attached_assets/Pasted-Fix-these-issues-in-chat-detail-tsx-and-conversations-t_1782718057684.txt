@@ -1,0 +1,126 @@
+Fix these issues in chat-detail.tsx and conversations.ts only. Do not touch any other files.
+1. Fix corrupted message history — consecutive assistant messages (conversations.ts)
+The blurred image is being pushed as a separate assistant message creating assistant, assistant sequences which corrupt AI context. Embed imageUrl directly into the existing assistant message:
+typescript// Single message with both text and image — never two consecutive assistant messages
+messageHistory.push({ 
+  role: 'assistant', 
+  content: replyText, 
+  imageUrl: blurredImageUrl || autoImageUrl || null,
+  isLocked: isBlurred || false,
+  timestamp: new Date().toISOString()
+});
+Only ONE assistant message per user turn. Never push two consecutive assistant messages.
+2. Fix auto image not firing for supreme_admin (conversations.ts)
+typescriptconst isSupremeAdmin = user?.subscription_tier === 'supreme_admin';
+const isFree = !user?.subscription_tier || user.subscription_tier === 'free';
+const imageChance = isFree ? 2/5 : 4/6;
+const shouldFireAutoImage = isSupremeAdmin ? true : Math.random() < imageChance;
+3. Fix auto loop image showing as tiny bubble instead of full width image (chat-detail.tsx)
+The image is rendering inside the narrow message bubble. Read the exact render structure carefully. The outer assistant message wrapper has a constrained width class like max-w-[85%] or max-w-xs.
+For any message with msg.imageUrl:
+
+Render the text content inside the normal bubble as usual
+Render the image BELOW the bubble at full width — completely OUTSIDE the bubble wrapper div
+The image must not be a child of any div with max-width constraints
+
+Structure must be:
+typescript{/* Text bubble — normal width */}
+{msg.content && (
+  <div className="bubble max-w-[85%] ...">
+    <p>{msg.content}</p>
+  </div>
+)}
+
+{/* Image — full width, OUTSIDE bubble */}
+{msg.imageUrl && !msg.isLocked && (
+  <div style={{ width: '100%', marginTop: '4px' }}>
+    <img
+      src={msg.imageUrl}
+      alt="Character image"
+      style={{
+        width: '100%',
+        height: 'auto',
+        minHeight: '250px',
+        maxHeight: '400px',
+        borderRadius: '12px',
+        objectFit: 'cover',
+        display: 'block'
+      }}
+      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+      onLoad={() => console.log('[CHAT] Image loaded OK')}
+    />
+  </div>
+)}
+
+{/* Blurred image — full width, OUTSIDE bubble */}
+{msg.imageUrl && msg.isLocked && (
+  <div 
+    style={{ 
+      width: '100%', 
+      marginTop: '4px',
+      position: 'relative',
+      borderRadius: '12px',
+      overflow: 'hidden',
+      minHeight: '250px',
+      cursor: 'pointer'
+    }}
+    onClick={() => handleUnlockTap(msg)}
+  >
+    <img
+      src={msg.imageUrl}
+      alt="Locked"
+      style={{ 
+        filter: 'blur(20px)', 
+        transform: 'scale(1.1)',
+        width: '100%',
+        height: 'auto',
+        minHeight: '250px',
+        objectFit: 'cover',
+        display: 'block'
+      }}
+      className="select-none pointer-events-none brightness-50"
+      draggable={false}
+    />
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30">
+      <div className="p-3 rounded-full bg-black/60 border border-primary/50 box-glow-pink">
+        <Lock size={22} className="text-primary" />
+      </div>
+      <p className="text-white text-xs font-bold drop-shadow-lg">
+        🔒 Unlock for {unlockCost} 💎
+      </p>
+    </div>
+  </div>
+)}
+4. Fix fullscreen image viewer — showing "Chat image" alt text instead of actual image (chat-detail.tsx)
+The fullscreen viewer <img> is failing to load. Fix:
+typescript<img
+  src={chatViewerImages[chatViewerIndex]?.imageUrl}
+  alt="Character image"
+  style={{
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    display: 'block',
+    maxHeight: '80vh'
+  }}
+  onError={(e) => {
+    console.log('[VIEWER] Image failed:', chatViewerImages[chatViewerIndex]?.imageUrl);
+  }}
+  onLoad={() => console.log('[VIEWER] Image loaded OK')}
+/>
+Add log when viewer opens:
+typescriptconsole.log('[VIEWER OPEN] url:', chatViewerImages[chatViewerIndex]?.imageUrl);
+5. Fix unlock modal position (chat-detail.tsx)
+Modal must sit above nav bar:
+typescriptstyle={{ 
+  position: 'fixed',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  padding: '20px 20px 80px 20px',
+  zIndex: 9999,
+  backgroundColor: 'var(--background)',
+  borderTopLeftRadius: '16px',
+  borderTopRightRadius: '16px'
+}}
+Do not touch any other files.
