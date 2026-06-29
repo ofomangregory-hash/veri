@@ -359,6 +359,7 @@ export function ChatDetail() {
       {chatViewer !== null && chatViewerImages.length > 0 && (() => {
         const currentMsg = chatViewerImages[chatViewer.idx];
         const isViewerLocked = currentMsg.isLocked === true;
+        console.log('[VIEWER OPEN] imageUrl:', currentMsg?.imageUrl);
         return (
           <div
             className="fixed inset-0 z-[60] bg-black/95 flex flex-col"
@@ -406,8 +407,18 @@ export function ChatDetail() {
               ) : (
                 <img
                   src={currentMsg.imageUrl!}
-                  alt="Chat image"
-                  className="max-w-full max-h-full object-contain rounded-xl"
+                  alt="Character image"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    display: 'block',
+                  }}
+                  onError={(e) => {
+                    console.log('[VIEWER] Image failed to load:', currentMsg?.imageUrl);
+                    (e.target as HTMLImageElement).alt = 'Image unavailable';
+                  }}
+                  onLoad={() => console.log('[VIEWER] Image loaded OK')}
                 />
               )}
               {chatViewerImages.length > 1 && (
