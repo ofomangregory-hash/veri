@@ -55,56 +55,74 @@ function sanitizePrompt(raw: string): string {
     .trim();
 }
 
+// Module-level throttle — enforce 1s minimum gap between all image requests
+let lastImageRequestTime = 0;
+
 async function tryPollinations(
   characterName: string,
   stylePrefix: string,
   subGenres: string[],
   imageSeed: number,
 ): Promise<string | null> {
-  try {
-    const parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
-    const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
-    const encodedPrompt = encodeURIComponent(cleanPrompt);
-    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=512&height=512&nologo=true&seed=${imageSeed}`;
+  const parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
+  const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
+  const encodedPrompt = encodeURIComponent(cleanPrompt);
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=512&height=512&nologo=true&seed=${imageSeed}`;
 
-    console.log("Image prompt:", cleanPrompt);
-    console.log("Pollinations URL:", url);
+  console.log("Image prompt:", cleanPrompt);
+  console.log("Pollinations URL:", url);
 
-    // Small pre-delay to avoid burst rate-limiting across concurrent requests
-    await new Promise(resolve => setTimeout(resolve, 500));
+  // Enforce 1s minimum gap between all Pollinations requests
+  const now = Date.now();
+  const timeSinceLast = now - lastImageRequestTime;
+  if (timeSinceLast < 1000) {
+    await new Promise(resolve => setTimeout(resolve, 1000 - timeSinceLast));
+  }
+  lastImageRequestTime = Date.now();
 
-    let check = await fetch(url, {
-      method: "HEAD",
-      headers: { "Referer": "https://pollinations.ai" },
-      signal: AbortSignal.timeout(65000),
-    });
+  // Exponential back-off: attempt 0 = immediate, attempt 1 = +2s, attempt 2 = +4s
+  const delays = [0, 2000, 4000];
 
-    console.log("Pollinations status:", check.status);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (delays[attempt] > 0) {
+      console.log(`Pollinations retry attempt ${attempt + 1}, waiting ${delays[attempt]}ms`);
+      await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+    }
 
-    // Retry once on 429 after 2s back-off
-    if (check.status === 429) {
-      console.log("Pollinations 429 — waiting 2s and retrying...");
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      check = await fetch(url, {
+    try {
+      const check = await fetch(url, {
         method: "HEAD",
         headers: { "Referer": "https://pollinations.ai" },
-        signal: AbortSignal.timeout(65000),
+        signal: AbortSignal.timeout(30000),
       });
-      console.log("Pollinations retry status:", check.status);
-    }
 
-    if (check.ok) {
-      console.log("Pollinations success — returning URL directly");
-      console.log("Image URL returned:", url);
-      return url;
-    }
+      console.log(`Pollinations status (attempt ${attempt + 1}):`, check.status);
 
-    console.log("Pollinations check failed:", check.status);
-    return null;
-  } catch (err: any) {
-    console.log("Pollinations error:", err?.message);
-    return null;
+      if (check.ok) {
+        console.log("Pollinations success — returning URL directly");
+        return url;
+      }
+
+      if (check.status === 429) {
+        console.log("Pollinations 429 rate limit — will retry");
+        continue;
+      }
+
+      if (check.status === 500 || check.status === 503) {
+        console.log("Pollinations server error — trying fallback prompt");
+        break;
+      }
+
+      console.log("Pollinations check failed:", check.status);
+      break;
+
+    } catch (err: any) {
+      console.log(`Pollinations error (attempt ${attempt + 1}):`, err?.message);
+      if (attempt < 2) continue;
+    }
   }
+
+  return null;
 }
 
 export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Promise<string> {

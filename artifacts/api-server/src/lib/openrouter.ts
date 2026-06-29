@@ -4,10 +4,7 @@ import { logger } from "./logger";
 console.log('OPENROUTER_API_KEY:', process.env.OPENROUTER_API_KEY ? 'present' : 'missing');
 console.log('GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'present' : 'missing');
 
-const OPENROUTER_MODELS = [
-  'deepseek/deepseek-v4-flash',
-  'nousresearch/hermes-3-llama-3.1-8b:free',
-  'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+const OPENROUTER_MODELS_SLOW = [
   'openrouter/free',
 ];
 
@@ -53,8 +50,68 @@ Keep replies short (1-3 sentences), casual, intimate texting style.`;
     { role: "user", content: userMessage },
   ];
 
-  // ── Provider 1: OpenRouter (primary, paid uncensored models) ──────────────
-  for (const model of OPENROUTER_MODELS) {
+  // ── Step 1: DeepSeek (10s timeout) ───────────────────────────────────────
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://z-fantasy.app',
+        'X-Title': 'Z-Fantasy',
+      },
+      body: JSON.stringify({
+        model: 'deepseek/deepseek-v4-flash',
+        messages,
+        max_tokens: 1000,
+        temperature: 0.9,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) {
+      const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const text = data.choices?.[0]?.message?.content;
+      if (text) {
+        console.log('Model succeeded: deepseek/deepseek-v4-flash');
+        return text;
+      }
+    }
+    console.log('DeepSeek failed:', res.status);
+  } catch (err: unknown) {
+    console.log('DeepSeek error:', (err as Error)?.message);
+  }
+
+  // ── Step 2: Groq llama3-70b (10s timeout) — immediately after DeepSeek ───
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'llama3-70b-8192',
+        messages,
+        max_tokens: 1000,
+        temperature: 0.9,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) {
+      const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const text = data.choices?.[0]?.message?.content;
+      if (text) {
+        console.log('Groq succeeded as fallback');
+        return text;
+      }
+    }
+    console.log('Groq failed:', res.status);
+  } catch (err: unknown) {
+    console.log('Groq error:', (err as Error)?.message);
+  }
+
+  // ── Step 3: OpenRouter free models (15s timeout) ──────────────────────────
+  for (const model of OPENROUTER_MODELS_SLOW) {
     try {
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -86,36 +143,7 @@ Keep replies short (1-3 sentences), casual, intimate texting style.`;
     }
   }
 
-  // ── Provider 2: Groq (fallback) ───────────────────────────────────────────
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'llama3-70b-8192',
-        messages,
-        max_tokens: 1000,
-        temperature: 0.9,
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (res.ok) {
-      const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-      const text = data.choices?.[0]?.message?.content;
-      if (text) {
-        console.log('Groq succeeded');
-        return text;
-      }
-    }
-    console.log('Groq failed:', res.status, '— soft fallback');
-  } catch (err: unknown) {
-    console.log('Groq error:', (err as Error)?.message, '— soft fallback');
-  }
-
-  // ── Final fallback — never break chat flow ───────────────────────────────
+  // ── Final fallback — never break chat flow ────────────────────────────────
   console.log('All providers failed — returning soft fallback');
   logger.error('All providers failed — returning soft fallback');
   return `*${characterName} smiles softly* I'm feeling a little quiet right now... but I'm here with you 💭`;
