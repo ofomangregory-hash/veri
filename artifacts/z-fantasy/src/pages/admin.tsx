@@ -88,6 +88,26 @@ export function Admin() {
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
   const [csUnreadCount, setCsUnreadCount] = useState(0);
+  const [debugData, setDebugData] = useState<any>(null);
+
+  const runDebug = async () => {
+    try {
+      const res = await fetch('/api/conversations/551904bb-ecf1-480b-9312-1773a152dbe1', {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      setDebugData({
+        status: res.status,
+        messageCount: data.messages?.length,
+        withImageUrl: data.messages?.filter((m: any) => m.imageUrl).length,
+        firstWithImage: data.messages?.find((m: any) => m.imageUrl),
+        lastMessage: data.messages?.[data.messages.length - 1],
+        rawFirst3: data.messages?.slice(0, 3),
+      });
+    } catch (err: any) {
+      setDebugData({ error: err.message });
+    }
+  };
 
   const [configs, setConfigs] = useState<SysConfig[]>([]);
   const [configsLoading, setConfigsLoading] = useState(false);
@@ -795,6 +815,16 @@ export function Admin() {
           </div>
         )}
       </div>
+
+      {/* Debug Panel — god-mode only */}
+      {isGodMode && (
+        <div style={{ background: '#111', color: '#0f0', padding: '12px', fontFamily: 'monospace', fontSize: '11px', borderRadius: '8px', margin: '0 0 16px 0', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+          <button onClick={runDebug} style={{ marginBottom: '8px', padding: '4px 12px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px' }}>
+            Run Debug Fetch
+          </button>
+          {debugData && JSON.stringify(debugData, null, 2)}
+        </div>
+      )}
 
       {/* Tab Bar */}
       <div className="flex overflow-x-auto gap-1 p-1 bg-card rounded-xl border border-border mb-6 no-scrollbar">
