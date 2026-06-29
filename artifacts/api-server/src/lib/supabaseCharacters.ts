@@ -334,8 +334,55 @@ export async function updateSupabaseCharacter(
     if (!error && data) {
       return serializeSupabaseCharacter(data as SupabaseCharacterRow);
     }
-    console.error('updateSupabaseCharacter error:', error.message, error.code, error.details, error.hint);
-    logger.error({ error, characterId }, "updateSupabaseCharacter: Supabase update failed — falling back to local DB");
+    console.error('updateSupabaseCharacter error:', error?.message, error?.code, error?.details, error?.hint);
+    logger.error({ error, characterId }, "updateSupabaseCharacter: Supabase update failed — trying upsert");
+
+    // ── Upsert fallback: row may not exist in Supabase yet ────────────────────
+    try {
+      const [localRow] = await db
+        .select()
+        .from(charactersTable)
+        .where(eq(charactersTable.characterId, characterId));
+
+      if (localRow) {
+        const upsertPayload: Record<string, unknown> = {
+          character_id: characterId,
+          creator_id: localRow.creatorId ?? "0",
+          name: values.name ?? localRow.name,
+          visibility: values.visibility ?? localRow.visibility,
+          system_prompt: values.systemPrompt ?? localRow.systemPrompt ?? "",
+          avatar_url: values.avatarUrl !== undefined ? values.avatarUrl : (localRow.avatarUrl ?? null),
+          teaser_description: values.teaserDescription !== undefined ? values.teaserDescription : (localRow.teaserDescription ?? null),
+          initial_greeting: values.initialGreeting !== undefined ? values.initialGreeting : (localRow.initialGreeting ?? null),
+          tags: payload.tags !== undefined ? payload.tags : (localRow.tags ?? []),
+          sub_genres: values.subGenres !== undefined ? values.subGenres : [],
+          genre: values.genre ?? localRow.genre ?? null,
+          tagline: values.tagline !== undefined ? values.tagline : null,
+          image_seed: values.imageSeed !== undefined ? (values.imageSeed ? parseInt(values.imageSeed, 10) : null) : null,
+          background: values.background !== undefined ? values.background : null,
+          personality: values.personality !== undefined ? values.personality : null,
+          age: typeof values.age === "number" ? values.age : null,
+          trigger_metadata_array: [],
+        };
+
+        const { data: upsertData, error: upsertError } = await supabase
+          .from("characters")
+          .upsert(upsertPayload, { onConflict: "character_id" })
+          .select("*")
+          .single();
+
+        if (!upsertError && upsertData) {
+          logger.info({ characterId }, "updateSupabaseCharacter: upsert succeeded");
+          return serializeSupabaseCharacter(upsertData as SupabaseCharacterRow);
+        }
+        console.error('updateSupabaseCharacter upsert error:', upsertError?.message, upsertError?.code, upsertError?.details, upsertError?.hint);
+        logger.error({ error: upsertError, characterId }, "updateSupabaseCharacter: upsert also failed — falling back to local DB");
+      } else {
+        logger.warn({ characterId }, "updateSupabaseCharacter: no local row found for upsert — falling back to local DB");
+      }
+    } catch (upsertErr) {
+      logger.error({ upsertErr, characterId }, "updateSupabaseCharacter: upsert attempt threw — falling back to local DB");
+    }
   }
 
   // ── Local DB fallback ──────────────────────────────────────────────────────
