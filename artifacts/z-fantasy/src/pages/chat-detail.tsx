@@ -41,7 +41,13 @@ export function ChatDetail() {
   const queryClient = useQueryClient();
 
   const { data: conv, isLoading, refetch } = useGetConversation(id!, {
-    query: { enabled: !!id, queryKey: ['chat', id] }
+    query: {
+      enabled: !!id,
+      queryKey: ['chat', id],
+      staleTime: 0,
+      gcTime: 0,
+      refetchOnWindowFocus: false,
+    }
   });
   const { data: me } = useGetMe();
 
@@ -84,10 +90,10 @@ export function ChatDetail() {
     },
     onSuccess: async () => {
       setUnlockTarget(null);
-      await queryClient.invalidateQueries();
+      queryClient.removeQueries({ queryKey: ['chat', id] });
       await refetch();
       setLastRefetch(Date.now());
-      console.log('[UNLOCK] Local state updated, image should reveal');
+      console.log('[CACHE CLEARED] Fresh fetch after unlock');
     },
     onError: (err: Error) => {
       setUnlockTarget(null);
@@ -112,10 +118,10 @@ export function ChatDetail() {
     setInput("");
     sendMsg.mutate({ characterId: id, data: { content: text } }, {
       onSuccess: async () => {
-        await queryClient.invalidateQueries();
+        queryClient.removeQueries({ queryKey: ['chat', id] });
         await refetch();
         setLastRefetch(Date.now());
-        console.log('[SEND COMPLETE] Cache invalidated, refetching conversation, lastRefetch updated');
+        console.log('[CACHE CLEARED] Fresh fetch after send');
       },
       onError: () => toast({ title: "Failed to send", variant: "destructive" })
     });
