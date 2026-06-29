@@ -413,9 +413,10 @@ router.patch("/admin/characters/:characterId/overlay", async (req, res): Promise
 // Full edit a character via Supabase
 router.patch("/admin/characters/:characterId", async (req, res): Promise<void> => {
   const { characterId } = req.params;
-  const { name, bio, initialGreeting, avatarUrl, visibility, isNsfw, tags, systemPrompt } = req.body as {
+  const { name, bio, initialGreeting, avatarUrl, visibility, isNsfw, tags, systemPrompt, background, personality, age, genre, subGenres } = req.body as {
     name?: string; bio?: string; initialGreeting?: string; avatarUrl?: string;
     visibility?: "public" | "private" | "premium"; isNsfw?: boolean; tags?: string[]; systemPrompt?: string;
+    background?: string; personality?: string; age?: number; genre?: string; subGenres?: string[];
   };
 
   let finalTags: string[] | undefined;
@@ -431,10 +432,15 @@ router.patch("/admin/characters/:characterId", async (req, res): Promise<void> =
     teaserDescription: bio !== undefined ? (bio || null) : undefined,
     initialGreeting: initialGreeting !== undefined ? (initialGreeting || null) : undefined,
     avatarUrl: avatarUrl !== undefined ? (avatarUrl || null) : undefined,
-    visibility: (visibility === "public" || visibility === "private") ? visibility : undefined,
+    visibility: (visibility === "public" || visibility === "private" || visibility === "premium") ? visibility : undefined,
     tags: finalTags,
     systemPrompt: systemPrompt || undefined,
     isNsfw: typeof isNsfw === "boolean" ? isNsfw : undefined,
+    background: background !== undefined ? (background || null) : undefined,
+    personality: personality !== undefined ? (personality || null) : undefined,
+    age: typeof age === "number" ? age : undefined,
+    genre: genre || undefined,
+    subGenres: Array.isArray(subGenres) ? subGenres : undefined,
   });
 
   if (!updated) {

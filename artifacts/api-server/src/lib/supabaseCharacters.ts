@@ -20,6 +20,9 @@ export interface SupabaseCharacterRow {
   character_advertisement: string | null;
   status_level: number;
   image_seed: number | null;
+  background: string | null;
+  personality: string | null;
+  age: number | null;
 }
 
 export interface NormalizedCharacter {
@@ -35,6 +38,8 @@ export interface NormalizedCharacter {
   subGenres: string[];
   genre: string | null;
   age: string | null;
+  background: string | null;
+  personality: string | null;
   triggerMetadataArray: unknown[] | null;
   tagline: string | null;
   imageSeed: string | null;
@@ -75,6 +80,8 @@ export function serializeSupabaseCharacter(row: SupabaseCharacterRow): Normalize
     subGenres: row.sub_genres ?? [],
     genre: row.genre ?? deriveGenre(row.tags ?? []),
     age: null,
+    background: row.background ?? null,
+    personality: row.personality ?? null,
     triggerMetadataArray: row.trigger_metadata_array ?? null,
     tagline: row.tagline ?? null,
     imageSeed: row.image_seed != null ? String(row.image_seed) : null,
@@ -95,6 +102,8 @@ function normalizeLocalCharacter(row: typeof charactersTable.$inferSelect): Norm
     subGenres: [],
     genre: row.genre ?? null,
     age: row.age ?? null,
+    background: null,
+    personality: null,
     triggerMetadataArray: Array.isArray(row.triggerMetadataArray) ? (row.triggerMetadataArray as unknown[]) : null,
     tagline: null,
     imageSeed: row.imageSeed ?? null,
@@ -285,6 +294,9 @@ export async function updateSupabaseCharacter(
     systemPrompt?: string;
     tagline?: string | null;
     isNsfw?: boolean;
+    background?: string | null;
+    personality?: string | null;
+    age?: number;
   }
 ): Promise<NormalizedCharacter | null> {
   // ── Supabase path ──────────────────────────────────────────────────────────
@@ -298,6 +310,9 @@ export async function updateSupabaseCharacter(
     if (values.systemPrompt != null) payload.system_prompt = values.systemPrompt;
     if (values.genre != null) payload.genre = values.genre;
     if (values.subGenres != null) payload.sub_genres = values.subGenres;
+    if (values.background !== undefined) payload.background = values.background;
+    if (values.personality !== undefined) payload.personality = values.personality;
+    if (typeof values.age === "number") payload.age = values.age;
     if (typeof values.isNsfw === "boolean") {
       const currentTags = (values.tags ?? []);
       const baseTags = currentTags.filter(t => t !== "#NSFW");

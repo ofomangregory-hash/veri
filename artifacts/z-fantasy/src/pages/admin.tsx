@@ -107,6 +107,12 @@ export function Admin() {
   const [charQuickSaving, setCharQuickSaving] = useState<Record<string, boolean>>({});
   const [charSubGenreInputMap, setCharSubGenreInputMap] = useState<Record<string, string>>({});
   const [charGenreSaving, setCharGenreSaving] = useState<Record<string, boolean>>({});
+  const [charExtEdit, setCharExtEdit] = useState<Record<string, {
+    background: string; personality: string; age: string;
+    tags: string[]; tagInput: string;
+    visibility: "public" | "private" | "premium"; nsfwEnabled: boolean;
+  }>>({});
+  const [charExtSaving, setCharExtSaving] = useState<Record<string, boolean>>({});
 
   // ── Economy price state (all editable from Supabase) ─────────────────────
   const [ecoMsgCost, setEcoMsgCost] = useState("1");
@@ -215,6 +221,26 @@ export function Admin() {
     if (activeTab === "affection") fetchAffUsers();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!expandedCharId) return;
+    if (charExtEdit[expandedCharId]) return;
+    const char = (charsData?.items ?? []).find((c: { characterId: string }) => c.characterId === expandedCharId) as (typeof charsData extends { items: Array<infer T> } ? T : never) & { background?: string | null; personality?: string | null; age?: string | number | null; subGenres?: string[] } | undefined;
+    if (!char) return;
+    setCharExtEdit(p => ({
+      ...p,
+      [expandedCharId]: {
+        background: (char as { background?: string | null }).background ?? "",
+        personality: (char as { personality?: string | null }).personality ?? "",
+        age: String((char as { age?: string | number | null }).age ?? ""),
+        tags: ((char as { tags?: string[] }).tags ?? []).filter((t: string) => t !== "#NSFW"),
+        tagInput: "",
+        visibility: ((char as { visibility?: string }).visibility as "public" | "private" | "premium") ?? "private",
+        nsfwEnabled: ((char as { tags?: string[] }).tags ?? []).includes("#NSFW"),
+      },
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedCharId, charsData]);
 
   const deleteConversation = async (convId: string) => {
     try {
@@ -497,6 +523,38 @@ export function Admin() {
       toast({ title: `🗑️ "${name}" deleted` });
       refetchChars();
     } catch (e) { toast({ title: "Delete failed", description: String(e), variant: "destructive" }); }
+  };
+
+  const saveCharAllFields = async (char: NonNullable<typeof charsData>["items"][0]) => {
+    const charId = char.characterId;
+    const ext = charExtEdit[charId];
+    if (!ext) return;
+    setCharExtSaving(p => ({ ...p, [charId]: true }));
+    try {
+      const quickEdit = charQuickEdit[charId];
+      const name = (quickEdit?.name ?? char.name).trim();
+      const bio = (quickEdit?.bio ?? char.teaserDescription ?? "").trim();
+      const genre = charGenreMap[charId] ?? char.genre ?? "";
+      const subGenres = charSubGenresMap[charId] ?? ((char as unknown as { subGenres?: string[] }).subGenres ?? []);
+      await adminApi("PATCH", `/admin/characters/${charId}`, {
+        name: name || undefined,
+        bio: bio || undefined,
+        background: ext.background || undefined,
+        personality: ext.personality || undefined,
+        genre: genre || undefined,
+        subGenres,
+        age: ext.age ? parseInt(ext.age, 10) : undefined,
+        tags: ext.tags,
+        isNsfw: ext.nsfwEnabled,
+        visibility: ext.visibility,
+      });
+      toast({ title: "✅ Character updated" });
+      void refetchChars();
+    } catch (e) {
+      toast({ title: "❌ Failed to update", description: String(e), variant: "destructive" });
+    } finally {
+      setCharExtSaving(p => ({ ...p, [charId]: false }));
+    }
   };
 
   const saveCharOverlay = async (characterId: string) => {
@@ -1202,6 +1260,117 @@ export function Admin() {
                         <Save size={14} />
                       </button>
                     </div>
+                    {/* ── Extended Character Edit ── */}
+                    {isGodMode && (() => {
+                      const ext = charExtEdit[char.characterId];
+                      if (!ext) return null;
+                      const setExt = (patch: Partial<typeof ext>) =>
+                        setCharExtEdit(p => ({ ...p, [char.characterId]: { ...p[char.characterId]!, ...patch } }));
+                      return (
+                        <div className="border border-border rounded-xl p-3 space-y-3 mt-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Full Character Details</p>
+                          {/* Background */}
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Background</label>
+                            <textarea
+                              value={ext.background}
+                              onChange={e => setExt({ background: e.target.value })}
+                              rows={3}
+                              placeholder="Character backstory…"
+                              className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary/60 resize-none"
+                            />
+                          </div>
+                          {/* Personality */}
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Personality</label>
+                            <textarea
+                              value={ext.personality}
+                              onChange={e => setExt({ personality: e.target.value })}
+                              rows={3}
+                              placeholder="Personality traits…"
+                              className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary/60 resize-none"
+                            />
+                          </div>
+                          {/* Age */}
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Age</label>
+                            <input
+                              type="number"
+                              value={ext.age}
+                              onChange={e => setExt({ age: e.target.value })}
+                              min={1}
+                              placeholder="25"
+                              className="w-full h-8 rounded-lg border border-border bg-card px-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                            />
+                          </div>
+                          {/* Tags */}
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Tags</label>
+                            <div className="flex flex-wrap gap-1.5 items-center min-h-[28px] mb-1.5">
+                              {ext.tags.map((tag: string) => (
+                                <span key={tag} className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-primary text-[10px] font-semibold">
+                                  {tag}
+                                  <button
+                                    onClick={() => setExt({ tags: ext.tags.filter((t: string) => t !== tag) })}
+                                    className="ml-0.5 leading-none hover:text-red-400"
+                                  >×</button>
+                                </span>
+                              ))}
+                            </div>
+                            <div className="flex gap-1">
+                              <input
+                                value={ext.tagInput}
+                                onChange={e => setExt({ tagInput: e.target.value })}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter" && ext.tagInput.trim()) {
+                                    setExt({ tags: [...ext.tags, ext.tagInput.trim()], tagInput: "" });
+                                  }
+                                }}
+                                placeholder="Add tag…"
+                                className="h-7 flex-1 rounded-lg border border-accent/40 bg-card px-2 text-xs text-white focus:outline-none focus:border-accent"
+                              />
+                              <button
+                                onClick={() => { if (ext.tagInput.trim()) setExt({ tags: [...ext.tags, ext.tagInput.trim()], tagInput: "" }); }}
+                                className="px-2 h-7 rounded-lg bg-accent/20 text-accent text-[10px] font-bold border border-accent/40 hover:bg-accent/30"
+                              >Add</button>
+                            </div>
+                          </div>
+                          {/* Visibility */}
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Visibility</label>
+                            <select
+                              value={ext.visibility}
+                              onChange={e => setExt({ visibility: e.target.value as "public" | "private" | "premium" })}
+                              className="w-full h-8 rounded-lg border border-border bg-card px-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                            >
+                              <option value="public">🌐 Public</option>
+                              <option value="private">🔒 Private</option>
+                              <option value="premium">💎 Premium</option>
+                            </select>
+                          </div>
+                          {/* NSFW toggle */}
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">NSFW Enabled</label>
+                            <button
+                              onClick={() => setExt({ nsfwEnabled: !ext.nsfwEnabled })}
+                              className={`relative w-10 h-5 rounded-full transition-all border ${ext.nsfwEnabled ? "bg-red-500/30 border-red-500/60" : "bg-muted/30 border-border"}`}
+                            >
+                              <span className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${ext.nsfwEnabled ? "left-5 bg-red-400" : "left-0.5 bg-muted-foreground"}`} />
+                            </button>
+                          </div>
+                          {/* Save All */}
+                          <button
+                            disabled={charExtSaving[char.characterId]}
+                            onClick={() => saveCharAllFields(char)}
+                            className="w-full py-2 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            {charExtSaving[char.characterId]
+                              ? <><RefreshCw size={12} className="animate-spin" /> Saving…</>
+                              : <><Save size={12} /> Save Changes</>}
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
                 {/* Creator ID row */}
