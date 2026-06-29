@@ -333,6 +333,7 @@ export function Admin() {
   const [charDrawerBackground, setCharDrawerBackground] = useState("");
   const [charDrawerTagline, setCharDrawerTagline] = useState("");
   const [charDrawerImageSeed, setCharDrawerImageSeed] = useState("");
+  const [charDrawerCreator, setCharDrawerCreator] = useState<string | null>(null);
   const [savingChar, setSavingChar] = useState(false);
 
   const openUserDrawer = async (userId: string) => {
@@ -399,6 +400,7 @@ export function Admin() {
     setCharDrawerBackground((char as unknown as { background?: string | null }).background ?? "");
     setCharDrawerTagline((char as unknown as { tagline?: string | null }).tagline ?? "");
     setCharDrawerImageSeed(String((char as unknown as { imageSeed?: string | number | null }).imageSeed ?? ""));
+    setCharDrawerCreator(char.creatorUsername ?? null);
     setCharDrawerOpen(true);
   };
 
@@ -2425,6 +2427,7 @@ export function Admin() {
         charDrawerBackground={charDrawerBackground} setCharDrawerBackground={setCharDrawerBackground}
         charDrawerTagline={charDrawerTagline} setCharDrawerTagline={setCharDrawerTagline}
         charDrawerImageSeed={charDrawerImageSeed} setCharDrawerImageSeed={setCharDrawerImageSeed}
+        charDrawerCreator={charDrawerCreator}
         savingChar={savingChar}
         saveCharChanges={saveCharChanges}
         onClose={() => setCharDrawerOpen(false)}
@@ -2772,6 +2775,7 @@ interface CharDrawerPanelProps {
   charDrawerBackground: string; setCharDrawerBackground: (v: string) => void;
   charDrawerTagline: string; setCharDrawerTagline: (v: string) => void;
   charDrawerImageSeed: string; setCharDrawerImageSeed: (v: string) => void;
+  charDrawerCreator: string | null;
   savingChar: boolean;
   saveCharChanges: () => void;
   onClose: () => void;
@@ -2914,7 +2918,7 @@ function AvatarsSection({ characterId, token }: { characterId: string; token: st
   );
 }
 
-function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charDrawerBio, setCharDrawerBio, charDrawerGreeting, setCharDrawerGreeting, charDrawerAvatar, setCharDrawerAvatar, charDrawerPrompt, setCharDrawerPrompt, charDrawerTags, setCharDrawerTags, charDrawerVisibility, setCharDrawerVisibility, charDrawerNsfw, setCharDrawerNsfw, charDrawerGenre, setCharDrawerGenre, charDrawerSubGenres, setCharDrawerSubGenres, charDrawerAge, setCharDrawerAge, charDrawerPersonality, setCharDrawerPersonality, charDrawerBackground, setCharDrawerBackground, charDrawerTagline, setCharDrawerTagline, charDrawerImageSeed, setCharDrawerImageSeed, savingChar, saveCharChanges, onClose }: CharDrawerPanelProps) {
+function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charDrawerBio, setCharDrawerBio, charDrawerGreeting, setCharDrawerGreeting, charDrawerAvatar, setCharDrawerAvatar, charDrawerPrompt, setCharDrawerPrompt, charDrawerTags, setCharDrawerTags, charDrawerVisibility, setCharDrawerVisibility, charDrawerNsfw, setCharDrawerNsfw, charDrawerGenre, setCharDrawerGenre, charDrawerSubGenres, setCharDrawerSubGenres, charDrawerAge, setCharDrawerAge, charDrawerPersonality, setCharDrawerPersonality, charDrawerBackground, setCharDrawerBackground, charDrawerTagline, setCharDrawerTagline, charDrawerImageSeed, setCharDrawerImageSeed, charDrawerCreator, savingChar, saveCharChanges, onClose }: CharDrawerPanelProps) {
   const token = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
   const [avatarGenerating, setAvatarGenerating] = useState(false);
   const generateAvatarUrl = async () => {
@@ -2943,6 +2947,11 @@ function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charD
           </div>
           <div className="flex-1 min-w-0">
             <div className="font-bold text-sm truncate">{charDrawerName || "Character"}</div>
+            {charDrawerCreator && (
+              <div className="text-[10px] text-primary/80 font-semibold truncate">
+                👤 Created by @{charDrawerCreator}
+              </div>
+            )}
             <div className="text-xs text-muted-foreground">{charDrawerNsfw ? "🔞 NSFW" : "Safe"} · {charDrawerVisibility}</div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
