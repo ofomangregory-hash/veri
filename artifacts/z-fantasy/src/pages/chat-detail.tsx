@@ -33,14 +33,6 @@ export function ChatDetail() {
   // Chat image fullscreen viewer
   const [chatViewer, setChatViewer] = useState<{ idx: number } | null>(null);
   const chatViewerTouchX = useRef<number | null>(null);
-  // Clamp index when image list changes (e.g. new message arrives)
-  useEffect(() => {
-    if (chatViewer && chatViewerImages.length > 0) {
-      setChatViewer(v => v && { idx: Math.min(v.idx, chatViewerImages.length - 1) });
-    } else if (chatViewer && chatViewerImages.length === 0) {
-      setChatViewer(null);
-    }
-  }, [chatViewerImages.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -199,10 +191,19 @@ export function ChatDetail() {
   const tier = me?.subscriptionTier ?? "Free";
   const isGold = tier === "Gold";
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-
   const messages = (conv?.messages ?? []) as ChatMsg[];
   const chatViewerImages = messages.filter(m => m.imageUrl);
+
+  // Clamp viewer index when the image list changes — must be before any early return
+  useEffect(() => {
+    if (chatViewer && chatViewerImages.length > 0) {
+      setChatViewer(v => v && { idx: Math.min(v.idx, chatViewerImages.length - 1) });
+    } else if (chatViewer && chatViewerImages.length === 0) {
+      setChatViewer(null);
+    }
+  }, [chatViewerImages.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background">
