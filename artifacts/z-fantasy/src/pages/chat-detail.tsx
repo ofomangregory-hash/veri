@@ -235,13 +235,14 @@ export function ChatDetail() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
         {displayMessages.map((msg, i) => {
+          console.log(`[MSG ${i}]`, { role: msg.role, content: msg.content?.slice(0, 30), imageUrl: !!msg.imageUrl, isLocked: msg.isLocked });
           const isUser = msg.role === 'user';
           const isLocked = msg.isLocked === true && !isUser;
           return (
-            <div key={i} className={`flex flex-col max-w-[85%] ${isUser ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-              {/* Render bubble when there is text, an image, or both */}
-              {(msg.content || msg.imageUrl) && (
-                <>
+            <div key={i} className="flex flex-col w-full">
+              {/* Text bubble + unlocked image — constrained to 85% width */}
+              {(msg.content || (msg.imageUrl && !isLocked)) && (
+                <div className={`flex flex-col max-w-[85%] ${isUser ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
                   {msg.content && (
                     <div className={`p-3 rounded-2xl ${
                       isUser
@@ -251,65 +252,67 @@ export function ChatDetail() {
                       {msg.content}
                     </div>
                   )}
-                  {msg.imageUrl && (
-                    <div
-                      style={{ width: '100%', maxWidth: '100%', marginTop: msg.content ? '8px' : undefined }}
-                      className="rounded-xl overflow-hidden border border-border relative cursor-pointer"
-                      onClick={() => {
-                        const imgIdx = chatViewerImages.indexOf(msg);
-                        if (imgIdx >= 0) setChatViewer({ idx: imgIdx });
+                  {msg.imageUrl && !isLocked && (
+                    <img
+                      src={msg.imageUrl}
+                      alt="Character image"
+                      style={{
+                        width: '100%',
+                        height: 'auto',
+                        minHeight: '250px',
+                        maxHeight: '400px',
+                        borderRadius: '12px',
+                        objectFit: 'cover',
+                        display: 'block',
+                        marginTop: msg.content ? '8px' : '0',
+                        cursor: 'pointer',
                       }}
-                    >
-                      {isLocked ? (
-                        <div className="relative">
-                          <div style={{ overflow: "hidden" }}>
-                            <img
-                              src={msg.imageUrl}
-                              alt="Locked"
-                              style={{
-                                filter: "blur(20px)",
-                                transform: "scale(1.1)",
-                                width: '100%',
-                                height: 'auto',
-                                minHeight: '250px',
-                                maxHeight: '400px',
-                                objectFit: 'cover',
-                                display: 'block',
-                                borderRadius: '12px',
-                              }}
-                              className="select-none pointer-events-none brightness-50"
-                              draggable={false}
-                            />
-                          </div>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30">
-                            <div className="p-3 rounded-full bg-black/60 border border-primary/50 box-glow-pink">
-                              <Lock size={22} className="text-primary" />
-                            </div>
-                            <p className="text-white text-xs font-bold drop-shadow-lg">
-                              🔒 Unlock for {unlockCost} 💎
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <img
-                          src={msg.imageUrl}
-                          alt="Character image"
-                          style={{
-                            width: '100%',
-                            height: 'auto',
-                            minHeight: '250px',
-                            maxHeight: '400px',
-                            borderRadius: '12px',
-                            objectFit: 'cover',
-                            display: 'block',
-                          }}
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                          onLoad={() => console.log('[CHAT] Image loaded:', msg.imageUrl)}
-                        />
-                      )}
-                    </div>
+                      onClick={() => { const idx = chatViewerImages.indexOf(msg); if (idx >= 0) setChatViewer({ idx }); }}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      onLoad={() => console.log('[CHAT] Auto image loaded:', msg.imageUrl)}
+                    />
                   )}
-                </>
+                </div>
+              )}
+              {/* Locked blurred image — full width, outside narrow bubble */}
+              {isLocked && msg.imageUrl && (
+                <div
+                  style={{
+                    width: '100%',
+                    position: 'relative',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    minHeight: '250px',
+                    maxHeight: '400px',
+                    cursor: 'pointer',
+                    marginTop: msg.content ? '8px' : '0',
+                  }}
+                  onClick={() => handleUnlockTap(msg)}
+                >
+                  <img
+                    src={msg.imageUrl}
+                    alt="Locked"
+                    style={{
+                      filter: 'blur(20px)',
+                      transform: 'scale(1.1)',
+                      width: '100%',
+                      height: 'auto',
+                      minHeight: '250px',
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                    className="select-none pointer-events-none brightness-50"
+                    draggable={false}
+                  />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30">
+                    <div className="p-3 rounded-full bg-black/60 border border-primary/50 box-glow-pink">
+                      <Lock size={22} className="text-primary" />
+                    </div>
+                    <p className="text-white text-xs font-bold drop-shadow-lg">
+                      🔒 Unlock for {unlockCost} 💎
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
           );
@@ -449,8 +452,19 @@ export function ChatDetail() {
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="w-full bg-card border-t border-primary/40 rounded-t-2xl p-6 shadow-[0_-10px_40px_rgba(255,0,127,0.25)]"
-              style={{ paddingBottom: '80px' }}
+              className="w-full shadow-[0_-10px_40px_rgba(255,0,127,0.25)]"
+              style={{
+                position: 'fixed',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                padding: '20px 20px 80px 20px',
+                zIndex: 9999,
+                backgroundColor: 'var(--card)',
+                borderTop: '1px solid rgba(var(--primary-rgb, 255,0,127),0.4)',
+                borderTopLeftRadius: '16px',
+                borderTopRightRadius: '16px',
+              }}
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">

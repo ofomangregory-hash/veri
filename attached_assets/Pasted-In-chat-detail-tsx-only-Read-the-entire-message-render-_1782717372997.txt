@@ -1,0 +1,94 @@
+In chat-detail.tsx only. Read the entire message render loop carefully before making any changes. Then fix both issues.
+Step 1 — Diagnose first:
+
+Add this log inside the render loop to see what's actually being rendered:
+typescript{displayMessages.map((msg, i) => {
+  console.log(`[MSG ${i}]`, { 
+    role: msg.role, 
+    content: msg.content?.slice(0, 30), 
+    imageUrl: !!msg.imageUrl, 
+    isLocked: msg.isLocked 
+  });
+Step 2 — Fix auto loop image not showing:
+
+The auto loop message has both content AND imageUrl but only the text is rendering. The image block {msg.imageUrl && (...)} is likely inside a condition that blocks it when content exists, or it's inside the wrong part of the message bubble structure.
+Find the image render block and make sure it renders for ALL assistant messages that have imageUrl, regardless of whether they also have content:
+typescript// Inside the assistant message bubble, after the text content:
+{msg.content && <p className="...">{msg.content}</p>}
+
+{msg.imageUrl && !msg.isLocked && (
+  <img
+    src={msg.imageUrl}
+    alt="Character image"
+    style={{
+      width: '100%',
+      height: 'auto',
+      minHeight: '250px',
+      maxHeight: '400px',
+      borderRadius: '12px',
+      objectFit: 'cover',
+      display: 'block',
+      marginTop: msg.content ? '8px' : '0'
+    }}
+    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+    onLoad={() => console.log('[CHAT] Auto image loaded:', msg.imageUrl)}
+  />
+)}
+Step 3 — Fix blurred image size:
+
+The blurred image is showing as a tiny dark circle. It's constrained by the message bubble wrapper which has a narrow max-width. Find the outer assistant message wrapper div — it likely has max-w-[75%] or max-w-xs class.
+For messages where msg.isLocked === true, render the blurred image OUTSIDE the narrow bubble wrapper, at full width:
+typescript{msg.isLocked && msg.imageUrl && (
+  <div style={{ 
+    width: '100%', 
+    position: 'relative',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    minHeight: '250px',
+    maxHeight: '400px',
+    cursor: 'pointer'
+  }}
+  onClick={() => handleUnlockTap(msg)}
+  >
+    <img
+      src={msg.imageUrl}
+      alt="Locked"
+      style={{ 
+        filter: 'blur(20px)', 
+        transform: 'scale(1.1)',
+        width: '100%',
+        height: 'auto',
+        minHeight: '250px',
+        objectFit: 'cover',
+        display: 'block'
+      }}
+      className="select-none pointer-events-none brightness-50"
+      draggable={false}
+    />
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30">
+      <div className="p-3 rounded-full bg-black/60 border border-primary/50 box-glow-pink">
+        <Lock size={22} className="text-primary" />
+      </div>
+      <p className="text-white text-xs font-bold drop-shadow-lg">
+        🔒 Unlock for {unlockCost} 💎
+      </p>
+    </div>
+  </div>
+)}
+Place this block at the TOP LEVEL of the message list render — not inside the narrow assistant bubble wrapper. The blurred image should render full width in the chat, separate from the text bubble.
+Step 4 — Fix unlock modal position:
+
+The unlock modal bottom sheet must sit above the nav bar. Find the modal container and ensure:
+typescriptstyle={{ 
+  position: 'fixed',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  paddingBottom: '80px',
+  zIndex: 9999,
+  backgroundColor: 'var(--background)',
+  borderTopLeftRadius: '16px',
+  borderTopRightRadius: '16px',
+  padding: '20px 20px 80px 20px'
+}}
+Do not touch any other files.
