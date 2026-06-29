@@ -192,6 +192,9 @@ export function ChatDetail() {
   const isGold = tier === "Gold";
 
   const messages = (conv?.messages ?? []) as ChatMsg[];
+  console.log('[FRONTEND RECEIVED] messages with imageUrl:', 
+    conv?.messages?.filter((m: any) => m.imageUrl).length
+  );
   const displayMessages = messages.filter(m => m.content || m.imageUrl);
   console.log('[FILTER CHECK]', messages.length, displayMessages?.length);
   const chatViewerImages = messages.filter(m => m.imageUrl);

@@ -202,6 +202,16 @@ router.get("/conversations/:characterId", async (req, res): Promise<void> => {
 
   const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
 
+  const messagesWithImages = messages.filter(m => m.imageUrl);
+  console.log('[API RESPONSE] Messages with imageUrl:', messagesWithImages.length);
+  if (messagesWithImages[0]) {
+    console.log('[API RESPONSE] Sample:', JSON.stringify({
+      role: messagesWithImages[0].role,
+      imageUrl: messagesWithImages[0].imageUrl,
+      isLocked: messagesWithImages[0].isLocked
+    }));
+  }
+
   res.json(GetConversationResponse.parse({
     conversationId: conv.conversationId,
     characterId: conv.characterId,
