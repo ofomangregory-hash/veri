@@ -18,6 +18,7 @@ type ChatMsg = {
   imageUrl?: string | null;
   isLocked?: boolean;
   timestamp?: string | null;
+  mediaType?: string | null;
 };
 
 export function ChatDetail() {
@@ -79,10 +80,11 @@ export function ChatDetail() {
       }
       return res.json() as Promise<{ ok: boolean; imageUrl: string | null; neonCardBalance: number }>;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       setUnlockTarget(null);
-      refetch();
-      queryClient.invalidateQueries({ queryKey: ["me"] });
+      await queryClient.invalidateQueries();
+      await refetch();
+      console.log('[UNLOCK] Local state updated, image should reveal');
     },
     onError: (err: Error) => {
       setUnlockTarget(null);
@@ -107,9 +109,9 @@ export function ChatDetail() {
     setInput("");
     sendMsg.mutate({ characterId: id, data: { content: text } }, {
       onSuccess: async () => {
-        await queryClient.invalidateQueries({ queryKey: ['chat', id] });
+        await queryClient.invalidateQueries();
         await refetch();
-        console.log('[REFETCH] Full conversation fetched after send');
+        console.log('[SEND COMPLETE] Cache invalidated, refetching conversation');
       },
       onError: () => toast({ title: "Failed to send", variant: "destructive" })
     });
@@ -201,6 +203,7 @@ export function ChatDetail() {
     imageUrl: m.imageUrl ?? null,
     isLocked: m.isLocked ?? false,
     timestamp: m.timestamp ?? null,
+    mediaType: m.mediaType ?? m.media_type ?? null,
   })) as ChatMsg[];
   console.log('[FRONTEND RECEIVED] messages with imageUrl:', 
     messages.filter(m => m.imageUrl).length
@@ -398,6 +401,28 @@ export function ChatDetail() {
               </button>
             </div>
             <div className="flex-1 flex items-center justify-center relative px-4">
+              {/* Image type label */}
+              <div style={{
+                position: 'absolute',
+                top: '16px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                backgroundColor: 'rgba(0,0,0,0.6)',
+                color: 'white',
+                padding: '4px 12px',
+                borderRadius: '20px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+                zIndex: 10,
+                whiteSpace: 'nowrap',
+              }}>
+                {currentMsg.isLocked ? '🔒 Locked' :
+                 currentMsg.mediaType === 'trigger' ? '⚡ Trigger' :
+                 currentMsg.mediaType === 'selfie' ? '📸 Selfie' :
+                 '🔄 Auto'}
+              </div>
               {isViewerLocked ? (
                 <div className="relative w-full max-w-sm">
                   <div style={{ overflow: "hidden", borderRadius: 12 }}>
@@ -434,8 +459,12 @@ export function ChatDetail() {
                     maxHeight: '80vh',
                   }}
                   onError={(e) => {
-                    console.log('[VIEWER] Image failed:', currentMsg?.imageUrl);
-                    (e.target as HTMLImageElement).alt = 'Image unavailable';
+                    const img = e.target as HTMLImageElement;
+                    console.log('[VIEWER] Image failed:', currentMsg?.imageUrl, 'retried:', img.dataset.retried);
+                    if (!img.dataset.retried) {
+                      img.dataset.retried = 'true';
+                      img.src = img.src + (img.src.includes('?') ? '&retry=1' : '?retry=1');
+                    }
                   }}
                   onLoad={() => console.log('[VIEWER] Image loaded OK')}
                 />

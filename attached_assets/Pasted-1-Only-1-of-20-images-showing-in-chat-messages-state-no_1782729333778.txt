@@ -1,0 +1,34 @@
+1. Only 1 of 20 images showing in chat — messages state not updating after send
+The root cause is the messages state is being updated by patching the cache with the send response, but the send response does NOT include imageUrl — only the GET conversation endpoint returns imageUrl. So 19 of 20 messages show without images.
+Find the handleSend function and the query client setup. After every successful send, force a hard refetch:
+typescriptconst handleSend = async (text: string) => {
+  // ... existing send logic ...
+  
+  // After response, invalidate cache and force fresh fetch:
+  await queryClient.invalidateQueries({ queryKey: ['conversation', characterId] });
+  await queryClient.refetchQueries({ queryKey: ['conversation', characterId] });
+  console.log('[SEND COMPLETE] Cache invalidated, refetching conversation');
+};
+Also check — what is the exact queryKey used for the conversation query? Log it:
+typescriptconsole.log('[QUERY KEY]', queryKey);
+The invalidateQueries key must match exactly or the cache won't bust.
+2. Blurred image disappears after unlock instead of revealing
+After unlock the isLocked state is set to false on the message but the image container disappears. The unlock response updates the server but the local state isn't being updated — the component is re-rendering with the old cached data which still has isLocked: true, then the condition {msg.isLocked && ...} hides it and nothing replaces it.
+Fix — after successful unlock, update the local messages state directly AND refetch:
+typescriptconst handleUnlock = async (msg: ChatMsg) => {
+  // ... existing unlock API call ...
+  
+  // On success — update local state immediately so image reveals instantly:
+  setMessages(prev => prev.map(m => 
+    m.timestamp === msg.timestamp 
+      ? { ...m, isLocked: false }
+      : m
+  ));
+  
+  // Then refetch to sync with server:
+  await queryClient.invalidateQueries({ queryKey: ['conversation', characterId] });
+  await queryClient.refetchQueries({ queryKey: ['conversation', characterId] });
+  
+  console.log('[UNLOCK] Local state updated, image should reveal');
+};
+Do not touch any other files.You said: add this to the previous prompt

@@ -1,0 +1,43 @@
+1. Fix Chinese replies — DeepSeek ignoring language instruction
+In conversations.ts, the language instruction is not working because DeepSeek overrides it. Replace the current approach — instead of a system message, inject the language rule directly into the character's existing system prompt text as the very last line:
+typescript// Append to the character system prompt string before sending:
+systemPromptText += `\n\nCRITICAL: Always respond in English only. Never respond in Chinese or any other language. If you cannot fulfill a request, say so in English.`;
+2. Add image type label to fullscreen viewer
+Each image in the viewer must show its type at the top. In the fullscreen image viewer modal, add a label above the image:
+typescript<div style={{
+  position: 'absolute',
+  top: '16px',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  backgroundColor: 'rgba(0,0,0,0.6)',
+  color: 'white',
+  padding: '4px 12px',
+  borderRadius: '20px',
+  fontSize: '12px',
+  fontWeight: 'bold',
+  textTransform: 'uppercase',
+  letterSpacing: '1px',
+  zIndex: 10
+}}>
+  {chatViewerImages[chatViewerIndex]?.mediaType === 'blurred' ? '🔒 Locked' :
+   chatViewerImages[chatViewerIndex]?.mediaType === 'trigger' ? '⚡ Trigger' :
+   chatViewerImages[chatViewerIndex]?.mediaType === 'selfie' ? '📸 Selfie' :
+   '🔄 Auto'}
+</div>
+Make sure mediaType is included in the chatViewerImages array items — pull it from msg.mediaType or msg.media_type when building the viewer array.
+3. Fix "Image unavailable" in fullscreen viewer
+The Pollinations URLs are valid but failing to load in the viewer <img> tag. Add a direct link fallback:
+typescript<img
+  src={chatViewerImages[chatViewerIndex]?.imageUrl}
+  alt="Character image"
+  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+  onError={(e) => {
+    // Try reloading once with cache-busting
+    const img = e.target as HTMLImageElement;
+    if (!img.dataset.retried) {
+      img.dataset.retried = 'true';
+      img.src = img.src + '&retry=1';
+    }
+  }}
+/>
+Do not touch any other files.You said: out of the 20 youre seeing only one came, the blurred dissapears after paying for its unlock
