@@ -222,25 +222,34 @@ export function Admin() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  useEffect(() => {
-    if (!expandedCharId) return;
-    if (charExtEdit[expandedCharId]) return;
-    const char = (charsData?.items ?? []).find((c: { characterId: string }) => c.characterId === expandedCharId) as (typeof charsData extends { items: Array<infer T> } ? T : never) & { background?: string | null; personality?: string | null; age?: string | number | null; subGenres?: string[] } | undefined;
-    if (!char) return;
-    setCharExtEdit(p => ({
-      ...p,
-      [expandedCharId]: {
-        background: (char as { background?: string | null }).background ?? "",
-        personality: (char as { personality?: string | null }).personality ?? "",
-        age: String((char as { age?: string | number | null }).age ?? ""),
-        tags: ((char as { tags?: string[] }).tags ?? []).filter((t: string) => t !== "#NSFW"),
-        tagInput: "",
-        visibility: ((char as { visibility?: string }).visibility as "public" | "private" | "premium") ?? "private",
-        nsfwEnabled: ((char as { tags?: string[] }).tags ?? []).includes("#NSFW"),
-      },
-    }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expandedCharId, charsData]);
+  const toggleExpandChar = (charId: string) => {
+    setExpandedCharId(prev => {
+      const next = prev === charId ? null : charId;
+      return next;
+    });
+    // Initialize immediately (not in useEffect) so the first render has data
+    if (!charExtEdit[charId]) {
+      const char = (charsData?.items ?? []).find((c: { characterId: string }) => c.characterId === charId) as
+        NonNullable<typeof charsData>["items"][0] & { background?: string | null; personality?: string | null; age?: string | number | null; subGenres?: string[] } | undefined;
+      console.log('[CHAR EDIT STATE] initializing for', charId, char ? 'found' : 'not found yet');
+      if (char) {
+        setCharExtEdit(p => ({
+          ...p,
+          [charId]: {
+            background: (char as { background?: string | null }).background ?? "",
+            personality: (char as { personality?: string | null }).personality ?? "",
+            age: String((char as { age?: string | number | null }).age ?? ""),
+            tags: ((char as { tags?: string[] }).tags ?? []).filter((t: string) => t !== "#NSFW"),
+            tagInput: "",
+            visibility: ((char as { visibility?: string }).visibility as "public" | "private" | "premium") ?? "private",
+            nsfwEnabled: ((char as { tags?: string[] }).tags ?? []).includes("#NSFW"),
+          },
+        }));
+      }
+    } else {
+      console.log('[CHAR EDIT STATE] already initialized for', charId, charExtEdit[charId]);
+    }
+  };
 
   const deleteConversation = async (convId: string) => {
     try {
@@ -1094,7 +1103,7 @@ export function Admin() {
                     {char.visibility === "public"  ? <Eye size={12} /> : char.visibility === "premium" ? <span className="text-[10px]">💎</span> : <EyeOff size={12} />}
                     <span>{char.visibility}</span>
                   </button>
-                  <button onClick={() => setExpandedCharId(p => p === char.characterId ? null : char.characterId)}
+                  <button onClick={() => toggleExpandChar(char.characterId)}
                     className="p-1.5 text-muted-foreground hover:text-foreground ml-1">
                     {expandedCharId === char.characterId ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   </button>
