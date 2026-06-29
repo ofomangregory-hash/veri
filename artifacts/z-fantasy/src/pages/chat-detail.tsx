@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, Link } from "wouter";
-import { useSendGift, useRequestSelfie, useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
+import { useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Send, Gift, Camera, ChevronLeft, ChevronRight, Heart, X, Lock, Unlock, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -85,8 +85,8 @@ export function ChatDetail() {
   const { data: me } = useGetMe();
 
   const [isSending, setIsSending] = useState(false);
-  const sendGift = useSendGift();
-  const reqSelfie = useRequestSelfie();
+  const [isSendingGift, setIsSendingGift] = useState(false);
+  const [isRequestingSelfie, setIsRequestingSelfie] = useState(false);
 
   const { data: ecoConfig } = useQuery<{ giftSmall: number; giftMedium: number; giftLarge: number }>({
     queryKey: ["economy-config"],
@@ -175,46 +175,69 @@ export function ChatDetail() {
     }
   };
 
-  const handleGift = (giftType: GiftInputGiftType) => {
-    if (!id) return;
+  const handleGift = async (giftType: GiftInputGiftType) => {
+    if (!id || isSendingGift) return;
     setShowGiftTray(false);
-    sendGift.mutate({ characterId: id, data: { giftType } }, {
-      onSuccess: (res) => {
-        toast({ title: "Gift Sent!", description: `+${res.affectionPoints} AP. ${res.aiReaction}` });
-        setLastRefetch(Date.now());
-      },
-      onError: (err: unknown) => {
-        const msg = (err as { message?: string })?.message ?? "";
+    setIsSendingGift(true);
+    try {
+      const res = await fetch(`/api/conversations/${id}/gift`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ giftType }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Gift failed" }));
+        const msg = err.error ?? "Gift could not be sent";
         const isLowBalance = msg.toLowerCase().includes("insufficient") || msg.toLowerCase().includes("neon");
-        toast({
-          title: "Gift Failed",
-          description: isLowBalance ? "Not enough Neon Cards" : "Gift could not be sent",
-          variant: "destructive"
-        });
+        toast({ title: "Gift Failed", description: isLowBalance ? "Not enough Neon Cards" : msg, variant: "destructive" });
+        return;
       }
-    });
+      const data = await res.json();
+      toast({ title: "Gift Sent!", description: `+${data.affectionPoints} AP. ${data.aiReaction}` });
+      setLastRefetch(Date.now());
+    } catch (err) {
+      toast({ title: "Gift Failed", description: "Gift could not be sent", variant: "destructive" });
+    } finally {
+      setIsSendingGift(false);
+    }
   };
 
-  const submitSelfie = () => {
-    if (!id) return;
+  const submitSelfie = async () => {
+    if (!id || isRequestingSelfie) return;
     const description = selfieDesc.trim() || "Show me yourself";
     setShowSelfieModal(false);
     setSelfieDesc("");
-    reqSelfie.mutate({ characterId: id, data: { description } }, {
-      onSuccess: () => {
-        toast({ title: "Selfie Requested!", description: "Generating your image…" });
-        setLastRefetch(Date.now());
-      },
-      onError: (err: unknown) => {
-        const msg = (err as { message?: string })?.message ?? "";
+    setIsRequestingSelfie(true);
+    try {
+      const res = await fetch(`/api/conversations/${id}/selfie`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ description }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Request failed" }));
+        const msg = err.error ?? "";
         const isLowBalance = msg.toLowerCase().includes("insufficient") || msg.toLowerCase().includes("neon");
         if (isLowBalance) {
           toast({ title: "❌ Not enough Neon Cards", description: msg, variant: "destructive" });
         } else {
           toast({ title: "Request Failed", variant: "destructive" });
         }
+        return;
       }
-    });
+      toast({ title: "Selfie Requested!", description: "Generating your image…" });
+      setLastRefetch(Date.now());
+    } catch (err) {
+      toast({ title: "Request Failed", variant: "destructive" });
+    } finally {
+      setIsRequestingSelfie(false);
+    }
   };
 
   const handleNewChat = async () => {
@@ -419,7 +442,7 @@ export function ChatDetail() {
         </button>
         <button
           onClick={() => setShowSelfieModal(true)}
-          disabled={reqSelfie.isPending}
+          disabled={isRequestingSelfie}
           className="p-2.5 rounded-full bg-card border border-border text-accent hover:box-glow-blue hover:border-accent transition-all shrink-0 disabled:opacity-50"
         >
           <Camera size={20} />
@@ -665,10 +688,10 @@ export function ChatDetail() {
                 </button>
                 <button
                   onClick={submitSelfie}
-                  disabled={reqSelfie.isPending}
+                  disabled={isRequestingSelfie}
                   className="flex-1 py-2.5 rounded-xl bg-accent text-white text-sm font-bold box-glow-blue disabled:opacity-50 transition-all"
                 >
-                  {reqSelfie.isPending ? "Generating…" : "📸 Send"}
+                  {isRequestingSelfie ? "Generating…" : "📸 Send"}
                 </button>
               </div>
             </motion.div>
