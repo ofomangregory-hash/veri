@@ -472,9 +472,11 @@ ABSOLUTE RULES:
 
   const notifyDelayMs = await getNotifyDelayMs();
 
+  const cleanHistory = newHistory.filter(m => (m.content?.trim()) || m.imageUrl);
+
   await db.update(conversationsTable)
     .set({
-      messageHistory: newHistory,
+      messageHistory: cleanHistory,
       messageCount: newMsgCount,
       dailyAutoImageCount: dailyCountIncrement > 0
         ? sql`daily_auto_image_count + ${dailyCountIncrement}`
@@ -625,8 +627,9 @@ ABSOLUTE RULES:
       timestamp: new Date().toISOString(),
     };
     console.log('[MESSAGE HISTORY PUSH]', JSON.stringify(selfieMsg));
+    const cleanSelfieHistory = [...messages, selfieMsg].filter(m => (m.content?.trim()) || m.imageUrl);
     await db.update(conversationsTable)
-      .set({ messageHistory: [...messages, selfieMsg], updatedAt: new Date() })
+      .set({ messageHistory: cleanSelfieHistory, updatedAt: new Date() })
       .where(eq(conversationsTable.conversationId, conv.conversationId));
     if (imageUrl) void addVaultItem(req.telegramUserId, params.data.characterId, character.name, imageUrl, "selfie", false);
   }

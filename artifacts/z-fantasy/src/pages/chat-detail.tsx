@@ -193,7 +193,6 @@ export function ChatDetail() {
 
   const messages = (conv?.messages ?? []) as ChatMsg[];
   const displayMessages = messages.filter(m => m.content || m.imageUrl);
-  console.log('[RENDER MESSAGES]', displayMessages.map(m => ({ role: m.role, hasContent: !!m.content, hasImage: !!m.imageUrl })));
   const chatViewerImages = messages.filter(m => m.imageUrl);
 
   // Clamp viewer index when the image list changes — must be before any early return
