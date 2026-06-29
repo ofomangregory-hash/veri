@@ -91,16 +91,25 @@ async function tryPollinations(
 
     try {
       const check = await fetch(url, {
-        method: "HEAD",
+        method: "GET",
         headers: { "Referer": "https://pollinations.ai" },
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(65000),
       });
 
       console.log(`Pollinations status (attempt ${attempt + 1}):`, check.status);
+      console.log("Content-Type:", check.headers.get("content-type"));
+      console.log("Content-Length:", check.headers.get("content-length"));
 
       if (check.ok) {
-        console.log("Pollinations success — returning URL directly");
-        return url;
+        const contentType = check.headers.get("content-type") ?? "";
+        if (contentType.includes("image")) {
+          console.log("Pollinations success — real image confirmed");
+          console.log("Image URL returned:", url);
+          return url;
+        } else {
+          console.log("Pollinations returned non-image content-type:", contentType);
+          continue;
+        }
       }
 
       if (check.status === 429) {
