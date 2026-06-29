@@ -106,7 +106,11 @@ export function ChatDetail() {
     const text = input;
     setInput("");
     sendMsg.mutate({ characterId: id, data: { content: text } }, {
-      onSuccess: () => refetch(),
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: ['chat', id] });
+        await refetch();
+        console.log('[REFETCH] Full conversation fetched after send');
+      },
       onError: () => toast({ title: "Failed to send", variant: "destructive" })
     });
   };
@@ -191,9 +195,18 @@ export function ChatDetail() {
   const tier = me?.subscriptionTier ?? "Free";
   const isGold = tier === "Gold";
 
-  const messages = (conv?.messages ?? []) as ChatMsg[];
+  const messages = (conv?.messages ?? []).map((m: any) => ({
+    role: m.role,
+    content: m.content,
+    imageUrl: m.imageUrl ?? null,
+    isLocked: m.isLocked ?? false,
+    timestamp: m.timestamp ?? null,
+  })) as ChatMsg[];
   console.log('[FRONTEND RECEIVED] messages with imageUrl:', 
-    conv?.messages?.filter((m: any) => m.imageUrl).length
+    messages.filter(m => m.imageUrl).length
+  );
+  console.log('[FETCH] Messages loaded:', messages.length,
+    'with images:', messages.filter(m => m.imageUrl).length
   );
   const displayMessages = messages.filter(m => m.content || m.imageUrl);
   console.log('[FILTER CHECK]', messages.length, displayMessages?.length);
