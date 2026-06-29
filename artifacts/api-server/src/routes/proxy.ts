@@ -2,7 +2,24 @@ import { Router, type Request, type Response, type NextFunction, type IRouter } 
 
 const router: IRouter = Router();
 
-const ALLOWED_HOSTS = ["image.pollinations.ai"];
+// Exact-match hostnames allowed through the proxy
+const ALLOWED_HOSTS = [
+  "image.pollinations.ai",
+  "telegra.ph",
+  "picsum.photos",
+  "api.dicebear.com",
+];
+
+// Wildcard suffix matches — any subdomain of these domains is allowed
+const ALLOWED_HOST_SUFFIXES = [
+  ".supabase.co",   // Supabase Storage (project-specific subdomains)
+];
+
+function isAllowedHost(hostname: string): boolean {
+  if (ALLOWED_HOSTS.includes(hostname)) return true;
+  if (ALLOWED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix))) return true;
+  return false;
+}
 
 // ── Public route — auth bypass ─────────────────────────────────────────────────
 // Browser <img> tags cannot send custom Authorization headers, so this endpoint
@@ -28,7 +45,7 @@ router.get("/proxy-image", async (req, res): Promise<void> => {
     return;
   }
 
-  if (!ALLOWED_HOSTS.includes(parsed.hostname)) {
+  if (!isAllowedHost(parsed.hostname)) {
     res.status(403).json({ error: "URL not allowed" });
     return;
   }
