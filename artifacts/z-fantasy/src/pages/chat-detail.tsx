@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, Link } from "wouter";
-import { useSendMessage, useSendGift, useRequestSelfie, useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
+import { useSendGift, useRequestSelfie, useGetMe, GiftInputGiftType } from "@workspace/api-client-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Send, Gift, Camera, ChevronLeft, ChevronRight, Heart, X, Lock, Unlock, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -84,7 +84,7 @@ export function ChatDetail() {
 
   const { data: me } = useGetMe();
 
-  const sendMsg = useSendMessage();
+  const [isSending, setIsSending] = useState(false);
   const sendGift = useSendGift();
   const reqSelfie = useRequestSelfie();
 
@@ -146,17 +146,33 @@ export function ChatDetail() {
     }
   }, [messages]);
 
-  const handleSend = () => {
-    if (!input.trim() || !id) return;
+  const handleSend = async () => {
+    if (!input.trim() || !id || isSending) return;
     const text = input;
     setInput("");
-    sendMsg.mutate({ characterId: id, data: { content: text } }, {
-      onSuccess: () => {
-        setLastRefetch(Date.now());
-        console.log('[SEND COMPLETE] Triggering full refetch');
-      },
-      onError: () => toast({ title: "Failed to send", variant: "destructive" })
-    });
+    setIsSending(true);
+    try {
+      const res = await fetch(`/api/conversations/${id}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ content: text }),
+      });
+      if (!res.ok) {
+        console.error('[SEND ERROR] Status:', res.status);
+        toast({ title: "Failed to send", variant: "destructive" });
+        return;
+      }
+      console.log('[SEND COMPLETE] Triggering full refetch');
+      setLastRefetch(Date.now());
+    } catch (err) {
+      console.error('[SEND ERROR]', err);
+      toast({ title: "Failed to send", variant: "destructive" });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleGift = (giftType: GiftInputGiftType) => {
@@ -386,7 +402,7 @@ export function ChatDetail() {
             </div>
           );
         })}
-        {sendMsg.isPending && (
+        {isSending && (
           <div className="mr-auto p-3 rounded-2xl bg-card border border-border rounded-tl-sm text-muted-foreground text-sm flex gap-1">
             <span className="animate-bounce">.</span><span className="animate-bounce delay-75">.</span><span className="animate-bounce delay-150">.</span>
           </div>
@@ -417,7 +433,7 @@ export function ChatDetail() {
         />
         <button
           onClick={handleSend}
-          disabled={!input.trim() || sendMsg.isPending}
+          disabled={!input.trim() || isSending}
           className="p-2.5 rounded-full bg-primary text-white box-glow-pink shrink-0 disabled:opacity-50"
         >
           <Send size={20} className="ml-0.5" />
