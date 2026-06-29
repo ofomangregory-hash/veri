@@ -1,0 +1,72 @@
+In imageGenerator.ts only. Do not touch any other files.
+The 500ms delay isn't enough and the retry on 429 isn't working. Fix the Pollinations request with proper exponential backoff:
+typescriptasync function tryPollinations(
+  characterName: string,
+  stylePrefix: string,
+  subGenres: string[],
+  imageSeed: number
+): Promise<string | null> {
+  const parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
+  const cleanPrompt = parts.join(', ').replace(/,\s*$/, '').trim();
+  const encodedPrompt = encodeURIComponent(cleanPrompt);
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=512&height=512&nologo=true&seed=${imageSeed}`;
+
+  console.log('Image prompt:', cleanPrompt);
+  console.log('Pollinations URL:', url);
+
+  // Try up to 3 times with increasing delays
+  const delays = [0, 2000, 4000];
+  
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (delays[attempt] > 0) {
+      console.log(`Pollinations retry attempt ${attempt + 1}, waiting ${delays[attempt]}ms`);
+      await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+    }
+
+    try {
+      const check = await fetch(url, {
+        method: 'HEAD',
+        headers: { 'Referer': 'https://pollinations.ai' },
+        signal: AbortSignal.timeout(30000)
+      });
+
+      console.log(`Pollinations status (attempt ${attempt + 1}):`, check.status);
+
+      if (check.ok) {
+        console.log('Pollinations success — returning URL directly');
+        return url;
+      }
+
+      if (check.status === 429) {
+        console.log('Pollinations 429 rate limit — will retry');
+        continue; // retry with next delay
+      }
+
+      if (check.status === 500 || check.status === 503) {
+        console.log('Pollinations server error — trying fallback prompt');
+        break; // go to fallback prompt
+      }
+
+      console.log('Pollinations check failed:', check.status);
+      break;
+
+    } catch (err: any) {
+      console.log(`Pollinations error (attempt ${attempt + 1}):`, err?.message);
+      if (attempt < 2) continue;
+    }
+  }
+
+  return null;
+}
+Also add a 1 second minimum gap between ALL image generation calls using a module-level timestamp:
+typescriptlet lastImageRequestTime = 0;
+
+// At the start of every image generation call:
+const now = Date.now();
+const timeSinceLast = now - lastImageRequestTime;
+if (timeSinceLast < 1000) {
+  await new Promise(resolve => setTimeout(resolve, 1000 - timeSinceLast));
+}
+lastImageRequestTime = Date.now();
+Do not touch any other files.
+Sonnet 4.6 Low
