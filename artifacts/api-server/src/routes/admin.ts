@@ -33,6 +33,27 @@ import { getBot } from "../lib/telegram-bot";
 
 const router: IRouter = Router();
 
+// Mapping from appearance field key (snake_case) to Drizzle column name (camelCase)
+const APPEARANCE_KEY_TO_DRIZZLE: Record<string, keyof typeof charactersTable.$inferInsert> = {
+  hair_color: 'hairColor', hair_length: 'hairLength', eye_color: 'eyeColor',
+  height: 'height', build: 'build', skin_tone: 'skinTone', species: 'species',
+  ear_type: 'earType', distinguishing_feature: 'distinguishingFeature',
+  voice_tone: 'voiceTone', hairstyle: 'hairstyle',
+  facial_expression_default: 'facialExpressionDefault', accessory: 'accessory',
+  tail_wings: 'tailWings', body_markings: 'bodyMarkings', posture: 'posture',
+  color_palette: 'colorPalette', occupation_look: 'occupationLook',
+  cultural_style: 'culturalStyle', ass_size: 'assSize', chest_size: 'chestSize',
+  camera_shot_type: 'cameraShotType', view_direction: 'viewDirection',
+  camera_angle: 'cameraAngle', gender_base_mesh: 'genderBaseMesh',
+  eye_detail_enhancer: 'eyeDetailEnhancer', clothing_material_finish: 'clothingMaterialFinish',
+  legwear_socks_style: 'legwearSocksStyle', environment_setting: 'environmentSetting',
+  lighting_style: 'lightingStyle', rendering_engine: 'renderingEngine',
+  bangs_style: 'bangsStyle', makeup_style: 'makeupStyle', outfit_fit: 'outfitFit',
+  image_focus: 'imageFocus', thigh_hip_size: 'thighHipSize',
+  skin_texture_realism: 'skinTextureRealism', negative_prompts_filter: 'negativePromptsFilter',
+  outfit_cleavage_cut: 'outfitCleavageCut',
+};
+
 function serializeCharacter(c: typeof charactersTable.$inferSelect) {
   return {
     characterId: c.characterId,
@@ -411,14 +432,27 @@ router.patch("/admin/characters/:characterId/overlay", async (req, res): Promise
   res.json({ key, value });
 });
 
+// GET /admin/characters/:characterId/appearance — read appearance columns from local DB
+router.get("/admin/characters/:characterId/appearance", adminOnly, async (req, res): Promise<void> => {
+  const { characterId } = req.params;
+  const [row] = await db.select().from(charactersTable).where(eq(charactersTable.characterId, characterId));
+  if (!row) { res.status(404).json({ error: "Character not found" }); return; }
+  const appearance: Record<string, string | null> = {};
+  for (const [key, col] of Object.entries(APPEARANCE_KEY_TO_DRIZZLE)) {
+    appearance[key] = (row[col as keyof typeof row] as string | null | undefined) ?? null;
+  }
+  res.json({ appearance, hybridSpecies: row.hybridSpecies ?? null });
+});
+
 // Full edit a character via Supabase
 router.patch("/admin/characters/:characterId", async (req, res): Promise<void> => {
   const { characterId } = req.params;
-  const { name, bio, initialGreeting, avatarUrl, visibility, isNsfw, tags, systemPrompt, background, personality, age, genre, subGenres, tagline, imageSeed, styleDescriptor } = req.body as {
+  const { name, bio, initialGreeting, avatarUrl, visibility, isNsfw, tags, systemPrompt, background, personality, age, genre, subGenres, tagline, imageSeed, styleDescriptor, appearance, hybridSpecies } = req.body as {
     name?: string; bio?: string; initialGreeting?: string; avatarUrl?: string;
     visibility?: "public" | "private" | "premium"; isNsfw?: boolean; tags?: string[]; systemPrompt?: string;
     background?: string; personality?: string; age?: number; genre?: string; subGenres?: string[];
     tagline?: string | null; imageSeed?: string | null; styleDescriptor?: string | null;
+    appearance?: Record<string, string | null>; hybridSpecies?: string | null;
   };
 
   let finalTags: string[] | undefined;
@@ -427,6 +461,30 @@ router.patch("/admin/characters/:characterId", async (req, res): Promise<void> =
   } else if (typeof isNsfw === "boolean") {
     const current = await getSupabaseCharacterById(characterId);
     finalTags = current?.tags ?? [];
+  }
+
+  // Build a styleDescriptor from appearance fields if provided and no explicit styleDescriptor
+  let computedStyleDescriptor = styleDescriptor;
+  if (appearance && typeof appearance === "object" && computedStyleDescriptor === undefined) {
+    const ap = appearance;
+    const apParts: string[] = [];
+    if (ap.hair_color || ap.hair_length) apParts.push(`${[ap.hair_color, ap.hair_length].filter(Boolean).join(" ")} hair`);
+    if (ap.eye_color) apParts.push(`${ap.eye_color} eyes`);
+    if (ap.gender_base_mesh) apParts.push(ap.gender_base_mesh);
+    if (ap.species) apParts.push(ap.species === "Hybrid" && hybridSpecies ? `hybrid (${hybridSpecies})` : ap.species ?? "");
+    if (ap.build) apParts.push(`${ap.build} build`);
+    if (ap.height) apParts.push(`${ap.height} height`);
+    if (ap.skin_tone) apParts.push(`${ap.skin_tone} skin`);
+    if (ap.chest_size) apParts.push(`${ap.chest_size} chest`);
+    if (ap.hairstyle) apParts.push(`${ap.hairstyle} hairstyle`);
+    if (ap.makeup_style) apParts.push(`${ap.makeup_style} makeup`);
+    if (ap.outfit_fit) apParts.push(`${ap.outfit_fit} outfit`);
+    if (ap.clothing_material_finish) apParts.push(`${ap.clothing_material_finish} material`);
+    if (ap.environment_setting) apParts.push(ap.environment_setting);
+    if (ap.lighting_style) apParts.push(ap.lighting_style);
+    if (ap.camera_shot_type) apParts.push(ap.camera_shot_type);
+    if (ap.rendering_engine) apParts.push(ap.rendering_engine);
+    if (apParts.length > 0) computedStyleDescriptor = apParts.filter(Boolean).join(", ");
   }
 
   const updated = await updateSupabaseCharacter(characterId, {
@@ -445,7 +503,7 @@ router.patch("/admin/characters/:characterId", async (req, res): Promise<void> =
     subGenres: Array.isArray(subGenres) ? subGenres : undefined,
     tagline: tagline !== undefined ? (tagline || null) : undefined,
     imageSeed: imageSeed !== undefined ? (imageSeed || null) : undefined,
-    styleDescriptor: styleDescriptor !== undefined ? (styleDescriptor || null) : undefined,
+    styleDescriptor: computedStyleDescriptor !== undefined ? (computedStyleDescriptor || null) : undefined,
   });
 
   if (!updated) {
@@ -453,6 +511,25 @@ router.patch("/admin/characters/:characterId", async (req, res): Promise<void> =
     res.status(500).json({ error: "Failed to update character" });
     return;
   }
+
+  // Also persist individual appearance columns to local Drizzle DB
+  if (appearance && typeof appearance === "object") {
+    try {
+      const localUpdate: Partial<typeof charactersTable.$inferInsert> = {};
+      for (const [key, col] of Object.entries(APPEARANCE_KEY_TO_DRIZZLE)) {
+        if (key in appearance) {
+          (localUpdate as Record<string, unknown>)[col] = appearance[key] || null;
+        }
+      }
+      if (hybridSpecies !== undefined) localUpdate.hybridSpecies = hybridSpecies || null;
+      if (Object.keys(localUpdate).length > 0) {
+        await db.update(charactersTable).set(localUpdate).where(eq(charactersTable.characterId, characterId));
+      }
+    } catch (err) {
+      logger.error({ err, characterId }, "PATCH /admin/characters: failed to update local appearance columns");
+    }
+  }
+
   res.json(updated);
 });
 

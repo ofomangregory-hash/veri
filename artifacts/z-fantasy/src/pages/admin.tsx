@@ -70,6 +70,49 @@ function tierColor(tier: string) {
   return "text-muted-foreground border-border bg-muted/20";
 }
 
+// Appearance fields shared between Quick Create and per-character edit drawer
+const ADMIN_APPEARANCE_FIELDS: Array<{ key: string; label: string; options: string[] }> = [
+  { key: "gender_base_mesh",       label: "Gender / Base Mesh",         options: ["Female", "Male", "Non-binary", "Androgynous"] },
+  { key: "hair_color",             label: "Hair Color",                  options: ["Black", "Brown", "Blonde", "Red", "White", "Pink", "Blue", "Purple"] },
+  { key: "hair_length",            label: "Hair Length",                 options: ["Short", "Medium", "Long"] },
+  { key: "hairstyle",              label: "Hairstyle",                   options: ["Straight", "Wavy", "Curly", "Braided", "Ponytail", "Twin-tails"] },
+  { key: "bangs_style",            label: "Bangs Style",                 options: ["Blunt Bangs", "Side-swept Bangs", "Curtain Bangs", "See-through Bangs", "Forehead Exposed"] },
+  { key: "eye_color",              label: "Eye Color",                   options: ["Brown", "Blue", "Green", "Hazel", "Gray", "Violet"] },
+  { key: "eye_detail_enhancer",    label: "Eye Detail Enhancer",         options: ["Sparkling", "Glowing", "Sharp", "Droopy", "Pupilless"] },
+  { key: "facial_expression_default", label: "Default Expression",       options: ["Smiling", "Neutral", "Serious", "Playful", "Shy"] },
+  { key: "makeup_style",           label: "Makeup Style",                options: ["Natural", "Gothic", "Glamour", "Cosplay/Alt", "None"] },
+  { key: "species",                label: "Species / Race",              options: ["Human", "Elf", "Demon", "Angel", "Vampire", "Android", "Hybrid"] },
+  { key: "ear_type",               label: "Ear Type",                    options: ["Human", "Pointed", "Animal"] },
+  { key: "height",                 label: "Height",                      options: ["Short", "Average", "Tall"] },
+  { key: "build",                  label: "Build",                       options: ["Slim", "Athletic", "Average", "Curvy"] },
+  { key: "skin_tone",              label: "Skin Tone",                   options: ["Fair", "Light", "Medium", "Tan", "Dark"] },
+  { key: "skin_texture_realism",   label: "Skin Texture Realism",        options: ["Smooth 2D", "Textured Matt", "Pore Detail (Realistic Mode)", "Flawless Satin"] },
+  { key: "chest_size",             label: "Chest Size",                  options: ["Small", "Medium", "Large", "Ample", "Voluptuous", "Exaggerated"] },
+  { key: "ass_size",               label: "Ass Size",                    options: ["Subtle", "Balanced", "Well-rounded", "Voluptuous", "Exaggerated"] },
+  { key: "thigh_hip_size",         label: "Thigh / Hip Size",            options: ["Slim", "Proportional", "Wide", "Thick", "Hourglass"] },
+  { key: "distinguishing_feature", label: "Distinguishing Feature",      options: ["Freckles", "Scar", "Tattoo", "Birthmark", "Heterochromia", "None"] },
+  { key: "body_markings",          label: "Body Markings",               options: ["Freckles", "Tattoos", "Scars", "Birthmarks", "None"] },
+  { key: "accessory",              label: "Accessory",                   options: ["Glasses", "Earrings", "Necklace", "Headband", "None"] },
+  { key: "tail_wings",             label: "Tail / Wings",                options: ["Tail", "Wings", "Both", "None"] },
+  { key: "posture",                label: "Posture",                     options: ["Confident", "Reserved", "Energetic", "Calm"] },
+  { key: "voice_tone",             label: "Voice Tone",                  options: ["Soft", "Husky", "Cheerful", "Stoic", "Playful"] },
+  { key: "occupation_look",        label: "Occupation Look",             options: ["Casual", "Formal", "Uniformed", "Armored", "Streetwear"] },
+  { key: "outfit_fit",             label: "Outfit Fit",                  options: ["Skin-tight", "Form-fitting", "Regular Fit", "Loose", "Oversized"] },
+  { key: "outfit_cleavage_cut",    label: "Outfit Cleavage / Cut",       options: ["High Neck", "V-Neck", "Plunging", "Off-shoulder", "Backless", "Covered"] },
+  { key: "clothing_material_finish", label: "Clothing Material",         options: ["Matte Fabric", "Leather", "Silk/Satin", "Glossy Latex", "Denim", "Lace", "Metallic Plate"] },
+  { key: "legwear_socks_style",    label: "Legwear / Socks Style",       options: ["Thigh-high stockings", "Fishnets", "Crew socks", "Barefoot", "Tights", "None"] },
+  { key: "color_palette",          label: "Color Palette",               options: ["Warm tones", "Cool tones", "Monochrome", "Pastel", "Neon"] },
+  { key: "cultural_style",         label: "Cultural Style",              options: ["Western", "Eastern", "Futuristic", "Medieval", "Tribal"] },
+  { key: "environment_setting",    label: "Environment Setting",         options: ["Studio Room", "Blurred Indoor Bokeh", "Outdoor Nature", "Cyberpunk Cityscape", "Abstract Gradient"] },
+  { key: "lighting_style",         label: "Lighting Style",              options: ["Studio Lighting", "Cinematic Soft Glow", "Dramatic Shadows", "Neon Rim Lighting", "Golden Hour"] },
+  { key: "camera_shot_type",       label: "Camera Shot Type",            options: ["Avatar Portrait (Close-up)", "Bust Shot", "Upper Body", "Full Body Portrait"] },
+  { key: "camera_angle",           label: "Camera Angle",                options: ["Eye Level", "Low Angle", "High Angle", "Cinematic Dutch Angle"] },
+  { key: "view_direction",         label: "View Direction",              options: ["Looking at viewer", "Looking away", "Profile side-view", "Looking over shoulder"] },
+  { key: "image_focus",            label: "Image Focus",                 options: ["Face Focus", "Upper Body Focus", "Outfit Focus", "Atmospheric/Background Focus"] },
+  { key: "rendering_engine",       label: "Rendering Engine",            options: ["Clean Digital Line Art", "Soft Cell Shading", "Photorealistic Vector", "Hyper-Detailed 2D"] },
+  { key: "negative_prompts_filter", label: "Negative Prompts Filter",    options: ["Low Quality Filter", "Deformed Hands Filter", "Asymmetry Filter", "Text/Watermark Scrub"] },
+];
+
 export function Admin() {
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
@@ -320,6 +363,8 @@ export function Admin() {
   const [charDrawerTagline, setCharDrawerTagline] = useState("");
   const [charDrawerImageSeed, setCharDrawerImageSeed] = useState("");
   const [charDrawerCreator, setCharDrawerCreator] = useState<string | null>(null);
+  const [charDrawerAppearance, setCharDrawerAppearance] = useState<Record<string, string>>({});
+  const [charDrawerHybridSpecies, setCharDrawerHybridSpecies] = useState("");
   const [savingChar, setSavingChar] = useState(false);
 
   const openUserDrawer = async (userId: string) => {
@@ -369,7 +414,7 @@ export function Admin() {
     }
   };
 
-  const openCharDrawer = (char: NonNullable<typeof charsData>["items"][0] & { creatorUsername?: string | null }) => {
+  const openCharDrawer = async (char: NonNullable<typeof charsData>["items"][0] & { creatorUsername?: string | null }) => {
     setCharDrawerCharId(char.characterId);
     setCharDrawerName(char.name);
     setCharDrawerBio(char.teaserDescription ?? "");
@@ -387,7 +432,27 @@ export function Admin() {
     setCharDrawerTagline((char as unknown as { tagline?: string | null }).tagline ?? "");
     setCharDrawerImageSeed(String((char as unknown as { imageSeed?: string | number | null }).imageSeed ?? ""));
     setCharDrawerCreator(char.creatorUsername ?? null);
+    // Start with blank appearance — pre-fill from local DB after opening
+    setCharDrawerAppearance(Object.fromEntries(ADMIN_APPEARANCE_FIELDS.map(f => [f.key, ""])));
+    setCharDrawerHybridSpecies("");
     setCharDrawerOpen(true);
+    // Async fetch appearance from local DB (old chars return all nulls → blank, not errors)
+    const fetchedForId = char.characterId;
+    try {
+      const apData = await adminApi<{ appearance: Record<string, string | null>; hybridSpecies: string | null }>(
+        "GET", `/admin/characters/${fetchedForId}/appearance`
+      );
+      // Guard against race: only apply if the drawer still shows this character
+      setCharDrawerCharId(currentId => {
+        if (currentId === fetchedForId) {
+          setCharDrawerAppearance(Object.fromEntries(ADMIN_APPEARANCE_FIELDS.map(f => [f.key, apData.appearance?.[f.key] ?? ""])));
+          setCharDrawerHybridSpecies(apData.hybridSpecies ?? "");
+        }
+        return currentId;
+      });
+    } catch {
+      // Old character or fetch failed — leave blank, not an error
+    }
   };
 
   const saveCharChanges = async () => {
@@ -395,6 +460,10 @@ export function Admin() {
     setSavingChar(true);
     try {
       const tags = charDrawerTags.split(",").map(t => t.trim()).filter(Boolean);
+      const appearancePayload: Record<string, string | null> = {};
+      for (const f of ADMIN_APPEARANCE_FIELDS) {
+        appearancePayload[f.key] = charDrawerAppearance[f.key] || null;
+      }
       await adminApi("PATCH", `/admin/characters/${charDrawerCharId}`, {
         name: charDrawerName.trim() || undefined,
         bio: charDrawerBio || undefined,
@@ -411,6 +480,8 @@ export function Admin() {
         background: charDrawerBackground || null,
         tagline: charDrawerTagline || null,
         imageSeed: charDrawerImageSeed || null,
+        appearance: appearancePayload,
+        hybridSpecies: charDrawerHybridSpecies || null,
       });
       toast({ title: `✅ Character updated` });
       setCharDrawerOpen(false);
@@ -472,48 +543,6 @@ export function Admin() {
   const [showAppearance, setShowAppearance] = useState(false);
   const [adminCustomInput, setAdminCustomInput] = useState<Record<string, string>>({});
   const [adminShowCustom, setAdminShowCustom] = useState<Record<string, boolean>>({});
-
-  const ADMIN_APPEARANCE_FIELDS: Array<{ key: string; label: string; options: string[] }> = [
-    { key: "gender_base_mesh",       label: "Gender / Base Mesh",         options: ["Female", "Male", "Non-binary", "Androgynous"] },
-    { key: "hair_color",             label: "Hair Color",                  options: ["Black", "Brown", "Blonde", "Red", "White", "Pink", "Blue", "Purple"] },
-    { key: "hair_length",            label: "Hair Length",                 options: ["Short", "Medium", "Long"] },
-    { key: "hairstyle",              label: "Hairstyle",                   options: ["Straight", "Wavy", "Curly", "Braided", "Ponytail", "Twin-tails"] },
-    { key: "bangs_style",            label: "Bangs Style",                 options: ["Blunt Bangs", "Side-swept Bangs", "Curtain Bangs", "See-through Bangs", "Forehead Exposed"] },
-    { key: "eye_color",              label: "Eye Color",                   options: ["Brown", "Blue", "Green", "Hazel", "Gray", "Violet"] },
-    { key: "eye_detail_enhancer",    label: "Eye Detail Enhancer",         options: ["Sparkling", "Glowing", "Sharp", "Droopy", "Pupilless"] },
-    { key: "facial_expression_default", label: "Default Expression",       options: ["Smiling", "Neutral", "Serious", "Playful", "Shy"] },
-    { key: "makeup_style",           label: "Makeup Style",                options: ["Natural", "Gothic", "Glamour", "Cosplay/Alt", "None"] },
-    { key: "species",                label: "Species / Race",              options: ["Human", "Elf", "Demon", "Angel", "Vampire", "Android", "Hybrid"] },
-    { key: "ear_type",               label: "Ear Type",                    options: ["Human", "Pointed", "Animal"] },
-    { key: "height",                 label: "Height",                      options: ["Short", "Average", "Tall"] },
-    { key: "build",                  label: "Build",                       options: ["Slim", "Athletic", "Average", "Curvy"] },
-    { key: "skin_tone",              label: "Skin Tone",                   options: ["Fair", "Light", "Medium", "Tan", "Dark"] },
-    { key: "skin_texture_realism",   label: "Skin Texture Realism",        options: ["Smooth 2D", "Textured Matt", "Pore Detail (Realistic Mode)", "Flawless Satin"] },
-    { key: "chest_size",             label: "Chest Size",                  options: ["Small", "Medium", "Large", "Ample", "Voluptuous", "Exaggerated"] },
-    { key: "ass_size",               label: "Ass Size",                    options: ["Subtle", "Balanced", "Well-rounded", "Voluptuous", "Exaggerated"] },
-    { key: "thigh_hip_size",         label: "Thigh / Hip Size",            options: ["Slim", "Proportional", "Wide", "Thick", "Hourglass"] },
-    { key: "distinguishing_feature", label: "Distinguishing Feature",      options: ["Freckles", "Scar", "Tattoo", "Birthmark", "Heterochromia", "None"] },
-    { key: "body_markings",          label: "Body Markings",               options: ["Freckles", "Tattoos", "Scars", "Birthmarks", "None"] },
-    { key: "accessory",              label: "Accessory",                   options: ["Glasses", "Earrings", "Necklace", "Headband", "None"] },
-    { key: "tail_wings",             label: "Tail / Wings",                options: ["Tail", "Wings", "Both", "None"] },
-    { key: "posture",                label: "Posture",                     options: ["Confident", "Reserved", "Energetic", "Calm"] },
-    { key: "voice_tone",             label: "Voice Tone",                  options: ["Soft", "Husky", "Cheerful", "Stoic", "Playful"] },
-    { key: "occupation_look",        label: "Occupation Look",             options: ["Casual", "Formal", "Uniformed", "Armored", "Streetwear"] },
-    { key: "outfit_fit",             label: "Outfit Fit",                  options: ["Skin-tight", "Form-fitting", "Regular Fit", "Loose", "Oversized"] },
-    { key: "outfit_cleavage_cut",    label: "Outfit Cleavage / Cut",       options: ["High Neck", "V-Neck", "Plunging", "Off-shoulder", "Backless", "Covered"] },
-    { key: "clothing_material_finish", label: "Clothing Material",         options: ["Matte Fabric", "Leather", "Silk/Satin", "Glossy Latex", "Denim", "Lace", "Metallic Plate"] },
-    { key: "legwear_socks_style",    label: "Legwear / Socks Style",       options: ["Thigh-high stockings", "Fishnets", "Crew socks", "Barefoot", "Tights", "None"] },
-    { key: "color_palette",          label: "Color Palette",               options: ["Warm tones", "Cool tones", "Monochrome", "Pastel", "Neon"] },
-    { key: "cultural_style",         label: "Cultural Style",              options: ["Western", "Eastern", "Futuristic", "Medieval", "Tribal"] },
-    { key: "environment_setting",    label: "Environment Setting",         options: ["Studio Room", "Blurred Indoor Bokeh", "Outdoor Nature", "Cyberpunk Cityscape", "Abstract Gradient"] },
-    { key: "lighting_style",         label: "Lighting Style",              options: ["Studio Lighting", "Cinematic Soft Glow", "Dramatic Shadows", "Neon Rim Lighting", "Golden Hour"] },
-    { key: "camera_shot_type",       label: "Camera Shot Type",            options: ["Avatar Portrait (Close-up)", "Bust Shot", "Upper Body", "Full Body Portrait"] },
-    { key: "camera_angle",           label: "Camera Angle",                options: ["Eye Level", "Low Angle", "High Angle", "Cinematic Dutch Angle"] },
-    { key: "view_direction",         label: "View Direction",              options: ["Looking at viewer", "Looking away", "Profile side-view", "Looking over shoulder"] },
-    { key: "image_focus",            label: "Image Focus",                 options: ["Face Focus", "Upper Body Focus", "Outfit Focus", "Atmospheric/Background Focus"] },
-    { key: "rendering_engine",       label: "Rendering Engine",            options: ["Clean Digital Line Art", "Soft Cell Shading", "Photorealistic Vector", "Hyper-Detailed 2D"] },
-    { key: "negative_prompts_filter", label: "Negative Prompts Filter",    options: ["Low Quality Filter", "Deformed Hands Filter", "Asymmetry Filter", "Text/Watermark Scrub"] },
-  ];
 
   const loadConfigs = useCallback(async () => {
     setConfigsLoading(true);
@@ -682,7 +711,15 @@ export function Admin() {
         hybridSpecies: newChar.hybrid_species || undefined,
       });
       toast({ title: `✅ ${newChar.name} created as ${newChar.visibility}!` });
-      setNewChar({ name: "", bio: "", age: "", genre: "Modern", tags: "", avatarUrl: "", initialGreeting: "", visibility: "private" });
+      setNewChar({ name: "", bio: "", age: "", genre: "Modern", tags: "", avatarUrl: "", initialGreeting: "", visibility: "private",
+        hair_color: "", hair_length: "", eye_color: "", height: "", build: "", skin_tone: "", species: "",
+        hybrid_species: "", ear_type: "", distinguishing_feature: "", voice_tone: "", hairstyle: "",
+        facial_expression_default: "", accessory: "", tail_wings: "", body_markings: "", posture: "",
+        color_palette: "", occupation_look: "", cultural_style: "", ass_size: "", chest_size: "",
+        camera_shot_type: "", view_direction: "", camera_angle: "", gender_base_mesh: "", eye_detail_enhancer: "",
+        clothing_material_finish: "", legwear_socks_style: "", environment_setting: "", lighting_style: "",
+        rendering_engine: "", bangs_style: "", makeup_style: "", outfit_fit: "", image_focus: "",
+        thigh_hip_size: "", skin_texture_realism: "", negative_prompts_filter: "", outfit_cleavage_cut: "" });
       setShowCreateForm(false);
     } catch (e) { toast({ title: "Create failed", description: String(e), variant: "destructive" }); }
     finally { setCreating(false); }
@@ -2646,6 +2683,8 @@ export function Admin() {
         charDrawerTagline={charDrawerTagline} setCharDrawerTagline={setCharDrawerTagline}
         charDrawerImageSeed={charDrawerImageSeed} setCharDrawerImageSeed={setCharDrawerImageSeed}
         charDrawerCreator={charDrawerCreator}
+        charDrawerAppearance={charDrawerAppearance} setCharDrawerAppearance={setCharDrawerAppearance}
+        charDrawerHybridSpecies={charDrawerHybridSpecies} setCharDrawerHybridSpecies={setCharDrawerHybridSpecies}
         savingChar={savingChar}
         saveCharChanges={saveCharChanges}
         onClose={() => setCharDrawerOpen(false)}
@@ -2994,6 +3033,8 @@ interface CharDrawerPanelProps {
   charDrawerTagline: string; setCharDrawerTagline: (v: string) => void;
   charDrawerImageSeed: string; setCharDrawerImageSeed: (v: string) => void;
   charDrawerCreator: string | null;
+  charDrawerAppearance: Record<string, string>; setCharDrawerAppearance: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  charDrawerHybridSpecies: string; setCharDrawerHybridSpecies: (v: string) => void;
   savingChar: boolean;
   saveCharChanges: () => void;
   onClose: () => void;
@@ -3136,9 +3177,12 @@ function AvatarsSection({ characterId, token }: { characterId: string; token: st
   );
 }
 
-function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charDrawerBio, setCharDrawerBio, charDrawerGreeting, setCharDrawerGreeting, charDrawerAvatar, setCharDrawerAvatar, charDrawerPrompt, setCharDrawerPrompt, charDrawerTags, setCharDrawerTags, charDrawerVisibility, setCharDrawerVisibility, charDrawerNsfw, setCharDrawerNsfw, charDrawerGenre, setCharDrawerGenre, charDrawerSubGenres, setCharDrawerSubGenres, charDrawerAge, setCharDrawerAge, charDrawerPersonality, setCharDrawerPersonality, charDrawerBackground, setCharDrawerBackground, charDrawerTagline, setCharDrawerTagline, charDrawerImageSeed, setCharDrawerImageSeed, charDrawerCreator, savingChar, saveCharChanges, onClose }: CharDrawerPanelProps) {
+function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charDrawerBio, setCharDrawerBio, charDrawerGreeting, setCharDrawerGreeting, charDrawerAvatar, setCharDrawerAvatar, charDrawerPrompt, setCharDrawerPrompt, charDrawerTags, setCharDrawerTags, charDrawerVisibility, setCharDrawerVisibility, charDrawerNsfw, setCharDrawerNsfw, charDrawerGenre, setCharDrawerGenre, charDrawerSubGenres, setCharDrawerSubGenres, charDrawerAge, setCharDrawerAge, charDrawerPersonality, setCharDrawerPersonality, charDrawerBackground, setCharDrawerBackground, charDrawerTagline, setCharDrawerTagline, charDrawerImageSeed, setCharDrawerImageSeed, charDrawerCreator, charDrawerAppearance, setCharDrawerAppearance, charDrawerHybridSpecies, setCharDrawerHybridSpecies, savingChar, saveCharChanges, onClose }: CharDrawerPanelProps) {
   const token = (window as typeof window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
   const [avatarGenerating, setAvatarGenerating] = useState(false);
+  const [showAppearanceSection, setShowAppearanceSection] = useState(false);
+  const [drawerShowCustom, setDrawerShowCustom] = useState<Record<string, boolean>>({});
+  const [drawerCustomInput, setDrawerCustomInput] = useState<Record<string, string>>({});
   const generateAvatarUrl = async () => {
     if (!characterId) return;
     setAvatarGenerating(true);
@@ -3259,6 +3303,116 @@ function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charD
               className="bg-card border-border h-10 text-sm" placeholder="Leave blank for random" type="number" />
             <p className="text-[10px] text-muted-foreground">Controls the Pollinations image generation seed — same seed = consistent look.</p>
           </div>
+
+          {/* ── Appearance Details ──────────────────────────────────────────── */}
+          <div className="border-t border-border/50 pt-3">
+            <button
+              type="button"
+              onClick={() => setShowAppearanceSection(p => !p)}
+              className="w-full flex items-center justify-between py-2 px-3 rounded-lg border border-border bg-muted/10 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all"
+            >
+              <span>✨ Appearance Details (optional)</span>
+              <span>{showAppearanceSection ? "▲" : "▼"}</span>
+            </button>
+            {showAppearanceSection && (
+              <div className="mt-3 space-y-4">
+                {ADMIN_APPEARANCE_FIELDS.map(field => {
+                  const current = charDrawerAppearance[field.key] ?? "";
+                  return (
+                    <div key={field.key}>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">{field.label}</label>
+                        {current && (
+                          <button
+                            onClick={() => {
+                              setCharDrawerAppearance(p => ({ ...p, [field.key]: "" }));
+                              if (field.key === "species") setCharDrawerHybridSpecies("");
+                            }}
+                            className="text-[9px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                          >
+                            clear
+                          </button>
+                        )}
+                      </div>
+                      {field.key === "species" && current === "Hybrid" && (
+                        <input
+                          value={charDrawerHybridSpecies}
+                          onChange={e => setCharDrawerHybridSpecies(e.target.value)}
+                          placeholder="Hybrid of which species?"
+                          maxLength={64}
+                          className="mb-1.5 w-full h-8 rounded-md border border-accent/40 bg-background px-2 text-xs text-white focus:outline-none focus:border-accent/60"
+                        />
+                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {field.options.map(opt => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => {
+                              setCharDrawerAppearance(p => ({ ...p, [field.key]: p[field.key] === opt ? "" : opt }));
+                              if (field.key === "species" && opt !== "Hybrid") setCharDrawerHybridSpecies("");
+                            }}
+                            className={`px-2 py-1 rounded-md text-[10px] font-semibold border transition-all ${
+                              current === opt
+                                ? "bg-primary/25 text-primary border-primary/50"
+                                : "bg-card text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-primary/30"
+                            }`}
+                          >
+                            {current === opt && "✓ "}{opt}
+                          </button>
+                        ))}
+                      </div>
+                      {drawerShowCustom[field.key] ? (
+                        <div className="flex gap-1.5 mt-1">
+                          <input
+                            autoFocus
+                            value={drawerCustomInput[field.key] ?? ""}
+                            onChange={e => setDrawerCustomInput(p => ({ ...p, [field.key]: e.target.value }))}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") {
+                                const val = (drawerCustomInput[field.key] ?? "").trim();
+                                if (val) {
+                                  setCharDrawerAppearance(p => ({ ...p, [field.key]: val }));
+                                  setDrawerCustomInput(p => ({ ...p, [field.key]: "" }));
+                                  setDrawerShowCustom(p => ({ ...p, [field.key]: false }));
+                                }
+                              }
+                            }}
+                            placeholder="Custom value..."
+                            maxLength={48}
+                            className="flex-1 h-7 rounded-md border border-accent/40 bg-background px-2 text-[10px] text-white focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const val = (drawerCustomInput[field.key] ?? "").trim();
+                              if (val) {
+                                setCharDrawerAppearance(p => ({ ...p, [field.key]: val }));
+                                setDrawerCustomInput(p => ({ ...p, [field.key]: "" }));
+                                setDrawerShowCustom(p => ({ ...p, [field.key]: false }));
+                              }
+                            }}
+                            className="px-2 h-7 rounded-md bg-accent/15 text-accent text-[9px] font-bold border border-accent/30 hover:bg-accent/25"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setDrawerShowCustom(p => ({ ...p, [field.key]: true }))}
+                          className="mt-1 text-[9px] text-muted-foreground/40 hover:text-accent/60 transition-colors"
+                        >
+                          ➕ Custom
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">System Prompt Override</label>
             <textarea value={charDrawerPrompt} onChange={e => setCharDrawerPrompt(e.target.value)}
