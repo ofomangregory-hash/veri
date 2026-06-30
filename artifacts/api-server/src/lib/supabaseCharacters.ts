@@ -298,6 +298,7 @@ export async function updateSupabaseCharacter(
     personality?: string | null;
     age?: number;
     imageSeed?: string | null;
+    styleDescriptor?: string | null;
   }
 ): Promise<NormalizedCharacter | null> {
   // ── Supabase path ──────────────────────────────────────────────────────────
@@ -316,6 +317,7 @@ export async function updateSupabaseCharacter(
     if (typeof values.age === "number") payload.age = values.age;
     if (values.tagline !== undefined) payload.tagline = values.tagline;
     if (values.imageSeed !== undefined) payload.image_seed = values.imageSeed ? parseInt(values.imageSeed, 10) : null;
+    if (values.styleDescriptor !== undefined) payload.style_descriptor = values.styleDescriptor;
     if (typeof values.isNsfw === "boolean") {
       const currentTags = (values.tags ?? []);
       const baseTags = currentTags.filter(t => t !== "#NSFW");
@@ -359,6 +361,7 @@ export async function updateSupabaseCharacter(
           genre: values.genre ?? localRow.genre ?? null,
           tagline: values.tagline !== undefined ? values.tagline : null,
           image_seed: values.imageSeed !== undefined ? (values.imageSeed ? parseInt(values.imageSeed, 10) : null) : null,
+          style_descriptor: values.styleDescriptor !== undefined ? values.styleDescriptor : null,
           background: values.background !== undefined ? values.background : null,
           personality: values.personality !== undefined ? values.personality : null,
           age: typeof values.age === "number" ? values.age : null,

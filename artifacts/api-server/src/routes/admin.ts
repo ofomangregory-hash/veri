@@ -414,11 +414,11 @@ router.patch("/admin/characters/:characterId/overlay", async (req, res): Promise
 // Full edit a character via Supabase
 router.patch("/admin/characters/:characterId", async (req, res): Promise<void> => {
   const { characterId } = req.params;
-  const { name, bio, initialGreeting, avatarUrl, visibility, isNsfw, tags, systemPrompt, background, personality, age, genre, subGenres, tagline, imageSeed } = req.body as {
+  const { name, bio, initialGreeting, avatarUrl, visibility, isNsfw, tags, systemPrompt, background, personality, age, genre, subGenres, tagline, imageSeed, styleDescriptor } = req.body as {
     name?: string; bio?: string; initialGreeting?: string; avatarUrl?: string;
     visibility?: "public" | "private" | "premium"; isNsfw?: boolean; tags?: string[]; systemPrompt?: string;
     background?: string; personality?: string; age?: number; genre?: string; subGenres?: string[];
-    tagline?: string | null; imageSeed?: string | null;
+    tagline?: string | null; imageSeed?: string | null; styleDescriptor?: string | null;
   };
 
   let finalTags: string[] | undefined;
@@ -445,6 +445,7 @@ router.patch("/admin/characters/:characterId", async (req, res): Promise<void> =
     subGenres: Array.isArray(subGenres) ? subGenres : undefined,
     tagline: tagline !== undefined ? (tagline || null) : undefined,
     imageSeed: imageSeed !== undefined ? (imageSeed || null) : undefined,
+    styleDescriptor: styleDescriptor !== undefined ? (styleDescriptor || null) : undefined,
   });
 
   if (!updated) {

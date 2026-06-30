@@ -16,6 +16,7 @@ export const charactersTable = pgTable("characters", {
   age: text("age"),
   triggerMetadataArray: jsonb("trigger_metadata_array"),
   imageSeed: text("image_seed"),
+  styleDescriptor: text("style_descriptor"),
 });
 
 export const insertCharacterSchema = createInsertSchema(charactersTable).omit({ characterId: true });

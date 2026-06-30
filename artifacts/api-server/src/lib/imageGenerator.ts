@@ -31,6 +31,19 @@ export interface GenerateSelfieOptions {
   contentLevelWords?: string;
   tags?: string[];
   subGenres?: string[];
+  styleDescriptor?: string | null;
+}
+
+export function deriveStyleDescriptor(genre: string, tags: string[]): string {
+  const tagLower = (tags ?? []).map(t => t.toLowerCase());
+  if (tagLower.includes("anime") || genre === "Anime") return "anime style, 2D illustration, vibrant colors";
+  if (tagLower.includes("realistic") || genre === "Realistic") return "realistic digital painting, photorealistic, highly detailed";
+  if (tagLower.includes("3d") || tagLower.includes("pixar")) return "3D render, Pixar style, soft lighting";
+  if (genre === "Dark Goth" || tagLower.includes("vampire") || tagLower.includes("goth")) return "gothic dark art, cinematic shadows, dramatic lighting";
+  if (genre === "Sci-Fi" || tagLower.includes("android") || tagLower.includes("cyberpunk")) return "cyberpunk digital art, neon aesthetic, futuristic";
+  if (genre === "Fantasy" || tagLower.includes("elf") || tagLower.includes("witch")) return "fantasy illustration, magical atmosphere, detailed painting";
+  if (genre === "Modern" || genre === "Romance") return "realistic digital painting, natural lighting, highly detailed";
+  return "cinematic digital art, detailed face, sharp focus, highly detailed";
 }
 
 export interface GenerateAvatarOptions {
@@ -151,13 +164,13 @@ export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Prom
 export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Promise<string> {
   const { characterName, genre, avatarUrl, subGenres = [] } = opts;
 
-  const stylePrefix = getStylePrefix(genre);
-  // Always generate a fresh seed per call — never reuse a cached character-level seed
-  const seed = Math.floor(Math.random() * 10000000000);
-  console.log(`[IMAGE SEED] ${characterName} — fresh seed: ${seed}`);
+  const styleDesc = opts.styleDescriptor ?? getStylePrefix(genre);
+  const seed = parseInt(opts.imageSeed, 10) || Math.floor(Math.random() * 10000000000);
+  console.log(`[IMAGE SEED] ${characterName} — seed: ${seed}`);
+  console.log(`[STYLE] ${characterName} — using style: ${styleDesc}`);
 
   // Primary: Pollinations with character-specific prompt
-  const result = await tryPollinations(characterName, stylePrefix, subGenres, seed);
+  const result = await tryPollinations(characterName, styleDesc, subGenres, seed);
   if (result) return result;
 
   // Fallback: generic portrait prompt

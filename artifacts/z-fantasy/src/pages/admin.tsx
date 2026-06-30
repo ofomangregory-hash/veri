@@ -110,6 +110,7 @@ export function Admin() {
   const [charGenreSaving, setCharGenreSaving] = useState<Record<string, boolean>>({});
   const [charExtEdit, setCharExtEdit] = useState<Record<string, {
     background: string; personality: string; age: string;
+    styleDescriptor: string;
     tags: string[]; tagInput: string;
     visibility: "public" | "private" | "premium"; nsfwEnabled: boolean;
   }>>({});
@@ -244,6 +245,7 @@ export function Admin() {
             background: (char as { background?: string | null }).background ?? "",
             personality: (char as { personality?: string | null }).personality ?? "",
             age: String((char as { age?: string | number | null }).age ?? ""),
+            styleDescriptor: (char as { styleDescriptor?: string | null }).styleDescriptor ?? "",
             tags: ((char as { tags?: string[] }).tags ?? []).filter((t: string) => t !== "#NSFW"),
             tagInput: "",
             visibility: ((char as { visibility?: string }).visibility as "public" | "private" | "premium") ?? "private",
@@ -578,6 +580,7 @@ export function Admin() {
         bio: bio || undefined,
         background: ext.background || undefined,
         personality: ext.personality || undefined,
+        styleDescriptor: ext.styleDescriptor || undefined,
         genre: genre || undefined,
         subGenres,
         age: ext.age ? parseInt(ext.age, 10) : undefined,
@@ -1385,6 +1388,17 @@ export function Admin() {
                               rows={3}
                               placeholder="Personality traits…"
                               className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary/60 resize-none"
+                            />
+                          </div>
+                          {/* Style Descriptor */}
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Style Descriptor <span className="text-primary/60 normal-case">(image style)</span></label>
+                            <input
+                              type="text"
+                              value={ext.styleDescriptor}
+                              onChange={e => setExt({ styleDescriptor: e.target.value })}
+                              placeholder="e.g. anime style, 2D illustration, vibrant colors"
+                              className="w-full h-8 rounded-lg border border-border bg-card px-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
                             />
                           </div>
                           {/* Age */}

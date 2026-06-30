@@ -18,7 +18,7 @@ import {
 import { authMiddleware } from "../middlewares/auth";
 import { generateAIReply } from "../lib/openrouter";
 import { getGenreDefaultAvatar } from "../lib/cloudinary";
-import { generateCharacterSelfie } from "../lib/imageGenerator";
+import { generateCharacterSelfie, deriveStyleDescriptor } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import { getSupabaseCharacterById, type NormalizedCharacter } from "../lib/supabaseCharacters";
 import { getEconomyConfig } from "../lib/economyConfig";
@@ -364,7 +364,27 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
   // ── Image fire logic ───────────────────────────────────────────────────────
   const newMsgCount = conv.messageCount + 1;
   const isFreeTier = tier === "Free";
-  const imageSeed = String(Math.floor(Math.random() * 10000000000));
+
+  // Seed: reuse saved or generate once and persist to local DB
+  let resolvedSeed = character.imageSeed ?? null;
+  if (!resolvedSeed) {
+    resolvedSeed = String(Math.floor(Math.random() * 10000000000));
+    console.log(`[IMAGE SEED] ${character.name} — first seed generated and saved: ${resolvedSeed}`);
+    void db.update(charactersTable).set({ imageSeed: resolvedSeed }).where(eq(charactersTable.characterId, params.data.characterId));
+  } else {
+    console.log(`[IMAGE SEED] ${character.name} — using saved seed: ${resolvedSeed}`);
+  }
+
+  // Style: reuse saved or derive from genre+tags and persist
+  const [_localStyleRow] = await db.select({ styleDescriptor: charactersTable.styleDescriptor }).from(charactersTable).where(eq(charactersTable.characterId, params.data.characterId));
+  let resolvedStyle = _localStyleRow?.styleDescriptor ?? null;
+  if (!resolvedStyle) {
+    resolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? []);
+    console.log(`[STYLE] ${character.name} — derived and saved: ${resolvedStyle}`);
+    void db.update(charactersTable).set({ styleDescriptor: resolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
+  } else {
+    console.log(`[STYLE] ${character.name} — using style: ${resolvedStyle}`);
+  }
   const dailyImageLimit = await getDailyImageLimit(tier, isAdminUser);
   const overDailyLimit = conv.dailyAutoImageCount >= dailyImageLimit;
 
@@ -384,10 +404,11 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
         genre: character.genre ?? "Fantasy",
         systemPrompt,
         teaserDescription: character.teaserDescription,
-        imageSeed,
+        imageSeed: resolvedSeed,
         sceneDescription: triggerScene,
         nsfwEnabled: charNsfw,
         contentLevelWords: contentWords,
+        styleDescriptor: resolvedStyle,
       });
       autoIsLocked = forceBlurred;
       triggerFired = true;
@@ -420,11 +441,12 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
         genre: character.genre ?? "Fantasy",
         systemPrompt,
         teaserDescription: character.teaserDescription,
-        imageSeed,
+        imageSeed: resolvedSeed,
         sceneDescription: loopScene,
         avatarUrl: loopAvatarUrl || undefined,
         nsfwEnabled: charNsfw,
         contentLevelWords: contentWords,
+        styleDescriptor: resolvedStyle,
       });
       autoIsLocked = forceBlurred;
       if (!forceBlurred) dailyCountIncrement++;
@@ -453,11 +475,12 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
         genre: character.genre ?? "Fantasy",
         systemPrompt,
         teaserDescription: character.teaserDescription,
-        imageSeed,
+        imageSeed: resolvedSeed,
         sceneDescription: blurredScene,
         avatarUrl: blurredAvatarUrl || undefined,
         nsfwEnabled: false,
         contentLevelWords: contentWords,
+        styleDescriptor: resolvedStyle,
       });
       if (blurredImageUrl) {
         console.log('[VAULT SAVE] URL:', blurredImageUrl, 'type: blurred');
@@ -557,7 +580,24 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   const contentLevel = getContentLevel(intimacy, charNsfw);
   const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
 
-  const imageSeed = String(Math.floor(Math.random() * 10000000000));
+  // Seed + style resolution for selfie
+  let selfieResolvedSeed = character.imageSeed ?? null;
+  if (!selfieResolvedSeed) {
+    selfieResolvedSeed = String(Math.floor(Math.random() * 10000000000));
+    console.log(`[IMAGE SEED] ${character.name} — first seed generated and saved: ${selfieResolvedSeed}`);
+    void db.update(charactersTable).set({ imageSeed: selfieResolvedSeed }).where(eq(charactersTable.characterId, params.data.characterId));
+  } else {
+    console.log(`[IMAGE SEED] ${character.name} — using saved seed: ${selfieResolvedSeed}`);
+  }
+  const [_selfieStyleRow] = await db.select({ styleDescriptor: charactersTable.styleDescriptor }).from(charactersTable).where(eq(charactersTable.characterId, params.data.characterId));
+  let selfieResolvedStyle = _selfieStyleRow?.styleDescriptor ?? null;
+  if (!selfieResolvedStyle) {
+    selfieResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? []);
+    console.log(`[STYLE] ${character.name} — derived and saved: ${selfieResolvedStyle}`);
+    void db.update(charactersTable).set({ styleDescriptor: selfieResolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
+  } else {
+    console.log(`[STYLE] ${character.name} — using style: ${selfieResolvedStyle}`);
+  }
 
   let imageUrl: string;
   let matched = false;
@@ -568,11 +608,12 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
       genre: character.genre ?? "Fantasy",
       systemPrompt: character.systemPrompt ?? "",
       teaserDescription: character.teaserDescription,
-      imageSeed,
+      imageSeed: selfieResolvedSeed,
       sceneDescription: parsed.data.description,
       avatarUrl: character.avatarUrl ?? null,
       nsfwEnabled: charNsfw,
       contentLevelWords: contentWords,
+      styleDescriptor: selfieResolvedStyle,
     });
     matched = true;
     console.log('Selfie requested by:', req.telegramUserId);
@@ -860,17 +901,34 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
     const contentLevel = getContentLevel(newIntimacy, charNsfw);
     const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
-    const imageSeed = String(Math.floor(Math.random() * 10000000000));
+    let giftResolvedSeed = character.imageSeed ?? null;
+    if (!giftResolvedSeed) {
+      giftResolvedSeed = String(Math.floor(Math.random() * 10000000000));
+      console.log(`[IMAGE SEED] ${character.name} — first seed generated and saved: ${giftResolvedSeed}`);
+      void db.update(charactersTable).set({ imageSeed: giftResolvedSeed }).where(eq(charactersTable.characterId, params.data.characterId));
+    } else {
+      console.log(`[IMAGE SEED] ${character.name} — using saved seed: ${giftResolvedSeed}`);
+    }
+    const [_giftStyleRow] = await db.select({ styleDescriptor: charactersTable.styleDescriptor }).from(charactersTable).where(eq(charactersTable.characterId, params.data.characterId));
+    let giftResolvedStyle = _giftStyleRow?.styleDescriptor ?? null;
+    if (!giftResolvedStyle) {
+      giftResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? []);
+      console.log(`[STYLE] ${character.name} — derived and saved: ${giftResolvedStyle}`);
+      void db.update(charactersTable).set({ styleDescriptor: giftResolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
+    } else {
+      console.log(`[STYLE] ${character.name} — using style: ${giftResolvedStyle}`);
+    }
     try {
       scenarioImageUrl = await generateCharacterSelfie({
         characterName: character.name,
         genre: character.genre ?? "Fantasy",
         systemPrompt: character.systemPrompt ?? "",
         teaserDescription: character.teaserDescription,
-        imageSeed,
+        imageSeed: giftResolvedSeed,
         sceneDescription: "intimate gift scene, secret revealed, close and personal",
         nsfwEnabled: charNsfw,
         contentLevelWords: contentWords,
+        styleDescriptor: giftResolvedStyle,
       });
     } catch {
       scenarioImageUrl = character.avatarUrl ?? getGenreDefaultAvatar(character.genre ?? "Fantasy");
