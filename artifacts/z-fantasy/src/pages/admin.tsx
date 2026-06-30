@@ -113,6 +113,15 @@ const ADMIN_APPEARANCE_FIELDS: Array<{ key: string; label: string; options: stri
   { key: "negative_prompts_filter", label: "Negative Prompts Filter",    options: ["Low Quality Filter", "Deformed Hands Filter", "Asymmetry Filter", "Text/Watermark Scrub"] },
 ];
 
+const ADMIN_MULTI_SELECT_KEYS = new Set([
+  "distinguishing_feature",
+  "accessory",
+  "body_markings",
+  "color_palette",
+  "cultural_style",
+  "negative_prompts_filter",
+]);
+
 export function Admin() {
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
@@ -1228,10 +1237,14 @@ export function Admin() {
                   <div className="mt-3 space-y-4">
                     {ADMIN_APPEARANCE_FIELDS.map(field => {
                       const current = (newChar as Record<string, string>)[field.key] ?? "";
+                      const isMulti = ADMIN_MULTI_SELECT_KEYS.has(field.key);
+                      const selectedVals = isMulti ? current.split(",").map(v => v.trim()).filter(Boolean) : [];
                       return (
                         <div key={field.key}>
                           <div className="flex items-center justify-between mb-1">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">{field.label}</label>
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                              {field.label}{isMulti && <span className="text-accent/60 font-normal ml-1">(multi)</span>}
+                            </label>
                             {current && (
                               <button
                                 onClick={() => setNewChar(p => ({ ...p, [field.key]: "" }))}
@@ -1241,7 +1254,6 @@ export function Admin() {
                               </button>
                             )}
                           </div>
-                          {/* Hybrid species follow-up */}
                           {field.key === "species" && current === "Hybrid" && (
                             <input
                               value={newChar.hybrid_species}
@@ -1252,22 +1264,43 @@ export function Admin() {
                             />
                           )}
                           <div className="flex flex-wrap gap-1">
-                            {field.options.map(opt => (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => setNewChar(p => ({ ...p, [field.key]: current === opt ? "" : opt }))}
-                                className={`px-2 py-1 rounded-md text-[10px] font-semibold border transition-all ${
-                                  current === opt
-                                    ? "bg-primary/25 text-primary border-primary/50"
-                                    : "bg-card text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-primary/30"
-                                }`}
-                              >
-                                {current === opt && "✓ "}{opt}
-                              </button>
-                            ))}
+                            {field.options.map(opt => {
+                              const isSel = isMulti ? selectedVals.includes(opt) : current === opt;
+                              return (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isMulti) {
+                                      const next = selectedVals.includes(opt)
+                                        ? selectedVals.filter(v => v !== opt)
+                                        : [...selectedVals, opt];
+                                      setNewChar(p => ({ ...p, [field.key]: next.join(", ") }));
+                                    } else {
+                                      setNewChar(p => ({ ...p, [field.key]: current === opt ? "" : opt }));
+                                    }
+                                  }}
+                                  className={`px-2 py-1 rounded-md text-[10px] font-semibold border transition-all ${
+                                    isSel
+                                      ? "bg-primary/25 text-primary border-primary/50"
+                                      : "bg-card text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-primary/30"
+                                  }`}
+                                >
+                                  {isSel && "✓ "}{opt}
+                                </button>
+                              );
+                            })}
                           </div>
-                          {/* Add Custom */}
+                          {isMulti && selectedVals.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {selectedVals.map(sel => (
+                                <span key={sel}
+                                  onClick={() => setNewChar(p => ({ ...p, [field.key]: selectedVals.filter(v => v !== sel).join(", ") }))}
+                                  className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-accent/15 text-accent border border-accent/30 cursor-pointer hover:bg-accent/25"
+                                >{sel} ✕</span>
+                              ))}
+                            </div>
+                          )}
                           {adminShowCustom[field.key] ? (
                             <div className="flex gap-1.5 mt-1">
                               <input
@@ -1278,9 +1311,15 @@ export function Admin() {
                                   if (e.key === "Enter") {
                                     const val = (adminCustomInput[field.key] ?? "").trim();
                                     if (val) {
-                                      setNewChar(p => ({ ...p, [field.key]: val }));
-                                      setAdminCustomInput(p => ({ ...p, [field.key]: "" }));
-                                      setAdminShowCustom(p => ({ ...p, [field.key]: false }));
+                                      if (isMulti) {
+                                        const next = [...selectedVals, val];
+                                        setNewChar(p => ({ ...p, [field.key]: next.join(", ") }));
+                                        setAdminCustomInput(p => ({ ...p, [field.key]: "" }));
+                                      } else {
+                                        setNewChar(p => ({ ...p, [field.key]: val }));
+                                        setAdminCustomInput(p => ({ ...p, [field.key]: "" }));
+                                        setAdminShowCustom(p => ({ ...p, [field.key]: false }));
+                                      }
                                     }
                                   }
                                 }}
@@ -1293,9 +1332,15 @@ export function Admin() {
                                 onClick={() => {
                                   const val = (adminCustomInput[field.key] ?? "").trim();
                                   if (val) {
-                                    setNewChar(p => ({ ...p, [field.key]: val }));
-                                    setAdminCustomInput(p => ({ ...p, [field.key]: "" }));
-                                    setAdminShowCustom(p => ({ ...p, [field.key]: false }));
+                                    if (isMulti) {
+                                      const next = [...selectedVals, val];
+                                      setNewChar(p => ({ ...p, [field.key]: next.join(", ") }));
+                                      setAdminCustomInput(p => ({ ...p, [field.key]: "" }));
+                                    } else {
+                                      setNewChar(p => ({ ...p, [field.key]: val }));
+                                      setAdminCustomInput(p => ({ ...p, [field.key]: "" }));
+                                      setAdminShowCustom(p => ({ ...p, [field.key]: false }));
+                                    }
                                   }
                                 }}
                                 className="px-2 h-7 rounded-md bg-accent/15 text-accent text-[9px] font-bold border border-accent/30 hover:bg-accent/25"
@@ -3318,10 +3363,14 @@ function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charD
               <div className="mt-3 space-y-4">
                 {ADMIN_APPEARANCE_FIELDS.map(field => {
                   const current = charDrawerAppearance[field.key] ?? "";
+                  const isMulti = ADMIN_MULTI_SELECT_KEYS.has(field.key);
+                  const selectedVals = isMulti ? current.split(",").map(v => v.trim()).filter(Boolean) : [];
                   return (
                     <div key={field.key}>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">{field.label}</label>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                          {field.label}{isMulti && <span className="text-accent/60 font-normal ml-1">(multi)</span>}
+                        </label>
                         {current && (
                           <button
                             onClick={() => {
@@ -3344,24 +3393,44 @@ function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charD
                         />
                       )}
                       <div className="flex flex-wrap gap-1">
-                        {field.options.map(opt => (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => {
-                              setCharDrawerAppearance(p => ({ ...p, [field.key]: p[field.key] === opt ? "" : opt }));
-                              if (field.key === "species" && opt !== "Hybrid") setCharDrawerHybridSpecies("");
-                            }}
-                            className={`px-2 py-1 rounded-md text-[10px] font-semibold border transition-all ${
-                              current === opt
-                                ? "bg-primary/25 text-primary border-primary/50"
-                                : "bg-card text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-primary/30"
-                            }`}
-                          >
-                            {current === opt && "✓ "}{opt}
-                          </button>
-                        ))}
+                        {field.options.map(opt => {
+                          const isSel = isMulti ? selectedVals.includes(opt) : current === opt;
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => {
+                                if (isMulti) {
+                                  const next = selectedVals.includes(opt)
+                                    ? selectedVals.filter(v => v !== opt)
+                                    : [...selectedVals, opt];
+                                  setCharDrawerAppearance(p => ({ ...p, [field.key]: next.join(", ") }));
+                                } else {
+                                  setCharDrawerAppearance(p => ({ ...p, [field.key]: p[field.key] === opt ? "" : opt }));
+                                  if (field.key === "species" && opt !== "Hybrid") setCharDrawerHybridSpecies("");
+                                }
+                              }}
+                              className={`px-2 py-1 rounded-md text-[10px] font-semibold border transition-all ${
+                                isSel
+                                  ? "bg-primary/25 text-primary border-primary/50"
+                                  : "bg-card text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-primary/30"
+                              }`}
+                            >
+                              {isSel && "✓ "}{opt}
+                            </button>
+                          );
+                        })}
                       </div>
+                      {isMulti && selectedVals.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {selectedVals.map(sel => (
+                            <span key={sel}
+                              onClick={() => setCharDrawerAppearance(p => ({ ...p, [field.key]: selectedVals.filter(v => v !== sel).join(", ") }))}
+                              className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-accent/15 text-accent border border-accent/30 cursor-pointer hover:bg-accent/25"
+                            >{sel} ✕</span>
+                          ))}
+                        </div>
+                      )}
                       {drawerShowCustom[field.key] ? (
                         <div className="flex gap-1.5 mt-1">
                           <input
@@ -3372,9 +3441,15 @@ function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charD
                               if (e.key === "Enter") {
                                 const val = (drawerCustomInput[field.key] ?? "").trim();
                                 if (val) {
-                                  setCharDrawerAppearance(p => ({ ...p, [field.key]: val }));
-                                  setDrawerCustomInput(p => ({ ...p, [field.key]: "" }));
-                                  setDrawerShowCustom(p => ({ ...p, [field.key]: false }));
+                                  if (isMulti) {
+                                    const next = [...selectedVals, val];
+                                    setCharDrawerAppearance(p => ({ ...p, [field.key]: next.join(", ") }));
+                                    setDrawerCustomInput(p => ({ ...p, [field.key]: "" }));
+                                  } else {
+                                    setCharDrawerAppearance(p => ({ ...p, [field.key]: val }));
+                                    setDrawerCustomInput(p => ({ ...p, [field.key]: "" }));
+                                    setDrawerShowCustom(p => ({ ...p, [field.key]: false }));
+                                  }
                                 }
                               }
                             }}
@@ -3387,9 +3462,15 @@ function CharDrawerPanel({ characterId, charDrawerName, setCharDrawerName, charD
                             onClick={() => {
                               const val = (drawerCustomInput[field.key] ?? "").trim();
                               if (val) {
-                                setCharDrawerAppearance(p => ({ ...p, [field.key]: val }));
-                                setDrawerCustomInput(p => ({ ...p, [field.key]: "" }));
-                                setDrawerShowCustom(p => ({ ...p, [field.key]: false }));
+                                if (isMulti) {
+                                  const next = [...selectedVals, val];
+                                  setCharDrawerAppearance(p => ({ ...p, [field.key]: next.join(", ") }));
+                                  setDrawerCustomInput(p => ({ ...p, [field.key]: "" }));
+                                } else {
+                                  setCharDrawerAppearance(p => ({ ...p, [field.key]: val }));
+                                  setDrawerCustomInput(p => ({ ...p, [field.key]: "" }));
+                                  setDrawerShowCustom(p => ({ ...p, [field.key]: false }));
+                                }
                               }
                             }}
                             className="px-2 h-7 rounded-md bg-accent/15 text-accent text-[9px] font-bold border border-accent/30 hover:bg-accent/25"

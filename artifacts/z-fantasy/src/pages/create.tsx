@@ -21,7 +21,18 @@ interface AppearanceFieldDef {
   label: string;
   options: string[];
   required: boolean;
+  multiSelect?: boolean;
 }
+
+// Keys that allow picking multiple options (stored as comma-separated string)
+const MULTI_SELECT_APPEARANCE_KEYS = new Set([
+  "distinguishing_feature",
+  "accessory",
+  "body_markings",
+  "color_palette",
+  "cultural_style",
+  "negative_prompts_filter",
+]);
 
 const APPEARANCE_FIELDS: AppearanceFieldDef[] = [
   // Required (11)
@@ -34,24 +45,48 @@ const APPEARANCE_FIELDS: AppearanceFieldDef[] = [
   { key: "environment_setting",   label: "Environment Setting",      required: true,  options: ["Studio Room", "Blurred Indoor Bokeh", "Outdoor Nature", "Cyberpunk Cityscape", "Abstract Gradient"] },
   { key: "rendering_engine",      label: "Rendering Engine",         required: true,  options: ["Clean Digital Line Art", "Soft Cell Shading", "Photorealistic Vector", "Hyper-Detailed 2D"] },
   { key: "image_focus",           label: "Image Focus",              required: true,  options: ["Face Focus", "Upper Body Focus", "Outfit Focus", "Atmospheric/Background Focus"] },
-  { key: "negative_prompts_filter", label: "Negative Prompts Filter", required: true, options: ["Low Quality Filter", "Deformed Hands Filter", "Asymmetry Filter", "Text/Watermark Scrub"] },
+  {
+    key: "negative_prompts_filter", label: "Negative Prompts Filter", required: true,
+    multiSelect: true,
+    options: ["Low Quality Filter", "Deformed Hands Filter", "Asymmetry Filter", "Text/Watermark Scrub"],
+  },
   { key: "species",               label: "Species / Race",           required: true,  options: ["Human", "Elf", "Demon", "Angel", "Vampire", "Android", "Hybrid"] },
   // Optional (29)
   { key: "height",                label: "Height",                   required: false, options: ["Short", "Average", "Tall"] },
   { key: "build",                 label: "Build",                    required: false, options: ["Slim", "Athletic", "Average", "Curvy"] },
   { key: "skin_tone",             label: "Skin Tone",                required: false, options: ["Fair", "Light", "Medium", "Tan", "Dark"] },
   { key: "ear_type",              label: "Ear Type",                 required: false, options: ["Human", "Pointed", "Animal"] },
-  { key: "distinguishing_feature", label: "Distinguishing Feature",  required: false, options: ["Freckles", "Scar", "Tattoo", "Birthmark", "Heterochromia", "None"] },
+  {
+    key: "distinguishing_feature", label: "Distinguishing Feature",  required: false,
+    multiSelect: true,
+    options: ["Freckles", "Scar", "Tattoo", "Birthmark", "Heterochromia", "None"],
+  },
   { key: "voice_tone",            label: "Voice Tone",               required: false, options: ["Soft", "Husky", "Cheerful", "Stoic", "Playful"] },
   { key: "hairstyle",             label: "Hairstyle",                required: false, options: ["Straight", "Wavy", "Curly", "Braided", "Ponytail", "Twin-tails"] },
   { key: "facial_expression_default", label: "Default Expression",   required: false, options: ["Smiling", "Neutral", "Serious", "Playful", "Shy"] },
-  { key: "accessory",             label: "Accessory",                required: false, options: ["Glasses", "Earrings", "Necklace", "Headband", "None"] },
+  {
+    key: "accessory",             label: "Accessory",                required: false,
+    multiSelect: true,
+    options: ["Glasses", "Earrings", "Necklace", "Headband", "None"],
+  },
   { key: "tail_wings",            label: "Tail / Wings",             required: false, options: ["Tail", "Wings", "Both", "None"] },
-  { key: "body_markings",         label: "Body Markings",            required: false, options: ["Freckles", "Tattoos", "Scars", "Birthmarks", "None"] },
+  {
+    key: "body_markings",         label: "Body Markings",            required: false,
+    multiSelect: true,
+    options: ["Freckles", "Tattoos", "Scars", "Birthmarks", "None"],
+  },
   { key: "posture",               label: "Posture",                  required: false, options: ["Confident", "Reserved", "Energetic", "Calm"] },
-  { key: "color_palette",         label: "Color Palette",            required: false, options: ["Warm tones", "Cool tones", "Monochrome", "Pastel", "Neon"] },
+  {
+    key: "color_palette",         label: "Color Palette",            required: false,
+    multiSelect: true,
+    options: ["Warm tones", "Cool tones", "Monochrome", "Pastel", "Neon"],
+  },
   { key: "occupation_look",       label: "Occupation Look",          required: false, options: ["Casual", "Formal", "Uniformed", "Armored", "Streetwear"] },
-  { key: "cultural_style",        label: "Cultural Style",           required: false, options: ["Western", "Eastern", "Futuristic", "Medieval", "Tribal"] },
+  {
+    key: "cultural_style",        label: "Cultural Style",           required: false,
+    multiSelect: true,
+    options: ["Western", "Eastern", "Futuristic", "Medieval", "Tribal"],
+  },
   { key: "ass_size",              label: "Ass Size",                 required: false, options: ["Subtle", "Balanced", "Well-rounded", "Voluptuous", "Exaggerated"] },
   { key: "chest_size",            label: "Chest Size",               required: false, options: ["Small", "Medium", "Large", "Ample", "Voluptuous", "Exaggerated"] },
   { key: "camera_angle",          label: "Camera Angle",             required: false, options: ["Eye Level", "Low Angle", "High Angle", "Cinematic Dutch Angle"] },
@@ -96,7 +131,23 @@ function getToken() {
     .Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
 }
 
-// ── Appearance chip field — reused in wizard step 2 and step 7 edit ────────────
+// ── Helpers for multi-select CSV values ─────────────────────────────────────────
+function parseMultiVal(val: string): string[] {
+  return val.split(",").map(v => v.trim()).filter(Boolean);
+}
+function toggleMultiVal(current: string, opt: string): string {
+  const vals = parseMultiVal(current);
+  const idx = vals.indexOf(opt);
+  if (idx >= 0) vals.splice(idx, 1); else vals.push(opt);
+  return vals.join(", ");
+}
+function addCustomMultiVal(current: string, custom: string): string {
+  const vals = parseMultiVal(current);
+  if (!vals.includes(custom)) vals.push(custom);
+  return vals.join(", ");
+}
+
+// ── Appearance chip field ────────────────────────────────────────────────────────
 function AppearanceChipSection({
   field,
   value,
@@ -122,21 +173,52 @@ function AppearanceChipSection({
   onToggleCustom: () => void;
   onClear?: () => void;
 }) {
+  const isMulti = !!field.multiSelect;
+  const selectedSet = isMulti ? new Set(parseMultiVal(value)) : null;
+
+  function handleChipClick(opt: string) {
+    if (!isMulti) {
+      onSelect(value === opt ? "" : opt);
+    } else {
+      onSelect(toggleMultiVal(value, opt));
+    }
+  }
+
+  function handleAddCustomClick() {
+    const trimmed = customInputVal.trim();
+    if (!trimmed) return;
+    if (isMulti) {
+      onSelect(addCustomMultiVal(value, trimmed));
+      onCustomInputChange("");
+      // Keep input open so user can add more
+    } else {
+      onAddCustom();
+    }
+  }
+
+  const isChipSelected = (opt: string) =>
+    isMulti ? selectedSet!.has(opt) : value === opt;
+
+  const displayLabel = isMulti
+    ? (selectedSet!.size > 0 ? `${selectedSet!.size} selected` : "")
+    : value;
+
   return (
     <div className={field.required ? "" : "opacity-85"}>
       <div className="flex items-center justify-between mb-2">
         <label className={`text-xs font-bold uppercase tracking-wider ${field.required ? "text-muted-foreground" : "text-muted-foreground/70"}`}>
           {field.label} {field.required && <span className="text-primary">*</span>}
+          {isMulti && <span className="text-[10px] font-normal text-accent/70 ml-1">(multi)</span>}
         </label>
         <div className="flex items-center gap-2">
-          {value && (
-            <span className={`text-[10px] font-semibold truncate max-w-[100px] ${field.required ? "text-primary" : "text-accent"}`}>
-              {field.required && "✓ "}{value}
+          {displayLabel && (
+            <span className={`text-[10px] font-semibold truncate max-w-[120px] ${field.required ? "text-primary" : "text-accent"}`}>
+              {field.required && !isMulti && "✓ "}{displayLabel}
             </span>
           )}
           {value && !field.required && onClear && (
             <button onClick={onClear} className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
-              Skip
+              Clear
             </button>
           )}
           {!value && !field.required && (
@@ -145,24 +227,41 @@ function AppearanceChipSection({
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {field.options.map(opt => (
-          <button
-            key={opt}
-            onClick={() => onSelect(opt)}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-              value === opt
-                ? field.required
-                  ? "bg-primary/30 text-primary border-primary/60 box-glow-pink"
-                  : "bg-accent/25 text-accent border-accent/60"
-                : field.required
-                ? "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/30"
-                : "bg-card/60 text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-accent/30"
-            }`}
-          >
-            {value === opt && <Check size={9} className="inline mr-1" />}{opt}
-          </button>
-        ))}
+        {field.options.map(opt => {
+          const sel = isChipSelected(opt);
+          return (
+            <button
+              key={opt}
+              onClick={() => handleChipClick(opt)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                sel
+                  ? field.required
+                    ? "bg-primary/30 text-primary border-primary/60 box-glow-pink"
+                    : "bg-accent/25 text-accent border-accent/60"
+                  : field.required
+                  ? "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/30"
+                  : "bg-card/60 text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-accent/30"
+              }`}
+            >
+              {sel && <Check size={9} className="inline mr-1" />}{opt}
+            </button>
+          );
+        })}
       </div>
+      {/* Multi-select: show selected badges */}
+      {isMulti && selectedSet!.size > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {[...selectedSet!].map(sel => (
+            <span
+              key={sel}
+              onClick={() => onSelect(toggleMultiVal(value, sel))}
+              className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-accent/15 text-accent border border-accent/40 cursor-pointer hover:bg-accent/25 transition-colors"
+            >
+              {sel} ✕
+            </span>
+          ))}
+        </div>
+      )}
       {field.key === "species" && (value === "Hybrid" || hybridSpeciesValue) && onHybridChange && (
         <input
           value={hybridSpeciesValue ?? ""}
@@ -178,18 +277,26 @@ function AppearanceChipSection({
             autoFocus
             value={customInputVal}
             onChange={e => onCustomInputChange(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") onAddCustom(); }}
+            onKeyDown={e => { if (e.key === "Enter") handleAddCustomClick(); }}
             placeholder="Type custom value..."
             maxLength={48}
             className="flex-1 h-8 rounded-lg border border-accent/50 bg-card px-3 text-xs text-white focus:outline-none focus:border-accent"
           />
           <button
-            onClick={onAddCustom}
+            onClick={handleAddCustomClick}
             disabled={!customInputVal.trim()}
             className="px-3 h-8 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors disabled:opacity-40"
           >
             Add
           </button>
+          {isMulti && (
+            <button
+              onClick={onToggleCustom}
+              className="px-3 h-8 rounded-lg bg-muted/20 text-muted-foreground text-xs border border-border hover:text-white transition-colors"
+            >
+              Done
+            </button>
+          )}
         </div>
       ) : (
         <button
@@ -233,15 +340,13 @@ export function Create() {
   const [bio, setBio] = useState("");
   const [greeting, setGreeting] = useState("");
   const [tagsInput, setTagsInput] = useState("");
-  const [isNsfw, setIsNsfw] = useState(false);
-  const [visibility, setVisibility] = useState<"public" | "private">("private");
+  const [isNsfw] = useState(false);
 
   // ── Step 7: Post-creation state ───────────────────────────────────────────────
   const [createdCharId, setCreatedCharId] = useState<string | null>(null);
   const [createdAvatarUrl, setCreatedAvatarUrl] = useState("");
   const [createdRegenCount, setCreatedRegenCount] = useState(0);
 
-  // Regen avatar
   const [regenDescription, setRegenDescription] = useState("");
   const [showRegenInput, setShowRegenInput] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -293,9 +398,16 @@ export function Create() {
   function addCustomForField(key: string) {
     const val = (customInputVal[key] ?? "").trim();
     if (!val) return;
-    setAppearanceField(key, val);
-    setCustomInputVal(prev => ({ ...prev, [key]: "" }));
-    setShowCustom(prev => ({ ...prev, [key]: false }));
+    // Multi-select: append; Single-select: replace
+    if (MULTI_SELECT_APPEARANCE_KEYS.has(key)) {
+      setAppearanceField(key, addCustomMultiVal(appearance[key] ?? "", val));
+      setCustomInputVal(prev => ({ ...prev, [key]: "" }));
+      // Keep input open for multi-select
+    } else {
+      setAppearanceField(key, val);
+      setCustomInputVal(prev => ({ ...prev, [key]: "" }));
+      setShowCustom(prev => ({ ...prev, [key]: false }));
+    }
   }
   function addCustomSubGenre() {
     const val = customSubGenreInput.trim();
@@ -319,9 +431,14 @@ export function Create() {
   function addEditCustomForField(key: string) {
     const val = (editCustomInputVal[key] ?? "").trim();
     if (!val) return;
-    setEditAppearanceField(key, val);
-    setEditCustomInputVal(prev => ({ ...prev, [key]: "" }));
-    setEditShowCustom(prev => ({ ...prev, [key]: false }));
+    if (MULTI_SELECT_APPEARANCE_KEYS.has(key)) {
+      setEditAppearanceField(key, addCustomMultiVal(editAppearance[key] ?? "", val));
+      setEditCustomInputVal(prev => ({ ...prev, [key]: "" }));
+    } else {
+      setEditAppearanceField(key, val);
+      setEditCustomInputVal(prev => ({ ...prev, [key]: "" }));
+      setEditShowCustom(prev => ({ ...prev, [key]: false }));
+    }
   }
   function addEditCustomSubGenre() {
     const val = editCustomSubGenreInput.trim();
@@ -341,7 +458,11 @@ export function Create() {
   // ── canAdvance ────────────────────────────────────────────────────────────────
   function canAdvance(): boolean {
     if (step === 1) return resolvedName.length > 0;
-    if (step === 2) return REQUIRED_APPEARANCE_KEYS.every(k => !!appearance[k]);
+    if (step === 2) return REQUIRED_APPEARANCE_KEYS.every(k => {
+      const v = appearance[k] ?? "";
+      if (MULTI_SELECT_APPEARANCE_KEYS.has(k)) return parseMultiVal(v).length > 0;
+      return v.length > 0;
+    });
     if (step === 3) return artStyle !== "" && subGenres.length >= 1;
     return true;
   }
@@ -382,7 +503,7 @@ export function Create() {
           bio: bio || undefined,
           initialGreeting: greeting || undefined,
           tags,
-          visibility,
+          visibility: "private",
           isNsfw,
           appearance,
           hybridSpecies: hybridSpecies || undefined,
@@ -397,7 +518,6 @@ export function Create() {
       const char = await res.json() as { characterId: string; avatarUrl?: string };
       queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
 
-      // Initialize edit state from wizard state
       setCreatedCharId(char.characterId);
       setCreatedAvatarUrl(char.avatarUrl ?? "");
       setCreatedRegenCount(0);
@@ -503,7 +623,10 @@ export function Create() {
   const currentStep = step <= WIZARD_STEPS.length ? WIZARD_STEPS[step - 1] : null;
   const allSubGenreOptions = [...SUB_GENRES, ...subGenres.filter(s => !SUB_GENRES.includes(s))];
   const allEditSubGenreOptions = [...SUB_GENRES, ...editSubGenres.filter(s => !SUB_GENRES.includes(s))];
-  const requiredFilled = REQUIRED_APPEARANCE_KEYS.filter(k => !!appearance[k]).length;
+  const requiredFilled = REQUIRED_APPEARANCE_KEYS.filter(k => {
+    const v = appearance[k] ?? "";
+    return MULTI_SELECT_APPEARANCE_KEYS.has(k) ? parseMultiVal(v).length > 0 : v.length > 0;
+  }).length;
   const requiredTotal = REQUIRED_APPEARANCE_KEYS.length;
   const regenIsFree = createdRegenCount < 3;
   const isPlaceholderAvatar = !createdAvatarUrl || createdAvatarUrl.includes("picsum.photos");
@@ -511,7 +634,7 @@ export function Create() {
   // ── Step 7: Preview & Confirm ─────────────────────────────────────────────────
   if (step === 7) {
     return (
-      <div className="flex flex-col h-[100dvh] bg-background overflow-y-auto pb-32">
+      <div className="flex flex-col h-[100dvh] bg-background overflow-y-auto pb-[200px]">
         {/* Step 7 Header */}
         <div className="shrink-0 px-4 pt-4 pb-3 border-b border-border/50">
           <div className="flex items-center justify-between">
@@ -695,9 +818,7 @@ export function Create() {
 
             {/* Appearance Details */}
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-primary mb-4">
-                Appearance Details
-              </p>
+              <p className="text-xs font-bold uppercase tracking-widest text-primary mb-4">Appearance Details</p>
               <div className="space-y-5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2">Required</p>
                 {APPEARANCE_FIELDS.filter(f => f.required).map(field => (
@@ -738,7 +859,7 @@ export function Create() {
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Apparent Age</label>
                 <input
-                  value={editBio ? age : ""}
+                  value={age}
                   onChange={e => setAge(e.target.value)}
                   placeholder="e.g. 24, Ancient, Unknown"
                   className="w-full h-11 rounded-xl border border-border bg-card px-4 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-all"
@@ -790,8 +911,9 @@ export function Create() {
           </div>
         </div>
 
-        {/* Sticky bottom bar */}
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur border-t border-border flex gap-3">
+        {/* ── Sticky bottom action bar — z-50 ensures it sits ABOVE the app nav bar ── */}
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-background/95 backdrop-blur border-t border-border flex gap-3"
+          style={{ paddingBottom: "max(16px, calc(16px + env(safe-area-inset-bottom)))" }}>
           <button
             onClick={handleSaveEdits}
             disabled={isSavingEdits}
@@ -909,7 +1031,6 @@ export function Create() {
         {/* ── Step 2: Appearance Details ── */}
         {step === 2 && (
           <div className="space-y-6">
-            {/* Required section */}
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-primary mb-4">
                 Required Fields <span className="text-primary/60">({requiredFilled}/{requiredTotal})</span>
@@ -933,7 +1054,6 @@ export function Create() {
               </div>
             </div>
 
-            {/* Optional section */}
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 mb-4 border-t border-border pt-4">
                 Optional Fields <span className="text-muted-foreground/40">(skip any)</span>
