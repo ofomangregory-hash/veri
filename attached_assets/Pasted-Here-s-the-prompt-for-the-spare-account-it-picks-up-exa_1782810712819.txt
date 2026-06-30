@@ -1,0 +1,16 @@
+Here's the prompt for the spare account — it picks up exactly where the original got cut off:
+
+Read the current state of create.tsx, characters.ts, and admin.ts first before making any changes. Do not touch any other files. Do not modify auth.ts, authMiddleware, or any proxy/image-proxy route logic.
+A previous session was interrupted mid-task (ran out of credits) while implementing AI-generated avatars and style descriptor saving. It was in the middle of adding a Supabase save call for styleDescriptor in admin.ts when it stopped. Verify and complete all of the following — do not assume anything is finished, check each one explicitly:
+1. create.tsx — Step 2 (avatar upload)
+Confirm the avatar upload UI (drop zone, file input, preview, remove/change buttons, any Upload/X/fileInputRef references) is fully removed. Replace with a simple confirmation message: "Your character's avatar will be generated automatically based on your name, art style, and character type." Confirm no dead imports or unused state remain.
+2. characters.ts — user avatar generation
+Confirm the background IIFE that previously built its own hardcoded prompt (${characterName}, ${characterGenre} style, character portrait, detailed face with HEAD-only validation) has been fully replaced with a call to the same avatar generation function admin uses (generateCharacterAvatar / generateCharacterSelfie), passing: character name, the seed generated at creation, a styleDescriptor derived via deriveStyleDescriptor(genre, subGenres), and subGenres. Confirm full GET validation (not HEAD-only) is used.
+3. styleDescriptor saved at creation for both flows — THIS WAS LEFT INCOMPLETE
+In admin.ts, find where the character is saved to Supabase after local DB insert (the "Supabase mirror" step). Add a call to updateSupabaseCharacter (or equivalent) that saves the derived styleDescriptor to Supabase right after creation. Confirm the same already happens correctly in characters.ts for user creation — if not, fix it there too. styleDescriptor must not be left null in Supabase for either flow.
+4. admin.ts — sub-genres passed to avatar generation
+Confirm subGenres is passed into the generateCharacterAvatar call in the admin create handler.
+After completing all 4 items, run a full build and confirm it compiles with zero errors. Report exactly which items needed fixing and the final build status.
+Do not touch any other files.
+
+Paste this into the spare account and share the response.
