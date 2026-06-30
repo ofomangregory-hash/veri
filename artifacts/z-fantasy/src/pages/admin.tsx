@@ -11,8 +11,9 @@ import { AdminReferralsTab } from "./admin/AdminReferralsTab";
 import { AdminCsTab } from "./admin/AdminCsTab";
 import { AdminImagesTab } from "./admin/AdminImagesTab";
 import { AdminDatabaseTab } from "./admin/AdminDatabaseTab";
+import { AdminErrorsTab } from "./admin/AdminErrorsTab";
 
-type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words" | "affection" | "active_chats" | "quests" | "referrals" | "helpdesk" | "cs" | "images" | "database";
+type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "premium" | "broadcast" | "earnings" | "transactions" | "blb" | "trigger_words" | "affection" | "active_chats" | "quests" | "referrals" | "helpdesk" | "cs" | "images" | "database" | "errors";
 
 interface SysConfig { key: string; value: unknown; updatedAt: string }
 
@@ -83,7 +84,7 @@ export function Admin() {
   const hasAnyAccess = isGodMode || isLimitedAdmin;
 
   const allTabs: AdminTab[] = isGodMode
-    ? ["stats", "users", "characters", "images", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words", "affection", "active_chats", "quests", "referrals", "helpdesk", "cs", "database"]
+    ? ["stats", "users", "characters", "images", "banners", "pricing", "premium", "broadcast", "transactions", "earnings", "blb", "trigger_words", "affection", "active_chats", "quests", "referrals", "helpdesk", "cs", "database", "errors"]
     : ["stats", "users", "characters"];
 
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
@@ -2156,6 +2157,10 @@ export function Admin() {
       {/* ── Database ── */}
       {activeTab === "database" && isGodMode && (
         <AdminDatabaseTab />
+      )}
+
+      {activeTab === "errors" && isGodMode && (
+        <AdminErrorsTab />
       )}
 
       {/* ── Transactions (All) ── */}

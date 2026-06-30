@@ -3,16 +3,22 @@ import { logger } from "./lib/logger";
 import { startTelegramBot } from "./lib/telegram-bot";
 import { startCronJobs } from "./lib/cron";
 import { pool } from "@workspace/db";
+import { captureError } from "./lib/errorStore";
+
+// ── Intercept console.error into the error store ───────────────────────────────
+const _origConsoleError = console.error;
+console.error = (...args: unknown[]) => {
+  _origConsoleError(...args);
+  captureError("console.error", ...args);
+};
 
 // ── Global crash guards ────────────────────────────────────────────────────────
-// Telegram bot callbacks run as unhandled async listeners. Without these guards
-// a single DB error or Telegram API timeout inside a bot handler will call
-// process.exit via Node's default uncaughtException behaviour and bring the
-// entire HTTP server down.  We log instead and keep the process alive.
 process.on("uncaughtException", (err) => {
+  captureError("uncaughtException", err);
   logger.error({ err }, "Uncaught exception — server continues");
 });
 process.on("unhandledRejection", (reason) => {
+  captureError("unhandledRejection", reason instanceof Error ? reason : String(reason));
   logger.error({ reason }, "Unhandled promise rejection — server continues");
 });
 

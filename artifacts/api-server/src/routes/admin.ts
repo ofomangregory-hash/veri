@@ -27,6 +27,7 @@ import { getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterAvatar } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import { listSupabaseCharacters, createSupabaseCharacter, updateSupabaseCharacter, getSupabaseCharacterById } from "../lib/supabaseCharacters";
+import { getErrors, clearErrors, deleteError } from "../lib/errorStore";
 import { supabase } from "../lib/supabase";
 import { getBot } from "../lib/telegram-bot";
 
@@ -1482,6 +1483,22 @@ router.post("/admin/db/:table", adminOnly, async (req, res): Promise<void> => {
 });
 
 // DELETE /admin/db/:table/:id — delete a row
+// ─── Error Store ──────────────────────────────────────────────────────────────
+
+router.get("/admin/errors", adminOnly, async (_req, res): Promise<void> => {
+  res.json(getErrors());
+});
+
+router.delete("/admin/errors", adminOnly, async (_req, res): Promise<void> => {
+  clearErrors();
+  res.status(204).end();
+});
+
+router.delete("/admin/errors/:id", adminOnly, async (req, res): Promise<void> => {
+  const deleted = deleteError(req.params.id);
+  res.status(deleted ? 204 : 404).end();
+});
+
 router.delete("/admin/db/:table/:id", adminOnly, async (req, res): Promise<void> => {
   if (!supabase) { res.status(503).json({ error: "Supabase not configured" }); return; }
   const { table, id } = req.params;
