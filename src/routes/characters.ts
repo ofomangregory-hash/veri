@@ -35,56 +35,171 @@ router.use(authMiddleware);
 const MAX_CHARACTER_SLOTS = 3;
 const CHARACTER_CREATION_NEON_COST = 25;
 
-// ── Appearance schema (parsed separately from generated CreateCharacterBody) ──
+// ── Appearance schema — all 40 columns (39 UX fields + hybridSpecies sub-field)
 const AppearanceSchema = z.object({
-  hairColor: z.string().optional(),
-  hairLength: z.string().optional(),
-  eyeColor: z.string().optional(),
-  hairstyle: z.string().optional(),
-  skinTone: z.string().optional(),
-  height: z.string().optional(),
-  build: z.string().optional(),
-  species: z.string().optional(),
-  hybridSpecies: z.string().optional(),
-  earType: z.string().optional(),
+  // Required group (fields 1–11)
+  hairColor:             z.string().optional(),
+  hairLength:            z.string().optional(),
+  eyeColor:              z.string().optional(),
+  cameraShotType:        z.string().optional(),
+  viewDirection:         z.string().optional(),
+  genderBaseMesh:        z.string().optional(),
+  environmentSetting:    z.string().optional(),
+  renderingEngine:       z.string().optional(),
+  imageFocus:            z.string().optional(),
+  negativePromptsFilter: z.string().optional(),
+  species:               z.string().optional(),
+  hybridSpecies:         z.string().optional(),
+  // Optional group (fields 12–39)
+  height:                z.string().optional(),
+  build:                 z.string().optional(),
+  skinTone:              z.string().optional(),
+  earType:               z.string().optional(),
   distinguishingFeature: z.string().optional(),
-  voiceTone: z.string().optional(),
+  voiceTone:             z.string().optional(),
+  hairstyle:             z.string().optional(),
   facialExpressionDefault: z.string().optional(),
-  accessory: z.string().optional(),
-  tailWings: z.string().optional(),
-  bodyMarkings: z.string().optional(),
-  posture: z.string().optional(),
-  colorPalette: z.string().optional(),
-  occupationLook: z.string().optional(),
-  culturalStyle: z.string().optional(),
+  accessory:             z.string().optional(),
+  tailWings:             z.string().optional(),
+  bodyMarkings:          z.string().optional(),
+  posture:               z.string().optional(),
+  colorPalette:          z.string().optional(),
+  occupationLook:        z.string().optional(),
+  culturalStyle:         z.string().optional(),
+  assSize:               z.string().optional(),
+  chestSize:             z.string().optional(),
+  cameraAngle:           z.string().optional(),
+  eyeDetailEnhancer:     z.string().optional(),
+  clothingMaterialFinish: z.string().optional(),
+  legwearSocksStyle:     z.string().optional(),
+  lightingStyle:         z.string().optional(),
+  bangsStyle:            z.string().optional(),
+  makeupStyle:           z.string().optional(),
+  outfitFit:             z.string().optional(),
+  thighHipSize:          z.string().optional(),
+  skinTextureRealism:    z.string().optional(),
+  outfitCleavageCut:     z.string().optional(),
 });
 
 type AppearanceData = z.infer<typeof AppearanceSchema>;
 
-function buildAppearanceDescription(app: AppearanceData): string {
-  const parts: string[] = [];
-  if (app.hairColor || app.hairLength || app.hairstyle) {
-    const hairParts = [app.hairLength, app.hairColor, "hair"].filter(Boolean);
-    parts.push(hairParts.join(" "));
-    if (app.hairstyle) parts.push(`${app.hairstyle} hairstyle`);
+// Negative prompt token map for negative_prompts_filter values
+const NEGATIVE_TOKEN_MAP: Record<string, string> = {
+  "Low Quality Filter":    "low quality, worst quality, blurry, jpeg artifacts, pixelated, overexposed, underexposed",
+  "Deformed Hands Filter": "bad hands, extra fingers, mutated hands, poorly drawn hands, missing fingers, fused fingers, malformed limbs",
+  "Asymmetry Filter":      "asymmetric face, uneven eyes, wonky nose, crooked face, off-center features, lopsided",
+  "Text/Watermark Scrub":  "text, watermark, signature, logo, username, caption, writing",
+};
+
+// Build the prompt following the strict sequential format from the spec
+function buildAppearancePrompt(
+  name: string,
+  tags: string[],
+  app: AppearanceData,
+): { appearanceText: string; negativeTokens: string } {
+  const t = (v: string | undefined | null) => v ?? "";
+
+  const segments: string[] = [];
+
+  // 1. Name, style, sub-genres
+  if (name) segments.push(name);
+  if (app.genderBaseMesh) segments.push(app.genderBaseMesh);
+  if (tags.length) segments.push(tags.join(", "));
+
+  // 2. Hair
+  const hairParts = [t(app.hairColor), t(app.hairLength)].filter(Boolean);
+  if (hairParts.length) segments.push(`${hairParts.join(" ")} hair`);
+
+  // 3. Eyes
+  if (app.eyeColor) segments.push(`${app.eyeColor} eyes`);
+
+  // 4. Outfit
+  const outfitParts: string[] = [];
+  if (app.occupationLook) outfitParts.push(`wearing ${app.occupationLook}`);
+  if (app.outfitFit) outfitParts.push(`in ${app.outfitFit} style`);
+  if (app.outfitCleavageCut) outfitParts.push(`with ${app.outfitCleavageCut} cut`);
+  if (outfitParts.length) segments.push(outfitParts.join(" "));
+
+  if (app.clothingMaterialFinish) segments.push(`made of ${app.clothingMaterialFinish}`);
+  if (app.legwearSocksStyle) segments.push(`styled with ${app.legwearSocksStyle}`);
+
+  // 5. Body
+  const bodyParts: string[] = [];
+  if (app.build || app.height) {
+    const bp: string[] = [];
+    if (app.build) bp.push(`body build is ${app.build}`);
+    if (app.height) bp.push(`${app.height} height`);
+    bodyParts.push(bp.join(" with "));
   }
-  if (app.eyeColor) parts.push(`${app.eyeColor} eyes`);
-  if (app.skinTone) parts.push(`${app.skinTone} skin`);
-  if (app.build) parts.push(`${app.build} build`);
-  if (app.height) parts.push(`${app.height} height`);
-  if (app.species && app.species !== "Human") parts.push(app.species);
-  if (app.hybridSpecies && app.hybridSpecies !== "None") parts.push(app.hybridSpecies);
-  if (app.earType && app.earType !== "Human") parts.push(app.earType);
-  if (app.distinguishingFeature && app.distinguishingFeature !== "None") parts.push(app.distinguishingFeature);
-  if (app.tailWings && app.tailWings !== "None") parts.push(app.tailWings);
-  if (app.bodyMarkings && app.bodyMarkings !== "None") parts.push(app.bodyMarkings);
-  if (app.accessory && app.accessory !== "None") parts.push(`wearing ${app.accessory}`);
-  if (app.posture) parts.push(`${app.posture} posture`);
-  if (app.colorPalette) parts.push(`${app.colorPalette} color palette`);
-  if (app.culturalStyle) parts.push(`${app.culturalStyle} aesthetic`);
-  if (app.occupationLook) parts.push(`${app.occupationLook} look`);
-  if (app.facialExpressionDefault) parts.push(`${app.facialExpressionDefault} expression`);
-  return parts.join(", ");
+  if (app.chestSize) bodyParts.push(`${app.chestSize} chest size`);
+  if (app.assSize) bodyParts.push(`${app.assSize} ass size`);
+  if (app.thighHipSize) bodyParts.push(`${app.thighHipSize} hips`);
+  if (bodyParts.length) segments.push(bodyParts.join(", "));
+
+  // 6. Skin
+  if (app.skinTone || app.skinTextureRealism) {
+    const skinParts = [t(app.skinTone), "skin tone", app.skinTextureRealism ? `with ${app.skinTextureRealism} finish` : ""].filter(Boolean);
+    segments.push(skinParts.join(" "));
+  }
+
+  // 7. Species
+  if (app.species) {
+    const speciesStr = app.hybridSpecies
+      ? `${app.species} race (hybrid origin: ${app.hybridSpecies})`
+      : `${app.species} race`;
+    segments.push(speciesStr);
+  }
+
+  // 8. Ears + hair detail
+  if (app.earType) segments.push(`featuring ${app.earType} ears`);
+  if (app.hairstyle || app.bangsStyle) {
+    const hd = [app.hairstyle ? `${app.hairstyle} hair` : "", app.bangsStyle ? `with ${app.bangsStyle} bangs` : ""].filter(Boolean);
+    segments.push(hd.join(" "));
+  }
+
+  // 9. Makeup
+  if (app.makeupStyle) segments.push(`wearing ${app.makeupStyle} makeup`);
+
+  // 10. Expression + eyes
+  if (app.facialExpressionDefault || app.eyeDetailEnhancer) {
+    const ep = [
+      app.facialExpressionDefault ? `default facial expression is ${app.facialExpressionDefault}` : "",
+      app.eyeDetailEnhancer ? `with ${app.eyeDetailEnhancer} eye look` : "",
+    ].filter(Boolean);
+    segments.push(ep.join(" "));
+  }
+
+  // 11. Posture
+  if (app.posture) segments.push(`standing in ${app.posture} posture`);
+
+  // 12. Visible details
+  const visibleDetails: string[] = [];
+  if (app.distinguishingFeature) visibleDetails.push(app.distinguishingFeature);
+  if (app.bodyMarkings) visibleDetails.push(app.bodyMarkings);
+  if (visibleDetails.length) segments.push(`visible details: ${visibleDetails.join(", ")}`);
+  if (app.accessory) segments.push(`wearing ${app.accessory}`);
+
+  // 13. Color palette
+  if (app.colorPalette) segments.push(`accentuating a ${app.colorPalette} color palette`);
+
+  // 14. Camera / shot
+  const camParts: string[] = [];
+  if (app.environmentSetting) camParts.push(`setting is ${app.environmentSetting}`);
+  if (app.cameraAngle) camParts.push(`shot from a ${app.cameraAngle}`);
+  if (app.cameraShotType) camParts.push(`with a ${app.cameraShotType} composition`);
+  if (camParts.length) segments.push(camParts.join(", "));
+
+  if (app.viewDirection) segments.push(`looking ${app.viewDirection}`);
+  if (app.imageFocus) segments.push(`focused tightly on ${app.imageFocus}`);
+  if (app.lightingStyle) segments.push(`lit by ${app.lightingStyle}`);
+  if (app.renderingEngine) segments.push(`rendered as ${app.renderingEngine}`);
+
+  // Negative prompt tokens
+  const negativeTokens = app.negativePromptsFilter
+    ? (NEGATIVE_TOKEN_MAP[app.negativePromptsFilter] ?? "")
+    : "";
+
+  return { appearanceText: segments.join(", "), negativeTokens };
 }
 
 function serializeCharacter(c: NormalizedCharacter) {
@@ -149,12 +264,7 @@ router.get("/characters/trending", async (req, res): Promise<void> => {
 
 router.get("/characters/surprise", async (req, res): Promise<void> => {
   const { items } = await listSupabaseCharacters({ visibility: "public", limit: 50, offset: 0 });
-
-  if (items.length === 0) {
-    res.status(404).json({ error: "No characters available" });
-    return;
-  }
-
+  if (items.length === 0) { res.status(404).json({ error: "No characters available" }); return; }
   const randomIndex = Math.floor(Math.random() * items.length);
   res.json(GetSurpriseCharacterResponse.parse(serializeCharacter(items[randomIndex])));
 });
@@ -166,38 +276,22 @@ router.get("/characters/mine", async (req, res): Promise<void> => {
 
 router.get("/characters/:characterId", async (req, res): Promise<void> => {
   const params = GetCharacterParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const character = await getSupabaseCharacterById(params.data.characterId);
-
-  if (!character) {
-    res.status(404).json({ error: "Character not found" });
-    return;
-  }
-
+  if (!character) { res.status(404).json({ error: "Character not found" }); return; }
   res.json(GetCharacterResponse.parse(serializeCharacter(character)));
 });
 
 router.post("/characters", async (req, res): Promise<void> => {
   const parsed = CreateCharacterBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  // Extract appearance fields alongside the typed body
+  // Extract all 39 appearance fields alongside the typed body
   const appearanceParsed = AppearanceSchema.safeParse(req.body);
-  const appearance: AppearanceData = appearanceParsed.success ? appearanceParsed.data : {};
-  const appearanceDesc = buildAppearanceDescription(appearance);
+  const app: AppearanceData = appearanceParsed.success ? appearanceParsed.data : {};
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
   if (!req.isAdmin && user.neonCardBalance < CHARACTER_CREATION_NEON_COST) {
     res.status(402).json({ error: `Insufficient Neon Cards. Character creation costs ${CHARACTER_CREATION_NEON_COST} Neon Cards.` });
@@ -213,11 +307,11 @@ router.post("/characters", async (req, res): Promise<void> => {
   }
 
   const tier = user.subscriptionTier;
-  const weeklyLimit = TIER_WEEKLY_LIMITS[tier] ?? 0;
   if (tier === "Free" && user.weeklyCreationsCount >= 1) {
     res.status(402).json({ error: "Free users must upgrade to create characters." });
     return;
   }
+  const weeklyLimit = TIER_WEEKLY_LIMITS[tier] ?? 0;
   if (weeklyLimit !== Infinity && user.weeklyCreationsCount >= weeklyLimit) {
     res.status(402).json({ error: `Weekly creation limit reached for ${tier} tier.` });
     return;
@@ -226,13 +320,29 @@ router.post("/characters", async (req, res): Promise<void> => {
   const visibility = req.isAdmin ? "public" : "private";
   const imageSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
 
-  // Build system prompt, embedding appearance and voice tone
-  const voiceNote = appearance.voiceTone ? ` Voice: ${appearance.voiceTone}.` : "";
-  const appearanceNote = appearanceDesc ? ` Appearance: ${appearanceDesc}.` : "";
-  const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}.${appearanceNote}${voiceNote} Be in character at all times.`;
+  // Build the strict-sequence appearance prompt + negative tokens
+  const { appearanceText, negativeTokens } = buildAppearancePrompt(
+    parsed.data.name,
+    parsed.data.tags ?? [],
+    app,
+  );
 
-  // Enrich teaser description with appearance so the image generator produces accurate visuals
-  const enrichedTeaser = [parsed.data.bio, appearanceDesc].filter(Boolean).join(". ") || null;
+  // System prompt: embed full appearance context + voice tone + negative tokens hint
+  const voiceNote = app.voiceTone ? ` Voice tone: ${app.voiceTone}.` : "";
+  const negNote = negativeTokens ? ` [Avoid in images: ${negativeTokens}]` : "";
+  const systemPrompt = [
+    `You are ${parsed.data.name}.`,
+    parsed.data.bio ? parsed.data.bio : "A mysterious AI companion.",
+    `Age: ${parsed.data.age ?? "unknown"}. Genre: ${parsed.data.genre}.`,
+    appearanceText ? `Appearance: ${appearanceText}.` : "",
+    voiceNote,
+    `Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}`,
+    negNote,
+    "Stay in character at all times.",
+  ].filter(Boolean).join(" ");
+
+  // Enrich teaserDescription with the full appearance prompt for image generation
+  const enrichedTeaser = [parsed.data.bio, appearanceText].filter(Boolean).join(". ") || null;
 
   let finalAvatarUrl = parsed.data.avatarUrl ?? null;
   if (!finalAvatarUrl) {
@@ -262,10 +372,7 @@ router.post("/characters", async (req, res): Promise<void> => {
     imageSeed,
   });
 
-  if (!character) {
-    res.status(500).json({ error: "Failed to create character" });
-    return;
-  }
+  if (!character) { res.status(500).json({ error: "Failed to create character" }); return; }
 
   await db.update(usersTable).set({
     neonCardBalance: req.isAdmin ? undefined : sql`neon_card_balance - ${CHARACTER_CREATION_NEON_COST}`,
@@ -283,27 +390,14 @@ router.post("/characters", async (req, res): Promise<void> => {
 
 router.patch("/characters/:characterId", async (req, res): Promise<void> => {
   const params = UpdateCharacterParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
   const parsed = UpdateCharacterBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const existing = await getSupabaseCharacterById(params.data.characterId);
-  if (!existing) {
-    res.status(404).json({ error: "Character not found" });
-    return;
-  }
-
-  if (existing.creatorId !== req.telegramUserId && !req.isAdmin) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
+  if (!existing) { res.status(404).json({ error: "Character not found" }); return; }
+  if (existing.creatorId !== req.telegramUserId && !req.isAdmin) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const updated = await updateSupabaseCharacter(params.data.characterId, {
     name: parsed.data.name ?? undefined,
@@ -315,38 +409,20 @@ router.patch("/characters/:characterId", async (req, res): Promise<void> => {
     systemPrompt: parsed.data.systemPrompt ?? undefined,
   });
 
-  if (!updated) {
-    res.status(500).json({ error: "Failed to update character" });
-    return;
-  }
-
+  if (!updated) { res.status(500).json({ error: "Failed to update character" }); return; }
   res.json(UpdateCharacterResponse.parse(serializeCharacter(updated)));
 });
 
 router.delete("/characters/:characterId", async (req, res): Promise<void> => {
   const params = DeleteCharacterParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
   const existing = await getSupabaseCharacterById(params.data.characterId);
-  if (!existing) {
-    res.status(404).json({ error: "Character not found" });
-    return;
-  }
-
-  if (existing.creatorId !== req.telegramUserId && !req.isAdmin) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
+  if (!existing) { res.status(404).json({ error: "Character not found" }); return; }
+  if (existing.creatorId !== req.telegramUserId && !req.isAdmin) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const ok = await deleteSupabaseCharacter(params.data.characterId);
-  if (!ok) {
-    res.status(500).json({ error: "Failed to delete character" });
-    return;
-  }
-
+  if (!ok) { res.status(500).json({ error: "Failed to delete character" }); return; }
   res.sendStatus(204);
 });
 
