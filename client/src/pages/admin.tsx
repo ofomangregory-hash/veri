@@ -3,7 +3,7 @@ import { useGetAdminStats, useAdminListUsers, useAdminListCharacters, useGetMe }
 import { Users, Bot, CreditCard, Activity, Image, ChevronDown, ChevronRight, Save, RefreshCw, Eye, EyeOff, MessageSquare, ShieldAlert, ShieldCheck, Plus, X, Sparkles, Wand2, DollarSign, UserCircle, Ticket, CreditCard as CardIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { CharacterWizard } from "@/components/CharacterWizard";
+import { CharacterWizard, type CharacterForEdit } from "@/components/CharacterWizard";
 
 type AdminTab = "stats" | "users" | "characters" | "banners" | "pricing" | "broadcast";
 interface SysConfig { key: string; value: unknown; updatedAt: string }
@@ -182,6 +182,7 @@ export function Admin() {
   const [expandedCharId, setExpandedCharId] = useState<string | null>(null);
   const [broadcastMsg, setBroadcastMsg] = useState(""); const [broadcasting, setBroadcasting] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [editingChar, setEditingChar] = useState<CharacterForEdit | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<{ seeded: number; skipped: number; total: number } | null>(null);
 
@@ -524,7 +525,23 @@ export function Admin() {
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${char.visibility === "public" ? "border-green-500/50 text-green-400 bg-green-500/10 hover:bg-green-500/20" : "border-border text-muted-foreground hover:border-primary/50"}`}>
                     {char.visibility === "public" ? <Eye size={12} /> : <EyeOff size={12} />}{char.visibility}
                   </button>
-                  <button onClick={() => setExpandedCharId(p => p === char.characterId ? null : char.characterId)} className="p-1.5 text-muted-foreground hover:text-foreground ml-1">
+                  <button
+                    onClick={() => setEditingChar({
+                      characterId: char.characterId,
+                      name: char.name,
+                      genre: char.genre ?? "Modern",
+                      visibility: char.visibility ?? "private",
+                      avatarUrl: char.avatarUrl ?? null,
+                      teaserDescription: (char as unknown as { teaserDescription?: string }).teaserDescription ?? null,
+                      initialGreeting: (char as unknown as { initialGreeting?: string }).initialGreeting ?? null,
+                      tags: char.tags ?? [],
+                    })}
+                    title={`Edit ${char.name} in wizard`}
+                    className="p-1.5 rounded-lg border border-accent/30 text-accent/70 hover:text-accent hover:border-accent/60 hover:bg-accent/10 transition-all ml-0.5"
+                  >
+                    <Wand2 size={14} />
+                  </button>
+                  <button onClick={() => setExpandedCharId(p => p === char.characterId ? null : char.characterId)} className="p-1.5 text-muted-foreground hover:text-foreground ml-0.5">
                     {expandedCharId === char.characterId ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   </button>
                 </div>
@@ -606,6 +623,7 @@ export function Admin() {
     </div>
 
     {showWizard && <CharacterWizard onClose={()=>setShowWizard(false)} onCreated={()=>{setShowWizard(false);loadConfigs();}} isSupremeAdmin={isSupremeAdmin} />}
+    {editingChar && <CharacterWizard onClose={()=>setEditingChar(null)} onCreated={()=>{setEditingChar(null);loadConfigs();}} isSupremeAdmin={isSupremeAdmin} character={editingChar} />}
 
     {/* ── User Detail Drawer ── */}
     {drawerOpen && (

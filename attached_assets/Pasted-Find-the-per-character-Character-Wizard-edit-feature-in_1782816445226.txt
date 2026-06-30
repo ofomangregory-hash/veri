@@ -1,0 +1,23 @@
+Find the per-character "Character Wizard" edit feature in admin.tsx (the wand icon next to each character in the Characters list, separate from "Quick Create"). Do not touch any other files. Do not modify auth.ts, authMiddleware, or proxy/image-proxy route logic.
+1. Add all core character fields (from the original creation flow, if not already present in this wizard):
+
+Name
+Genre (Anime, Fantasy, Modern, Sci-Fi, Dark Goth — valid enum only)
+Art Style (Anime/Realistic — separate field, NOT mapped to genre)
+Sub-genres/Character Type (multi-select, max 2 + custom)
+Apparent Age
+Bio / Core Directives
+Initial Greeting
+Tags
+Visibility (Private/Public)
+
+2. Add all 40 appearance fields (the same ones already implemented in Quick Create — hair_color, hair_length, eye_color, height, build, skin_tone, species, hybrid_species, ear_type, distinguishing_feature, voice_tone, hairstyle, facial_expression_default, accessory, tail_wings, body_markings, posture, color_palette, occupation_look, cultural_style, ass_size, chest_size, camera_shot_type, view_direction, camera_angle, gender_base_mesh, eye_detail_enhancer, clothing_material_finish, legwear_socks_style, environment_setting, lighting_style, rendering_engine, bangs_style, makeup_style, outfit_fit, image_focus, thigh_hip_size, skin_texture_realism, negative_prompts_filter, outfit_cleavage_cut)
+Requirements for both sections:
+
+When opening the wizard for an EXISTING character, pre-fill ALL fields (core + appearance) with that character's current saved values. Null/empty fields show as unselected/blank, not errors
+Use the same chip + "Add Custom" UI pattern already built for appearance fields in Quick Create
+All fields optional in this edit context (no required gate — this must work for editing existing characters created before these fields existed)
+On save, update ALL changed fields in both local DB and Supabase (via updateSupabaseCharacter or equivalent), same pattern as other admin edits
+Must work for characters with existing data AND characters missing this data entirely (retroactive editing)
+
+Do not touch any other files.
