@@ -16,6 +16,27 @@ export const charactersTable = pgTable("characters", {
   age: text("age"),
   triggerMetadataArray: jsonb("trigger_metadata_array"),
   imageSeed: text("image_seed"),
+  // ── Appearance columns ────────────────────────────────────────────────────
+  hairColor: text("hair_color"),
+  hairLength: text("hair_length"),
+  eyeColor: text("eye_color"),
+  height: text("height"),
+  build: text("build"),
+  skinTone: text("skin_tone"),
+  species: text("species"),
+  hybridSpecies: text("hybrid_species"),
+  earType: text("ear_type"),
+  distinguishingFeature: text("distinguishing_feature"),
+  voiceTone: text("voice_tone"),
+  hairstyle: text("hairstyle"),
+  facialExpressionDefault: text("facial_expression_default"),
+  accessory: text("accessory"),
+  tailWings: text("tail_wings"),
+  bodyMarkings: text("body_markings"),
+  posture: text("posture"),
+  colorPalette: text("color_palette"),
+  occupationLook: text("occupation_look"),
+  culturalStyle: text("cultural_style"),
 });
 
 export const insertCharacterSchema = createInsertSchema(charactersTable).omit({ characterId: true });

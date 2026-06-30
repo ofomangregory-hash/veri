@@ -41,6 +41,116 @@ const STAFF_ROLES = [
   { value: "full_admin", label: "Full Admin" },
 ];
 
+// ── Appearance fields (mirrors create.tsx) ────────────────────────────────────
+const APPEARANCE_FIELDS = [
+  { key: "hairColor", label: "Hair Color", required: true, presets: ["Black", "Brown", "Blonde", "Red", "White", "Silver", "Blue", "Pink", "Purple", "Green", "Rose gold"] },
+  { key: "hairLength", label: "Hair Length", required: true, presets: ["Bald", "Buzzcut", "Short", "Medium", "Long", "Very long", "Waist-length", "Floor-length"] },
+  { key: "eyeColor", label: "Eye Color", required: true, presets: ["Brown", "Blue", "Green", "Hazel", "Grey", "Amber", "Red", "Purple", "Gold", "Heterochromia", "Glowing"] },
+  { key: "hairstyle", label: "Hairstyle", required: false, presets: ["Straight", "Wavy", "Curly", "Braided", "Twin tails", "Ponytail", "Bob", "Bun", "Wild / messy"] },
+  { key: "skinTone", label: "Skin Tone", required: false, presets: ["Pale", "Fair", "Light", "Medium", "Tan", "Dark", "Ebony", "Bronze", "Blue-grey", "Silver"] },
+  { key: "height", label: "Height", required: false, presets: ["Petite", "Short", "Average", "Tall", "Very tall"] },
+  { key: "build", label: "Build", required: false, presets: ["Slim", "Athletic", "Curvy", "Muscular", "Petite", "Voluptuous", "Lithe"] },
+  { key: "species", label: "Species", required: false, presets: ["Human", "Elf", "Demon", "Angel", "Vampire", "Werewolf", "Neko", "Android", "Alien", "Fae", "Undead"] },
+  { key: "hybridSpecies", label: "Hybrid Species", required: false, presets: ["None", "Half-human", "Half-demon", "Half-elf", "Half-dragon", "Cyborg"] },
+  { key: "earType", label: "Ear Type", required: false, presets: ["Human", "Elf-pointed", "Cat ears", "Fox ears", "Demon horns", "Dragon horns", "Bunny ears"] },
+  { key: "distinguishingFeature", label: "Distinguishing Feature", required: false, presets: ["None", "Scar", "Tattoo", "Birthmark", "Freckles", "Heterochromia", "Glowing eyes", "Fangs"] },
+  { key: "voiceTone", label: "Voice Tone", required: false, presets: ["Soft", "Deep", "Raspy", "Melodic", "Playful", "Cold", "Sultry", "High-pitched", "Robotic"] },
+  { key: "facialExpressionDefault", label: "Default Expression", required: false, presets: ["Smiling", "Serious", "Mysterious", "Playful", "Seductive", "Stoic", "Shy", "Mischievous"] },
+  { key: "accessory", label: "Accessory", required: false, presets: ["None", "Glasses", "Choker", "Crown", "Headphones", "Mask", "Earrings", "Horns", "Halo", "Eye patch"] },
+  { key: "tailWings", label: "Tail / Wings", required: false, presets: ["None", "Tail", "Fox tail", "Dragon wings", "Demon wings", "Angel wings", "Multiple tails"] },
+  { key: "bodyMarkings", label: "Body Markings", required: false, presets: ["None", "Tattoos", "Runes", "Scales", "Scars", "Glowing markings", "Clan marks"] },
+  { key: "posture", label: "Posture", required: false, presets: ["Confident", "Relaxed", "Elegant", "Tense", "Slouched", "Warrior stance", "Seductive lean"] },
+  { key: "colorPalette", label: "Color Palette", required: false, presets: ["Dark", "Pastel", "Neon", "Monochrome", "Warm", "Cool", "Earthy", "Vibrant", "Muted"] },
+  { key: "occupationLook", label: "Occupation Look", required: false, presets: ["Casual", "Formal", "Military", "Mage robes", "Hacker / street", "Noble", "Armor", "Lab coat"] },
+  { key: "culturalStyle", label: "Cultural Style", required: false, presets: ["Western", "Japanese", "Gothic", "Cyberpunk", "Victorian", "Fantasy", "Ancient", "Futuristic"] },
+] as const;
+
+type AppearanceKey = (typeof APPEARANCE_FIELDS)[number]["key"];
+
+const BLANK_APPEARANCE: Record<AppearanceKey, string> = {
+  hairColor: "", hairLength: "", eyeColor: "", hairstyle: "", skinTone: "",
+  height: "", build: "", species: "", hybridSpecies: "", earType: "",
+  distinguishingFeature: "", voiceTone: "", facialExpressionDefault: "",
+  accessory: "", tailWings: "", bodyMarkings: "", posture: "",
+  colorPalette: "", occupationLook: "", culturalStyle: "",
+};
+
+// ── ChipField component ───────────────────────────────────────────────────────
+interface ChipFieldProps {
+  label: string;
+  required?: boolean;
+  presets: readonly string[];
+  value: string;
+  onChange: (v: string) => void;
+}
+
+function ChipField({ label, required, presets, value, onChange }: ChipFieldProps) {
+  const [showCustom, setShowCustom] = useState(false);
+  const [customVal, setCustomVal] = useState("");
+
+  function applyCustom() {
+    const v = customVal.trim();
+    if (v) { onChange(v); setShowCustom(false); setCustomVal(""); }
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        {label}{required && <span className="text-primary ml-1">*</span>}
+      </label>
+      <div className="flex flex-wrap gap-1.5">
+        {presets.map(p => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(value === p ? "" : p)}
+            className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-all ${
+              value === p
+                ? "bg-primary/20 border-primary text-primary"
+                : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setShowCustom(s => !s)}
+          className="px-2 py-0.5 rounded-full text-[11px] font-medium border border-dashed border-primary/40 text-primary/70 hover:border-primary hover:text-primary transition-all"
+        >
+          + Custom
+        </button>
+      </div>
+      {showCustom && (
+        <div className="flex gap-2 items-center">
+          <input
+            type="text"
+            value={customVal}
+            onChange={e => setCustomVal(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); applyCustom(); } }}
+            placeholder={`Custom ${label.toLowerCase()}…`}
+            className="flex-1 h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/60"
+          />
+          <button
+            type="button"
+            onClick={applyCustom}
+            className="h-7 px-2 rounded-md bg-primary/20 border border-primary/40 text-primary text-xs font-bold hover:bg-primary/30 transition-colors"
+          >
+            ✓
+          </button>
+        </div>
+      )}
+      {value && (
+        <div className="text-[11px] text-primary flex items-center gap-1">
+          <span>Selected: <span className="font-semibold">{value}</span></span>
+          <button type="button" onClick={() => onChange("")} className="text-muted-foreground hover:text-foreground ml-1">×</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function getToken() {
   return window.Telegram?.WebApp?.initData || "mock_init_data_for_dev";
 }
@@ -170,12 +280,20 @@ export function Admin() {
     finally { setSeeding(false); }
   };
 
+  // ── Quick Create state ────────────────────────────────────────────────────
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [showAppearance, setShowAppearance] = useState(false);
   const [newChar, setNewChar] = useState({
     name: "", bio: "", age: "", genre: "Modern", tags: "",
     avatarUrl: "", initialGreeting: "", visibility: "private" as "public" | "private",
+    // Appearance fields — all 20
+    ...BLANK_APPEARANCE,
   });
+
+  function setNewCharAppearance(key: AppearanceKey, value: string) {
+    setNewChar(p => ({ ...p, [key]: value }));
+  }
 
   const loadConfigs = useCallback(async () => {
     setConfigsLoading(true);
@@ -255,6 +373,13 @@ export function Admin() {
     if (!newChar.name.trim()) { toast({ title: "Name required", variant: "destructive" }); return; }
     setCreating(true);
     try {
+      // Build appearance payload — only include non-empty fields
+      const appearancePayload: Record<string, string> = {};
+      for (const field of APPEARANCE_FIELDS) {
+        const v = newChar[field.key as AppearanceKey];
+        if (v) appearancePayload[field.key] = v;
+      }
+
       await adminApi("POST", "/admin/characters/create", {
         name: newChar.name.trim(),
         bio: newChar.bio || undefined,
@@ -264,9 +389,16 @@ export function Admin() {
         avatarUrl: newChar.avatarUrl || undefined,
         initialGreeting: newChar.initialGreeting || undefined,
         visibility: newChar.visibility,
+        ...appearancePayload,
       });
       toast({ title: `✅ ${newChar.name} created as ${newChar.visibility}!` });
-      setNewChar({ name: "", bio: "", age: "", genre: "Modern", tags: "", avatarUrl: "", initialGreeting: "", visibility: "private" });
+      // Reset all fields including all 20 appearance fields
+      setNewChar({
+        name: "", bio: "", age: "", genre: "Modern", tags: "",
+        avatarUrl: "", initialGreeting: "", visibility: "private",
+        ...BLANK_APPEARANCE,
+      });
+      setShowAppearance(false);
       setShowCreateForm(false);
     } catch (e) { toast({ title: "Create failed", description: String(e), variant: "destructive" }); }
     finally { setCreating(false); }
@@ -277,7 +409,7 @@ export function Admin() {
     setBroadcasting(true);
     try {
       const result = await adminApi<{ sent: number; failed: number }>("POST", "/admin/broadcast", { message: broadcastMsg });
-      toast({ title: `Broadcast sent!`, description: `✅ ${result.sent} sent, ❌ ${result.failed} failed` });
+      toast({ title: "Broadcast sent!", description: `✅ ${result.sent} sent, ❌ ${result.failed} failed` });
       setBroadcastMsg("");
     } catch (e) { toast({ title: "Broadcast failed", description: String(e), variant: "destructive" }); }
     finally { setBroadcasting(false); }
@@ -535,6 +667,35 @@ export function Admin() {
                 <label className="text-xs text-muted-foreground mb-1 block">Tags (comma-separated)</label>
                 <Input value={newChar.tags} onChange={e => setNewChar(p => ({ ...p, tags: e.target.value }))}
                   placeholder="Hacker, Anime, Tsundere" className="bg-background border-border h-9 text-sm" />
+              </div>
+
+              {/* ── Appearance Details (collapsible) ───────────────────────── */}
+              <div className="border border-border rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowAppearance(s => !s)}
+                  className="w-full flex items-center justify-between px-3 py-2 bg-muted/30 hover:bg-muted/50 transition-colors text-xs font-bold uppercase tracking-wider text-muted-foreground"
+                >
+                  <span>✨ Appearance Details (shapes avatar &amp; prompt)</span>
+                  <ChevronDown size={14} className={`transition-transform ${showAppearance ? "rotate-180" : ""}`} />
+                </button>
+                {showAppearance && (
+                  <div className="p-3 space-y-4 bg-background/50">
+                    <p className="text-[11px] text-muted-foreground">
+                      Fields marked <span className="text-primary font-bold">*</span> are recommended for best avatar generation.
+                    </p>
+                    {APPEARANCE_FIELDS.map(field => (
+                      <ChipField
+                        key={field.key}
+                        label={field.label}
+                        required={field.required}
+                        presets={field.presets}
+                        value={newChar[field.key as AppearanceKey]}
+                        onChange={v => setNewCharAppearance(field.key as AppearanceKey, v)}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
 
               <button onClick={createCharacter} disabled={creating || !newChar.name.trim()}

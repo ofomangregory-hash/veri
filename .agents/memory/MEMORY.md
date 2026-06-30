@@ -7,3 +7,4 @@
 - [NSFW access pattern](nsfw-access.md) — NSFW uses #NSFW tag (no Supabase schema column needed); free users filtered in GET /characters via excludeNsfw; admin PATCH /admin/characters/:id in admin.ts uses updateSupabaseCharacter
 - [Conversations route order](conv-route-order.md) — GET /conversations/archived MUST come before GET /conversations/:characterId in Express; also all conv queries need archived=false filter + orderBy(desc(updatedAt)).limit(1)
 - [CS tab and push notifications](cs-tab-push.md) — Customer Service tab wired; push notifications use notifyAfter column on conversations; Supabase silent-fail pattern always needs console.error not just logger.warn
+- [Appearance system design](appearance-system.md) — 20 appearance columns in local Drizzle schema; Supabase path gets appearance via enriched systemPrompt; image gen enriched via teaserDescription param; extra fields sent as-any from UI, parsed with AppearanceSchema in route

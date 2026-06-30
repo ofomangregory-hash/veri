@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { db, usersTable, transactionsTable } from "../db";
 import {
   ListCharactersQueryParams,
@@ -33,6 +34,58 @@ router.use(authMiddleware);
 
 const MAX_CHARACTER_SLOTS = 3;
 const CHARACTER_CREATION_NEON_COST = 25;
+
+// ── Appearance schema (parsed separately from generated CreateCharacterBody) ──
+const AppearanceSchema = z.object({
+  hairColor: z.string().optional(),
+  hairLength: z.string().optional(),
+  eyeColor: z.string().optional(),
+  hairstyle: z.string().optional(),
+  skinTone: z.string().optional(),
+  height: z.string().optional(),
+  build: z.string().optional(),
+  species: z.string().optional(),
+  hybridSpecies: z.string().optional(),
+  earType: z.string().optional(),
+  distinguishingFeature: z.string().optional(),
+  voiceTone: z.string().optional(),
+  facialExpressionDefault: z.string().optional(),
+  accessory: z.string().optional(),
+  tailWings: z.string().optional(),
+  bodyMarkings: z.string().optional(),
+  posture: z.string().optional(),
+  colorPalette: z.string().optional(),
+  occupationLook: z.string().optional(),
+  culturalStyle: z.string().optional(),
+});
+
+type AppearanceData = z.infer<typeof AppearanceSchema>;
+
+function buildAppearanceDescription(app: AppearanceData): string {
+  const parts: string[] = [];
+  if (app.hairColor || app.hairLength || app.hairstyle) {
+    const hairParts = [app.hairLength, app.hairColor, "hair"].filter(Boolean);
+    parts.push(hairParts.join(" "));
+    if (app.hairstyle) parts.push(`${app.hairstyle} hairstyle`);
+  }
+  if (app.eyeColor) parts.push(`${app.eyeColor} eyes`);
+  if (app.skinTone) parts.push(`${app.skinTone} skin`);
+  if (app.build) parts.push(`${app.build} build`);
+  if (app.height) parts.push(`${app.height} height`);
+  if (app.species && app.species !== "Human") parts.push(app.species);
+  if (app.hybridSpecies && app.hybridSpecies !== "None") parts.push(app.hybridSpecies);
+  if (app.earType && app.earType !== "Human") parts.push(app.earType);
+  if (app.distinguishingFeature && app.distinguishingFeature !== "None") parts.push(app.distinguishingFeature);
+  if (app.tailWings && app.tailWings !== "None") parts.push(app.tailWings);
+  if (app.bodyMarkings && app.bodyMarkings !== "None") parts.push(app.bodyMarkings);
+  if (app.accessory && app.accessory !== "None") parts.push(`wearing ${app.accessory}`);
+  if (app.posture) parts.push(`${app.posture} posture`);
+  if (app.colorPalette) parts.push(`${app.colorPalette} color palette`);
+  if (app.culturalStyle) parts.push(`${app.culturalStyle} aesthetic`);
+  if (app.occupationLook) parts.push(`${app.occupationLook} look`);
+  if (app.facialExpressionDefault) parts.push(`${app.facialExpressionDefault} expression`);
+  return parts.join(", ");
+}
 
 function serializeCharacter(c: NormalizedCharacter) {
   const triggerMeta = Array.isArray(c.triggerMetadataArray) ? null : (c.triggerMetadataArray ?? null);
@@ -135,6 +188,11 @@ router.post("/characters", async (req, res): Promise<void> => {
     return;
   }
 
+  // Extract appearance fields alongside the typed body
+  const appearanceParsed = AppearanceSchema.safeParse(req.body);
+  const appearance: AppearanceData = appearanceParsed.success ? appearanceParsed.data : {};
+  const appearanceDesc = buildAppearanceDescription(appearance);
+
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
   if (!user) {
     res.status(404).json({ error: "User not found" });
@@ -167,7 +225,14 @@ router.post("/characters", async (req, res): Promise<void> => {
 
   const visibility = req.isAdmin ? "public" : "private";
   const imageSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
-  const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
+
+  // Build system prompt, embedding appearance and voice tone
+  const voiceNote = appearance.voiceTone ? ` Voice: ${appearance.voiceTone}.` : "";
+  const appearanceNote = appearanceDesc ? ` Appearance: ${appearanceDesc}.` : "";
+  const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}.${appearanceNote}${voiceNote} Be in character at all times.`;
+
+  // Enrich teaser description with appearance so the image generator produces accurate visuals
+  const enrichedTeaser = [parsed.data.bio, appearanceDesc].filter(Boolean).join(". ") || null;
 
   let finalAvatarUrl = parsed.data.avatarUrl ?? null;
   if (!finalAvatarUrl) {
@@ -175,7 +240,7 @@ router.post("/characters", async (req, res): Promise<void> => {
       finalAvatarUrl = await generateCharacterAvatar({
         characterName: parsed.data.name,
         genre: parsed.data.genre,
-        teaserDescription: parsed.data.bio ?? null,
+        teaserDescription: enrichedTeaser,
         imageSeed,
       });
     } catch (err) {
