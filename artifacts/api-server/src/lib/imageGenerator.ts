@@ -1,7 +1,7 @@
 import { logger } from "./logger";
 
 const GENRE_STYLE_PREFIX: Record<string, string> = {
-  "Anime":     "anime style, anime art, 2D illustration",
+  "Anime":     "modern high-quality anime style, clean digital line art, smooth cell shading, soft gradients, vibrant lighting, polished textures, highly detailed 2D illustration",
   "Realistic": "realistic, photorealistic, detailed photography, lifelike",
 };
 
@@ -36,7 +36,7 @@ export interface GenerateSelfieOptions {
 
 export function deriveStyleDescriptor(genre: string, tags: string[]): string {
   const tagLower = (tags ?? []).map(t => t.toLowerCase());
-  if (tagLower.includes("anime") || genre === "Anime") return "anime style, 2D illustration, vibrant colors";
+  if (tagLower.includes("anime") || genre === "Anime") return "modern high-quality anime style, clean digital line art, smooth cell shading, soft gradients, vibrant lighting, polished textures, highly detailed 2D illustration";
   if (tagLower.includes("realistic") || genre === "Realistic") return "realistic digital painting, photorealistic, highly detailed";
   if (tagLower.includes("3d") || tagLower.includes("pixar")) return "3D render, Pixar style, soft lighting";
   if (genre === "Dark Goth" || tagLower.includes("vampire") || tagLower.includes("goth")) return "gothic dark art, cinematic shadows, dramatic lighting";
