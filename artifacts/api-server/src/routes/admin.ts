@@ -24,7 +24,7 @@ import {
 } from "@workspace/api-zod";
 import { authMiddleware, adminOnly } from "../middlewares/auth";
 import { getGenreDefaultAvatar } from "../lib/cloudinary";
-import { generateCharacterAvatar } from "../lib/imageGenerator";
+import { generateCharacterAvatar, generateCharacterSelfie, deriveStyleDescriptor } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import { listSupabaseCharacters, createSupabaseCharacter, updateSupabaseCharacter, getSupabaseCharacterById } from "../lib/supabaseCharacters";
 import { getErrors, clearErrors, deleteError } from "../lib/errorStore";
@@ -583,14 +583,23 @@ router.post("/admin/characters/create", async (req, res): Promise<void> => {
 
   // Auto-generate avatar if none provided
   const seed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
+  const subGenresArray: string[] = Array.isArray((req.body as Record<string, unknown>).subGenres)
+    ? ((req.body as Record<string, unknown>).subGenres as string[]).slice(0, 2)
+    : [];
+  const styleDescriptor = deriveStyleDescriptor(safeGenre, subGenresArray);
   let finalAvatarUrl = avatarUrl ?? null;
   if (!finalAvatarUrl) {
     try {
-      finalAvatarUrl = await generateCharacterAvatar({
+      finalAvatarUrl = await generateCharacterSelfie({
         characterName: name.trim(),
         genre: safeGenre,
+        systemPrompt: "",
         teaserDescription: bio ?? null,
         imageSeed: seed,
+        sceneDescription: "close-up portrait, looking at camera, soft studio lighting, high detail",
+        nsfwEnabled: false,
+        subGenres: subGenresArray,
+        styleDescriptor,
       });
     } catch (err) {
       logger.warn({ err }, "Admin avatar generation failed — using genre default");
@@ -610,6 +619,7 @@ router.post("/admin/characters/create", async (req, res): Promise<void> => {
     genre: safeGenre,
     age: age ?? null,
     imageSeed: seed,
+    styleDescriptor,
   }).returning();
 
   // Mirror to Supabase with the same ID so the webapp can see it
@@ -625,6 +635,9 @@ router.post("/admin/characters/create", async (req, res): Promise<void> => {
     tags: Array.isArray(tags) ? tags : [],
     imageSeed: seed,
   }).catch(err => logger.warn({ err }, "admin create: Supabase mirror failed"));
+
+  updateSupabaseCharacter(character.characterId, { styleDescriptor })
+    .catch(err => logger.warn({ err }, "admin create: styleDescriptor save failed"));
 
   res.status(201).json(serializeCharacter(character));
 });

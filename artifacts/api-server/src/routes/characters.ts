@@ -17,6 +17,7 @@ import {
 } from "@workspace/api-zod";
 import { authMiddleware } from "../middlewares/auth";
 import { getGenreDefaultAvatar } from "../lib/cloudinary";
+import { generateCharacterSelfie, deriveStyleDescriptor } from "../lib/imageGenerator";
 import { logger } from "../lib/logger";
 import {
   listSupabaseCharacters,
@@ -219,10 +220,11 @@ router.post("/characters", async (req, res): Promise<void> => {
   const subGenres: string[] = Array.isArray(createBody.subGenres)
     ? (createBody.subGenres as string[]).slice(0, 2)
     : [];
+  const styleDescriptor = deriveStyleDescriptor(parsed.data.genre, subGenres);
   const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
 
   // Save immediately with genre placeholder — avatar generated async after save
-  const initialAvatarUrl = parsed.data.avatarUrl ?? getGenreDefaultAvatar(parsed.data.genre);
+  const initialAvatarUrl = getGenreDefaultAvatar(parsed.data.genre);
 
   const character = await createSupabaseCharacter({
     creatorId: req.telegramUserId,
@@ -262,35 +264,26 @@ router.post("/characters", async (req, res): Promise<void> => {
   const characterId = character.characterId;
   const characterName = character.name;
   const characterGenre = character.genre ?? parsed.data.genre;
-  const seed = parseInt(imageSeed);
 
   (async () => {
     try {
-      const prompt = encodeURIComponent(
-        `${characterName}, ${characterGenre} style, character portrait, detailed face`
-      );
-      const pollinationsUrl = `https://image.pollinations.ai/prompt/${prompt}?model=flux&width=512&height=512&nologo=true&seed=${seed}`;
-
-      console.log('[CHARACTER AVATAR] Starting background generation for:', characterName);
-      console.log('[CHARACTER AVATAR] URL:', pollinationsUrl);
-
-      const check = await fetch(pollinationsUrl, {
-        method: 'HEAD',
-        headers: { 'Referer': 'https://pollinations.ai' },
-        signal: AbortSignal.timeout(65000),
+      console.log('[CHARACTER AVATAR] Starting generation for:', characterName, 'style:', styleDescriptor);
+      const avatarUrl = await generateCharacterSelfie({
+        characterName,
+        genre: characterGenre,
+        systemPrompt: "",
+        teaserDescription: null,
+        imageSeed,
+        sceneDescription: "close-up portrait, looking at camera, soft studio lighting, high detail",
+        nsfwEnabled: false,
+        subGenres,
+        styleDescriptor,
       });
-
-      console.log('[CHARACTER AVATAR] Pollinations status:', check.status);
-
-      if (!check.ok) {
-        console.log('[CHARACTER AVATAR] Pollinations check failed — keeping placeholder');
-        return;
-      }
-
-      await updateSupabaseCharacter(characterId, { avatarUrl: pollinationsUrl });
-      console.log('[CHARACTER AVATAR] Generated successfully for:', characterName, '->', pollinationsUrl);
+      await updateSupabaseCharacter(characterId, { avatarUrl, styleDescriptor });
+      console.log('[CHARACTER AVATAR] Generated successfully:', characterName, '->', avatarUrl);
     } catch (err: any) {
-      console.log('[CHARACTER AVATAR] Generation failed, keeping existing avatar:', err?.message);
+      console.log('[CHARACTER AVATAR] Generation failed, saving style descriptor:', err?.message);
+      await updateSupabaseCharacter(characterId, { styleDescriptor }).catch(() => {});
     }
   })();
 });

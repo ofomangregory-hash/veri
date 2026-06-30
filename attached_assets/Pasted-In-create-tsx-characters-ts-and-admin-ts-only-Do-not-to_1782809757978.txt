@@ -1,0 +1,19 @@
+In create.tsx, characters.ts, and admin.ts only. Do not touch any other files. Do not modify auth.ts, authMiddleware, or any proxy/image-proxy route logic.
+1. Remove avatar upload from user creation flow (create.tsx)
+Remove the Step 2 upload UI (drop zone, file input, preview, remove/change buttons) entirely. Replace it with a simple confirmation screen: "Your character's avatar will be generated automatically based on your name, art style, and character type." No file upload, no avatarUrl field sent from client at all.
+2. Fix user avatar generation (characters.ts)
+Replace the hardcoded background IIFE (lines ~267–295) that builds its own prompt and uses HEAD-only validation. Instead:
+
+Call the same generateCharacterSelfie / avatar generation function that admin creation uses (the proper style system), not a separate inline prompt
+Pass: character name, the seed already generated at line 217, the style descriptor (derive it using deriveStyleDescriptor(genre, subGenres) at creation time), and subGenres
+Save the resulting styleDescriptor to Supabase at creation time — it must not be null
+Use full GET validation (download check), not HEAD-only, matching the admin path
+
+3. Save styleDescriptor at creation time for both flows
+In both characters.ts (user) and admin.ts (admin) creation handlers, derive styleDescriptor via deriveStyleDescriptor(genre, subGenres) immediately at creation and save it to both local DB and Supabase. It must not be left null until first chat image.
+4. Pass sub-genres into admin avatar generation (admin.ts)
+In the admin create handler (~line 585–598), pass subGenres into the generateCharacterAvatar call so character-type context (e.g. "Elf", "Cyberpunk") is included in the avatar prompt, matching what's collected in the admin form.
+All avatar prompts must only use: character name, style descriptor (derived from genre), and sub-genre tags — fields the user/admin already submitted. Do not introduce any new descriptive content.
+Do not touch any other files.
+
+Th

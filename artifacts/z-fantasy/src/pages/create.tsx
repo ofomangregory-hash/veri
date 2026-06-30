@@ -1,9 +1,9 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Sparkles, Upload, X, ChevronLeft, ChevronRight, Check,
+  Sparkles, ChevronLeft, ChevronRight, Check,
 } from "lucide-react";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 
@@ -18,7 +18,7 @@ const MAX_SUBGENRES = 2;
 
 const STEPS = [
   { id: 1, title: "Entity Name",       subtitle: "Choose or type your companion's identity" },
-  { id: 2, title: "Visual Form",       subtitle: "Upload an avatar for your entity" },
+  { id: 2, title: "Visual Form",       subtitle: "Avatar auto-generated from your choices" },
   { id: 3, title: "Origin Genre",      subtitle: "Choose art style and character type" },
   { id: 4, title: "Core Data",         subtitle: "Age & biographical directives" },
   { id: 5, title: "First Contact",     subtitle: "Their opening transmission" },
@@ -42,10 +42,6 @@ export function Create() {
   const [usingCustomName, setUsingCustomName] = useState(false);
   const [customNameInput, setCustomNameInput] = useState("");
 
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [artStyle, setArtStyle] = useState<"Anime" | "Realistic" | "">("");
   const [subGenres, setSubGenres] = useState<string[]>([]);
   const [customSubGenreInput, setCustomSubGenreInput] = useState("");
@@ -59,24 +55,6 @@ export function Create() {
   const [visibility, setVisibility] = useState<"public" | "private">("private");
 
   const resolvedName = usingCustomName ? customNameInput.trim() : name;
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Please select an image file", variant: "destructive" });
-      return;
-    }
-    setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
-  }
-
-  function clearAvatar() {
-    setAvatarFile(null);
-    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
-    setAvatarPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
 
   function addCustomSubGenre() {
     const val = customSubGenreInput.trim();
@@ -118,22 +96,6 @@ export function Create() {
 
     setSubmitting(true);
     try {
-      let avatarUrl: string | undefined;
-
-      if (avatarFile) {
-        const formData = new FormData();
-        formData.append("file", avatarFile);
-        const up = await fetch("/api/media/upload", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${getToken()}` },
-          body: formData,
-        });
-        if (up.ok) {
-          const j = await up.json() as { url?: string };
-          avatarUrl = j.url;
-        }
-      }
-
       const extraTags = tagsInput
         ? tagsInput.split(",").map(t => t.trim()).filter(Boolean)
         : [];
@@ -153,7 +115,6 @@ export function Create() {
           bio: bio || undefined,
           initialGreeting: greeting || undefined,
           tags,
-          avatarUrl,
           visibility,
           isNsfw,
         }),
@@ -267,53 +228,20 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 2: Avatar ── */}
+        {/* ── Step 2: Visual Form ── */}
         {step === 2 && (
-          <div className="space-y-4">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <div
-              onClick={() => !avatarPreview && fileInputRef.current?.click()}
-              className={`w-full aspect-video rounded-2xl border-2 border-dashed flex items-center justify-center flex-col gap-3 transition-colors relative overflow-hidden ${
-                avatarPreview
-                  ? "border-primary/60 cursor-default"
-                  : "border-border hover:border-primary cursor-pointer group"
-              }`}
-            >
-              {avatarPreview ? (
-                <>
-                  <img src={avatarPreview} alt="Avatar" className="absolute inset-0 w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={e => { e.stopPropagation(); clearAvatar(); }}
-                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 z-10"
-                  >
-                    <X size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                    className="absolute bottom-2 right-2 px-3 py-1 rounded-lg bg-black/60 text-white text-xs font-semibold hover:bg-black/80 z-10 flex items-center gap-1"
-                  >
-                    <Upload size={12} /> Change
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Upload size={36} className="text-muted-foreground group-hover:text-primary transition-colors" />
-                  <span className="text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors">
-                    Tap to upload avatar
-                  </span>
-                </>
-              )}
+          <div className="flex flex-col items-center gap-6 py-6">
+            <div className="w-24 h-24 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-4xl">
+              🎨
             </div>
-            <p className="text-center text-xs text-muted-foreground">
-              Skipping avatar will auto-generate one based on art style
+            <p className="text-sm text-center text-muted-foreground leading-relaxed max-w-xs">
+              Your character's avatar will be generated automatically based on your{" "}
+              <span className="text-foreground font-semibold">name</span>,{" "}
+              <span className="text-foreground font-semibold">art style</span>, and{" "}
+              <span className="text-foreground font-semibold">character type</span>.
+            </p>
+            <p className="text-xs text-center text-muted-foreground/60">
+              You can update it from the admin panel after creation.
             </p>
           </div>
         )}
