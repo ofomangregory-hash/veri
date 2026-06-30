@@ -1,0 +1,32 @@
+In create.tsx and the character creation submit/regenerate routes (characters.ts) only. Do not touch any other files. Do not modify auth.ts, authMiddleware, or proxy/image-proxy route logic.
+1. Restore the original 6-step flow and reposition Appearance
+Current state is a 3-step wizard (Basic/Personality/Appearance) — restore it to the original 6 steps, with Appearance Details moved to Step 2:
+
+Step 1 — Entity Name
+Step 2 — Appearance Details (the 40-field system already built — chip + "Add Custom" pattern, required: Hair Color, Hair Length, Eye Color; rest optional)
+Step 3 — Origin Genre (Art Style toggle + Sub-genre multi-select)
+Step 4 — Core Data (Apparent Age + Bio)
+Step 5 — First Contact (Initial Greeting)
+Step 6 — Signal Tags (+ summary: Name, Art Style, Types, Visibility, Cost)
+
+2. Add a new Step 7 — Preview & Confirm
+
+Tapping "Awaken" on Step 6 deducts Neon Cards (existing cost), creates the character, generates the avatar using all submitted fields (existing pipeline), and lands the user on Step 7 instead of exiting the flow
+Step 7 displays the character like a bio page: avatar image front and center, name, all appearance details, genre/sub-genres, age, bio, initial greeting, tags — full summary view
+ALL fields are editable on Step 7 (appearance chips, name, bio, greeting, tags, everything) — same chip + "Add Custom" UI components reused here
+Saving edits on Step 7 updates the character record (local DB + Supabase) without re-deducting Neon Cards
+
+3. Add "Regenerate Avatar" on Step 7
+
+Button opens a text input: "Describe what you'd like changed"
+On regenerate: keep the EXISTING locked seed (do not generate a new one), but include the user's described change as additional prompt context appended to the existing appearance-based prompt
+Track a regenerate_count per character (new DB column, integer, default 0)
+First 3 regenerations (regenerate_count 0, 1, 2) are FREE — no Neon Card deduction
+From the 4th regeneration onward (regenerate_count >= 3), deduct 5 Neon Cards before regenerating; if the user doesn't have enough, block with an insufficient-balance message
+Increment regenerate_count on every successful regeneration
+Log: [AVATAR REGENERATE] {characterName} — attempt #{regenerate_count}, cost: {free/5 Neon Cards}, seed kept: {seed}
+
+4. Add regenerate_count and final_step_completed columns to characters table (integer default 0, boolean default false respectively).
+Do not touch any other files.
+
+Since you've now created regenerate_count and final_step_completed directly via SQL, you can tell Replit those columns already exist when you resend/follow up, so it doesn't try to re-create them and potentially conflict.
