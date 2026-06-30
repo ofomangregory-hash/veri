@@ -25,6 +25,19 @@ const STEPS = [
   { id: 6, title: "Signal Tags",       subtitle: "Classify your entity's attributes" },
 ];
 
+const VALID_GENRES = ["Anime", "Fantasy", "Modern", "Sci-Fi", "Dark Goth"] as const;
+type ValidGenre = typeof VALID_GENRES[number];
+
+function resolveGenre(artStyle: "Anime" | "Realistic" | "", subGenres: string[]): ValidGenre {
+  if (artStyle === "Anime") return "Anime";
+  // Realistic is a rendering style, not a content genre — derive genre from subGenres
+  const lower = subGenres.map(s => s.toLowerCase());
+  if (lower.some(s => ["fantasy", "elf", "mage", "witch", "warrior", "angel", "demon", "vampire"].includes(s))) return "Fantasy";
+  if (lower.some(s => ["sci-fi", "cyberpunk", "android", "isekai"].includes(s))) return "Sci-Fi";
+  if (lower.some(s => ["horror", "dark", "goth", "supernatural", "thriller"].includes(s))) return "Dark Goth";
+  return "Modern"; // safe default for realistic art style
+}
+
 function getToken() {
   return (window as unknown as { Telegram?: { WebApp?: { initData?: string } } })
     .Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
@@ -109,7 +122,7 @@ export function Create() {
         },
         body: JSON.stringify({
           name: resolvedName,
-          genre: artStyle || "Realistic",
+          genre: resolveGenre(artStyle, subGenres),
           subGenres,
           age: age || undefined,
           bio: bio || undefined,
