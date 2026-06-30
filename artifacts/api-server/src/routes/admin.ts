@@ -634,10 +634,10 @@ router.post("/admin/characters/create", async (req, res): Promise<void> => {
     initialGreeting: initialGreeting ?? null,
     tags: Array.isArray(tags) ? tags : [],
     imageSeed: seed,
+    genre: safeGenre,
+    subGenres: subGenresArray,
+    styleDescriptor,
   }).catch(err => logger.warn({ err }, "admin create: Supabase mirror failed"));
-
-  updateSupabaseCharacter(character.characterId, { styleDescriptor })
-    .catch(err => logger.warn({ err }, "admin create: styleDescriptor save failed"));
 
   res.status(201).json(serializeCharacter(character));
 });
