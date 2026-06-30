@@ -458,7 +458,62 @@ export function Admin() {
   const [newChar, setNewChar] = useState({
     name: "", bio: "", age: "", genre: "Modern", tags: "",
     avatarUrl: "", initialGreeting: "", visibility: "private" as "public" | "private",
+    // Appearance fields (all optional for admin)
+    hair_color: "", hair_length: "", eye_color: "", height: "", build: "",
+    skin_tone: "", species: "", hybrid_species: "", ear_type: "", distinguishing_feature: "",
+    voice_tone: "", hairstyle: "", facial_expression_default: "", accessory: "", tail_wings: "",
+    body_markings: "", posture: "", color_palette: "", occupation_look: "", cultural_style: "",
+    ass_size: "", chest_size: "", camera_shot_type: "", view_direction: "", camera_angle: "",
+    gender_base_mesh: "", eye_detail_enhancer: "", clothing_material_finish: "", legwear_socks_style: "",
+    environment_setting: "", lighting_style: "", rendering_engine: "", bangs_style: "",
+    makeup_style: "", outfit_fit: "", image_focus: "", thigh_hip_size: "", skin_texture_realism: "",
+    negative_prompts_filter: "", outfit_cleavage_cut: "",
   });
+  const [showAppearance, setShowAppearance] = useState(false);
+  const [adminCustomInput, setAdminCustomInput] = useState<Record<string, string>>({});
+  const [adminShowCustom, setAdminShowCustom] = useState<Record<string, boolean>>({});
+
+  const ADMIN_APPEARANCE_FIELDS: Array<{ key: string; label: string; options: string[] }> = [
+    { key: "gender_base_mesh",       label: "Gender / Base Mesh",         options: ["Female", "Male", "Non-binary", "Androgynous"] },
+    { key: "hair_color",             label: "Hair Color",                  options: ["Black", "Brown", "Blonde", "Red", "White", "Pink", "Blue", "Purple"] },
+    { key: "hair_length",            label: "Hair Length",                 options: ["Short", "Medium", "Long"] },
+    { key: "hairstyle",              label: "Hairstyle",                   options: ["Straight", "Wavy", "Curly", "Braided", "Ponytail", "Twin-tails"] },
+    { key: "bangs_style",            label: "Bangs Style",                 options: ["Blunt Bangs", "Side-swept Bangs", "Curtain Bangs", "See-through Bangs", "Forehead Exposed"] },
+    { key: "eye_color",              label: "Eye Color",                   options: ["Brown", "Blue", "Green", "Hazel", "Gray", "Violet"] },
+    { key: "eye_detail_enhancer",    label: "Eye Detail Enhancer",         options: ["Sparkling", "Glowing", "Sharp", "Droopy", "Pupilless"] },
+    { key: "facial_expression_default", label: "Default Expression",       options: ["Smiling", "Neutral", "Serious", "Playful", "Shy"] },
+    { key: "makeup_style",           label: "Makeup Style",                options: ["Natural", "Gothic", "Glamour", "Cosplay/Alt", "None"] },
+    { key: "species",                label: "Species / Race",              options: ["Human", "Elf", "Demon", "Angel", "Vampire", "Android", "Hybrid"] },
+    { key: "ear_type",               label: "Ear Type",                    options: ["Human", "Pointed", "Animal"] },
+    { key: "height",                 label: "Height",                      options: ["Short", "Average", "Tall"] },
+    { key: "build",                  label: "Build",                       options: ["Slim", "Athletic", "Average", "Curvy"] },
+    { key: "skin_tone",              label: "Skin Tone",                   options: ["Fair", "Light", "Medium", "Tan", "Dark"] },
+    { key: "skin_texture_realism",   label: "Skin Texture Realism",        options: ["Smooth 2D", "Textured Matt", "Pore Detail (Realistic Mode)", "Flawless Satin"] },
+    { key: "chest_size",             label: "Chest Size",                  options: ["Small", "Medium", "Large", "Ample", "Voluptuous", "Exaggerated"] },
+    { key: "ass_size",               label: "Ass Size",                    options: ["Subtle", "Balanced", "Well-rounded", "Voluptuous", "Exaggerated"] },
+    { key: "thigh_hip_size",         label: "Thigh / Hip Size",            options: ["Slim", "Proportional", "Wide", "Thick", "Hourglass"] },
+    { key: "distinguishing_feature", label: "Distinguishing Feature",      options: ["Freckles", "Scar", "Tattoo", "Birthmark", "Heterochromia", "None"] },
+    { key: "body_markings",          label: "Body Markings",               options: ["Freckles", "Tattoos", "Scars", "Birthmarks", "None"] },
+    { key: "accessory",              label: "Accessory",                   options: ["Glasses", "Earrings", "Necklace", "Headband", "None"] },
+    { key: "tail_wings",             label: "Tail / Wings",                options: ["Tail", "Wings", "Both", "None"] },
+    { key: "posture",                label: "Posture",                     options: ["Confident", "Reserved", "Energetic", "Calm"] },
+    { key: "voice_tone",             label: "Voice Tone",                  options: ["Soft", "Husky", "Cheerful", "Stoic", "Playful"] },
+    { key: "occupation_look",        label: "Occupation Look",             options: ["Casual", "Formal", "Uniformed", "Armored", "Streetwear"] },
+    { key: "outfit_fit",             label: "Outfit Fit",                  options: ["Skin-tight", "Form-fitting", "Regular Fit", "Loose", "Oversized"] },
+    { key: "outfit_cleavage_cut",    label: "Outfit Cleavage / Cut",       options: ["High Neck", "V-Neck", "Plunging", "Off-shoulder", "Backless", "Covered"] },
+    { key: "clothing_material_finish", label: "Clothing Material",         options: ["Matte Fabric", "Leather", "Silk/Satin", "Glossy Latex", "Denim", "Lace", "Metallic Plate"] },
+    { key: "legwear_socks_style",    label: "Legwear / Socks Style",       options: ["Thigh-high stockings", "Fishnets", "Crew socks", "Barefoot", "Tights", "None"] },
+    { key: "color_palette",          label: "Color Palette",               options: ["Warm tones", "Cool tones", "Monochrome", "Pastel", "Neon"] },
+    { key: "cultural_style",         label: "Cultural Style",              options: ["Western", "Eastern", "Futuristic", "Medieval", "Tribal"] },
+    { key: "environment_setting",    label: "Environment Setting",         options: ["Studio Room", "Blurred Indoor Bokeh", "Outdoor Nature", "Cyberpunk Cityscape", "Abstract Gradient"] },
+    { key: "lighting_style",         label: "Lighting Style",              options: ["Studio Lighting", "Cinematic Soft Glow", "Dramatic Shadows", "Neon Rim Lighting", "Golden Hour"] },
+    { key: "camera_shot_type",       label: "Camera Shot Type",            options: ["Avatar Portrait (Close-up)", "Bust Shot", "Upper Body", "Full Body Portrait"] },
+    { key: "camera_angle",           label: "Camera Angle",                options: ["Eye Level", "Low Angle", "High Angle", "Cinematic Dutch Angle"] },
+    { key: "view_direction",         label: "View Direction",              options: ["Looking at viewer", "Looking away", "Profile side-view", "Looking over shoulder"] },
+    { key: "image_focus",            label: "Image Focus",                 options: ["Face Focus", "Upper Body Focus", "Outfit Focus", "Atmospheric/Background Focus"] },
+    { key: "rendering_engine",       label: "Rendering Engine",            options: ["Clean Digital Line Art", "Soft Cell Shading", "Photorealistic Vector", "Hyper-Detailed 2D"] },
+    { key: "negative_prompts_filter", label: "Negative Prompts Filter",    options: ["Low Quality Filter", "Deformed Hands Filter", "Asymmetry Filter", "Text/Watermark Scrub"] },
+  ];
 
   const loadConfigs = useCallback(async () => {
     setConfigsLoading(true);
@@ -609,6 +664,11 @@ export function Admin() {
     if (!newChar.name.trim()) { toast({ title: "Name required", variant: "destructive" }); return; }
     setCreating(true);
     try {
+      const appearancePayload: Record<string, string> = {};
+      for (const f of ADMIN_APPEARANCE_FIELDS) {
+        const val = (newChar as Record<string, string>)[f.key];
+        if (val) appearancePayload[f.key] = val;
+      }
       await adminApi("POST", "/admin/characters/create", {
         name: newChar.name.trim(),
         bio: newChar.bio || undefined,
@@ -618,6 +678,8 @@ export function Admin() {
         avatarUrl: newChar.avatarUrl || undefined,
         initialGreeting: newChar.initialGreeting || undefined,
         visibility: newChar.visibility,
+        appearance: Object.keys(appearancePayload).length > 0 ? appearancePayload : undefined,
+        hybridSpecies: newChar.hybrid_species || undefined,
       });
       toast({ title: `✅ ${newChar.name} created as ${newChar.visibility}!` });
       setNewChar({ name: "", bio: "", age: "", genre: "Modern", tags: "", avatarUrl: "", initialGreeting: "", visibility: "private" });
@@ -1113,6 +1175,111 @@ export function Admin() {
                 <label className="text-xs text-muted-foreground mb-1 block">Tags (comma-separated)</label>
                 <Input value={newChar.tags} onChange={e => setNewChar(p => ({ ...p, tags: e.target.value }))}
                   placeholder="Hacker, Anime, Tsundere" className="bg-background border-border h-9 text-sm" />
+              </div>
+
+              {/* Appearance Fields — all optional for admin */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowAppearance(p => !p)}
+                  className="w-full flex items-center justify-between py-2 px-3 rounded-lg border border-border bg-muted/10 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all"
+                >
+                  <span>✨ Appearance Details (optional — shapes image generation)</span>
+                  <span>{showAppearance ? "▲" : "▼"}</span>
+                </button>
+                {showAppearance && (
+                  <div className="mt-3 space-y-4">
+                    {ADMIN_APPEARANCE_FIELDS.map(field => {
+                      const current = (newChar as Record<string, string>)[field.key] ?? "";
+                      return (
+                        <div key={field.key}>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">{field.label}</label>
+                            {current && (
+                              <button
+                                onClick={() => setNewChar(p => ({ ...p, [field.key]: "" }))}
+                                className="text-[9px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                              >
+                                clear
+                              </button>
+                            )}
+                          </div>
+                          {/* Hybrid species follow-up */}
+                          {field.key === "species" && current === "Hybrid" && (
+                            <input
+                              value={newChar.hybrid_species}
+                              onChange={e => setNewChar(p => ({ ...p, hybrid_species: e.target.value }))}
+                              placeholder="Hybrid of which species?"
+                              maxLength={64}
+                              className="mb-1.5 w-full h-8 rounded-md border border-accent/40 bg-background px-2 text-xs text-white focus:outline-none focus:border-accent/60"
+                            />
+                          )}
+                          <div className="flex flex-wrap gap-1">
+                            {field.options.map(opt => (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => setNewChar(p => ({ ...p, [field.key]: current === opt ? "" : opt }))}
+                                className={`px-2 py-1 rounded-md text-[10px] font-semibold border transition-all ${
+                                  current === opt
+                                    ? "bg-primary/25 text-primary border-primary/50"
+                                    : "bg-card text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-primary/30"
+                                }`}
+                              >
+                                {current === opt && "✓ "}{opt}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Add Custom */}
+                          {adminShowCustom[field.key] ? (
+                            <div className="flex gap-1.5 mt-1">
+                              <input
+                                autoFocus
+                                value={adminCustomInput[field.key] ?? ""}
+                                onChange={e => setAdminCustomInput(p => ({ ...p, [field.key]: e.target.value }))}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") {
+                                    const val = (adminCustomInput[field.key] ?? "").trim();
+                                    if (val) {
+                                      setNewChar(p => ({ ...p, [field.key]: val }));
+                                      setAdminCustomInput(p => ({ ...p, [field.key]: "" }));
+                                      setAdminShowCustom(p => ({ ...p, [field.key]: false }));
+                                    }
+                                  }
+                                }}
+                                placeholder="Custom value..."
+                                maxLength={48}
+                                className="flex-1 h-7 rounded-md border border-accent/40 bg-background px-2 text-[10px] text-white focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const val = (adminCustomInput[field.key] ?? "").trim();
+                                  if (val) {
+                                    setNewChar(p => ({ ...p, [field.key]: val }));
+                                    setAdminCustomInput(p => ({ ...p, [field.key]: "" }));
+                                    setAdminShowCustom(p => ({ ...p, [field.key]: false }));
+                                  }
+                                }}
+                                className="px-2 h-7 rounded-md bg-accent/15 text-accent text-[9px] font-bold border border-accent/30 hover:bg-accent/25"
+                              >
+                                Add
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setAdminShowCustom(p => ({ ...p, [field.key]: true }))}
+                              className="mt-1 text-[9px] text-muted-foreground/40 hover:text-accent/60 transition-colors"
+                            >
+                              ➕ Custom
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <button onClick={createCharacter} disabled={creating || !newChar.name.trim()}

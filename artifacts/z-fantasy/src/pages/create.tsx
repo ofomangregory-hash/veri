@@ -16,13 +16,69 @@ const SUB_GENRES = [
 ];
 const MAX_SUBGENRES = 2;
 
+// ── Appearance field definitions ───────────────────────────────────────────────
+
+interface AppearanceFieldDef {
+  key: string;
+  label: string;
+  options: string[];
+  required: boolean;
+}
+
+const APPEARANCE_FIELDS: AppearanceFieldDef[] = [
+  // Required (11)
+  { key: "hair_color",            label: "Hair Color",               required: true,  options: ["Black", "Brown", "Blonde", "Red", "White", "Pink", "Blue", "Purple"] },
+  { key: "hair_length",           label: "Hair Length",              required: true,  options: ["Short", "Medium", "Long"] },
+  { key: "eye_color",             label: "Eye Color",                required: true,  options: ["Brown", "Blue", "Green", "Hazel", "Gray", "Violet"] },
+  { key: "camera_shot_type",      label: "Camera Shot Type",         required: true,  options: ["Avatar Portrait (Close-up)", "Bust Shot", "Upper Body", "Full Body Portrait"] },
+  { key: "view_direction",        label: "View Direction",           required: true,  options: ["Looking at viewer", "Looking away", "Profile side-view", "Looking over shoulder"] },
+  { key: "gender_base_mesh",      label: "Gender / Base Mesh",       required: true,  options: ["Female", "Male", "Non-binary", "Androgynous"] },
+  { key: "environment_setting",   label: "Environment Setting",      required: true,  options: ["Studio Room", "Blurred Indoor Bokeh", "Outdoor Nature", "Cyberpunk Cityscape", "Abstract Gradient"] },
+  { key: "rendering_engine",      label: "Rendering Engine",         required: true,  options: ["Clean Digital Line Art", "Soft Cell Shading", "Photorealistic Vector", "Hyper-Detailed 2D"] },
+  { key: "image_focus",           label: "Image Focus",              required: true,  options: ["Face Focus", "Upper Body Focus", "Outfit Focus", "Atmospheric/Background Focus"] },
+  { key: "negative_prompts_filter", label: "Negative Prompts Filter", required: true, options: ["Low Quality Filter", "Deformed Hands Filter", "Asymmetry Filter", "Text/Watermark Scrub"] },
+  { key: "species",               label: "Species / Race",           required: true,  options: ["Human", "Elf", "Demon", "Angel", "Vampire", "Android", "Hybrid"] },
+  // Optional (28)
+  { key: "height",                label: "Height",                   required: false, options: ["Short", "Average", "Tall"] },
+  { key: "build",                 label: "Build",                    required: false, options: ["Slim", "Athletic", "Average", "Curvy"] },
+  { key: "skin_tone",             label: "Skin Tone",                required: false, options: ["Fair", "Light", "Medium", "Tan", "Dark"] },
+  { key: "ear_type",              label: "Ear Type",                 required: false, options: ["Human", "Pointed", "Animal"] },
+  { key: "distinguishing_feature", label: "Distinguishing Feature",  required: false, options: ["Freckles", "Scar", "Tattoo", "Birthmark", "Heterochromia", "None"] },
+  { key: "voice_tone",            label: "Voice Tone",               required: false, options: ["Soft", "Husky", "Cheerful", "Stoic", "Playful"] },
+  { key: "hairstyle",             label: "Hairstyle",                required: false, options: ["Straight", "Wavy", "Curly", "Braided", "Ponytail", "Twin-tails"] },
+  { key: "facial_expression_default", label: "Default Expression",   required: false, options: ["Smiling", "Neutral", "Serious", "Playful", "Shy"] },
+  { key: "accessory",             label: "Accessory",                required: false, options: ["Glasses", "Earrings", "Necklace", "Headband", "None"] },
+  { key: "tail_wings",            label: "Tail / Wings",             required: false, options: ["Tail", "Wings", "Both", "None"] },
+  { key: "body_markings",         label: "Body Markings",            required: false, options: ["Freckles", "Tattoos", "Scars", "Birthmarks", "None"] },
+  { key: "posture",               label: "Posture",                  required: false, options: ["Confident", "Reserved", "Energetic", "Calm"] },
+  { key: "color_palette",         label: "Color Palette",            required: false, options: ["Warm tones", "Cool tones", "Monochrome", "Pastel", "Neon"] },
+  { key: "occupation_look",       label: "Occupation Look",          required: false, options: ["Casual", "Formal", "Uniformed", "Armored", "Streetwear"] },
+  { key: "cultural_style",        label: "Cultural Style",           required: false, options: ["Western", "Eastern", "Futuristic", "Medieval", "Tribal"] },
+  { key: "ass_size",              label: "Ass Size",                 required: false, options: ["Subtle", "Balanced", "Well-rounded", "Voluptuous", "Exaggerated"] },
+  { key: "chest_size",            label: "Chest Size",               required: false, options: ["Small", "Medium", "Large", "Ample", "Voluptuous", "Exaggerated"] },
+  { key: "camera_angle",          label: "Camera Angle",             required: false, options: ["Eye Level", "Low Angle", "High Angle", "Cinematic Dutch Angle"] },
+  { key: "eye_detail_enhancer",   label: "Eye Detail Enhancer",      required: false, options: ["Sparkling", "Glowing", "Sharp", "Droopy", "Pupilless"] },
+  { key: "clothing_material_finish", label: "Clothing Material / Finish", required: false, options: ["Matte Fabric", "Leather", "Silk/Satin", "Glossy Latex", "Denim", "Lace", "Metallic Plate"] },
+  { key: "legwear_socks_style",   label: "Legwear / Socks Style",    required: false, options: ["Thigh-high stockings", "Fishnets", "Crew socks", "Barefoot", "Tights", "None"] },
+  { key: "lighting_style",        label: "Lighting Style",           required: false, options: ["Studio Lighting", "Cinematic Soft Glow", "Dramatic Shadows", "Neon Rim Lighting", "Golden Hour"] },
+  { key: "bangs_style",           label: "Bangs Style",              required: false, options: ["Blunt Bangs", "Side-swept Bangs", "Curtain Bangs", "See-through Bangs", "Forehead Exposed"] },
+  { key: "makeup_style",          label: "Makeup Style",             required: false, options: ["Natural", "Gothic", "Glamour", "Cosplay/Alt", "None"] },
+  { key: "outfit_fit",            label: "Outfit Fit",               required: false, options: ["Skin-tight", "Form-fitting", "Regular Fit", "Loose", "Oversized"] },
+  { key: "thigh_hip_size",        label: "Thigh / Hip Size",         required: false, options: ["Slim", "Proportional", "Wide", "Thick", "Hourglass"] },
+  { key: "skin_texture_realism",  label: "Skin Texture Realism",     required: false, options: ["Smooth 2D", "Textured Matt", "Pore Detail (Realistic Mode)", "Flawless Satin"] },
+  { key: "outfit_cleavage_cut",   label: "Outfit Cleavage / Cut",    required: false, options: ["High Neck", "V-Neck", "Plunging", "Off-shoulder", "Backless", "Covered"] },
+];
+
+const REQUIRED_APPEARANCE_KEYS = APPEARANCE_FIELDS.filter(f => f.required).map(f => f.key);
+
 const STEPS = [
-  { id: 1, title: "Entity Name",       subtitle: "Choose or type your companion's identity" },
-  { id: 2, title: "Visual Form",       subtitle: "Avatar auto-generated from your choices" },
-  { id: 3, title: "Origin Genre",      subtitle: "Choose art style and character type" },
-  { id: 4, title: "Core Data",         subtitle: "Age & biographical directives" },
-  { id: 5, title: "First Contact",     subtitle: "Their opening transmission" },
-  { id: 6, title: "Signal Tags",       subtitle: "Classify your entity's attributes" },
+  { id: 1, title: "Entity Name",         subtitle: "Choose or type your companion's identity" },
+  { id: 2, title: "Visual Form",         subtitle: "Avatar auto-generated from your choices" },
+  { id: 3, title: "Appearance Details",  subtitle: "Define the look that shapes every image" },
+  { id: 4, title: "Origin Genre",        subtitle: "Choose art style and character type" },
+  { id: 5, title: "Core Data",           subtitle: "Age & biographical directives" },
+  { id: 6, title: "First Contact",       subtitle: "Their opening transmission" },
+  { id: 7, title: "Signal Tags",         subtitle: "Classify your entity's attributes" },
 ];
 
 const VALID_GENRES = ["Anime", "Fantasy", "Modern", "Sci-Fi", "Dark Goth"] as const;
@@ -30,12 +86,11 @@ type ValidGenre = typeof VALID_GENRES[number];
 
 function resolveGenre(artStyle: "Anime" | "Realistic" | "", subGenres: string[]): ValidGenre {
   if (artStyle === "Anime") return "Anime";
-  // Realistic is a rendering style, not a content genre — derive genre from subGenres
   const lower = subGenres.map(s => s.toLowerCase());
   if (lower.some(s => ["fantasy", "elf", "mage", "witch", "warrior", "angel", "demon", "vampire"].includes(s))) return "Fantasy";
   if (lower.some(s => ["sci-fi", "cyberpunk", "android", "isekai"].includes(s))) return "Sci-Fi";
   if (lower.some(s => ["horror", "dark", "goth", "supernatural", "thriller"].includes(s))) return "Dark Goth";
-  return "Modern"; // safe default for realistic art style
+  return "Modern";
 }
 
 function getToken() {
@@ -51,15 +106,24 @@ export function Create() {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
+  // ── Step 1: Name ──
   const [name, setName] = useState("");
   const [usingCustomName, setUsingCustomName] = useState(false);
   const [customNameInput, setCustomNameInput] = useState("");
 
+  // ── Step 3: Appearance ──
+  const [appearance, setAppearance] = useState<Record<string, string>>({});
+  const [hybridSpecies, setHybridSpecies] = useState("");
+  const [customInputVal, setCustomInputVal] = useState<Record<string, string>>({});
+  const [showCustom, setShowCustom] = useState<Record<string, boolean>>({});
+
+  // ── Step 4: Genre ──
   const [artStyle, setArtStyle] = useState<"Anime" | "Realistic" | "">("");
   const [subGenres, setSubGenres] = useState<string[]>([]);
   const [customSubGenreInput, setCustomSubGenreInput] = useState("");
   const [showCustomSubGenre, setShowCustomSubGenre] = useState(false);
 
+  // ── Steps 5-7 ──
   const [age, setAge] = useState("");
   const [bio, setBio] = useState("");
   const [greeting, setGreeting] = useState("");
@@ -68,6 +132,18 @@ export function Create() {
   const [visibility, setVisibility] = useState<"public" | "private">("private");
 
   const resolvedName = usingCustomName ? customNameInput.trim() : name;
+
+  function setAppearanceField(key: string, value: string) {
+    setAppearance(prev => ({ ...prev, [key]: value }));
+  }
+
+  function addCustomForField(key: string) {
+    const val = (customInputVal[key] ?? "").trim();
+    if (!val) return;
+    setAppearanceField(key, val);
+    setCustomInputVal(prev => ({ ...prev, [key]: "" }));
+    setShowCustom(prev => ({ ...prev, [key]: false }));
+  }
 
   function addCustomSubGenre() {
     const val = customSubGenreInput.trim();
@@ -87,7 +163,8 @@ export function Create() {
 
   function canAdvance(): boolean {
     if (step === 1) return resolvedName.length > 0;
-    if (step === 3) return artStyle !== "" && subGenres.length >= 1;
+    if (step === 3) return REQUIRED_APPEARANCE_KEYS.every(k => !!appearance[k]);
+    if (step === 4) return artStyle !== "" && subGenres.length >= 1;
     return true;
   }
 
@@ -130,6 +207,8 @@ export function Create() {
           tags,
           visibility,
           isNsfw,
+          appearance,
+          hybridSpecies: hybridSpecies || undefined,
         }),
       });
 
@@ -156,6 +235,10 @@ export function Create() {
   const progressPct = (step / STEPS.length) * 100;
   const currentStep = STEPS[step - 1];
   const allSubGenreOptions = [...SUB_GENRES, ...subGenres.filter(s => !SUB_GENRES.includes(s))];
+
+  // Count required vs filled for step 3 progress hint
+  const requiredFilled = REQUIRED_APPEARANCE_KEYS.filter(k => !!appearance[k]).length;
+  const requiredTotal = REQUIRED_APPEARANCE_KEYS.length;
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background">
@@ -190,6 +273,11 @@ export function Create() {
         <div className="mb-6">
           <h2 className="text-lg font-bold text-white">{currentStep.title}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">{currentStep.subtitle}</p>
+          {step === 3 && (
+            <p className="text-[10px] text-primary/80 mt-1 font-semibold">
+              Required: {requiredFilled}/{requiredTotal} · Optional fields can be skipped
+            </p>
+          )}
         </div>
 
         {/* ── Step 1: Name ── */}
@@ -251,7 +339,7 @@ export function Create() {
               Your character's avatar will be generated automatically based on your{" "}
               <span className="text-foreground font-semibold">name</span>,{" "}
               <span className="text-foreground font-semibold">art style</span>, and{" "}
-              <span className="text-foreground font-semibold">character type</span>.
+              <span className="text-foreground font-semibold">appearance details</span>.
             </p>
             <p className="text-xs text-center text-muted-foreground/60">
               You can update it from the admin panel after creation.
@@ -259,8 +347,168 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 3: Genre (Art Style + Sub-genre) ── */}
+        {/* ── Step 3: Appearance Details ── */}
         {step === 3 && (
+          <div className="space-y-6">
+            {/* Required section */}
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-primary mb-4">
+                Required Fields <span className="text-primary/60">({requiredFilled}/{requiredTotal})</span>
+              </p>
+              <div className="space-y-5">
+                {APPEARANCE_FIELDS.filter(f => f.required).map(field => (
+                  <div key={field.key}>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        {field.label} <span className="text-primary">*</span>
+                      </label>
+                      {appearance[field.key] && (
+                        <span className="text-[10px] text-primary font-semibold truncate max-w-[120px]">
+                          ✓ {appearance[field.key]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {field.options.map(opt => (
+                        <button
+                          key={opt}
+                          onClick={() => setAppearanceField(field.key, opt)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                            appearance[field.key] === opt
+                              ? "bg-primary/30 text-primary border-primary/60 box-glow-pink"
+                              : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/30"
+                          }`}
+                        >
+                          {appearance[field.key] === opt && <Check size={9} className="inline mr-1" />}{opt}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Special: Hybrid follow-up */}
+                    {field.key === "species" && (appearance[field.key] === "Hybrid" || hybridSpecies) && (
+                      <input
+                        autoFocus
+                        value={hybridSpecies}
+                        onChange={e => setHybridSpecies(e.target.value)}
+                        placeholder="Hybrid of which species? e.g. Elf-Demon"
+                        maxLength={64}
+                        className="mt-2 w-full h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:border-accent transition-colors"
+                      />
+                    )}
+                    {/* Add Custom */}
+                    {showCustom[field.key] ? (
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          autoFocus
+                          value={customInputVal[field.key] ?? ""}
+                          onChange={e => setCustomInputVal(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === "Enter") addCustomForField(field.key); }}
+                          placeholder="Type custom value..."
+                          maxLength={48}
+                          className="flex-1 h-8 rounded-lg border border-accent/50 bg-card px-3 text-xs text-white focus:outline-none focus:border-accent"
+                        />
+                        <button
+                          onClick={() => addCustomForField(field.key)}
+                          disabled={!(customInputVal[field.key] ?? "").trim()}
+                          className="px-3 h-8 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors disabled:opacity-40"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowCustom(prev => ({ ...prev, [field.key]: true }))}
+                        className="mt-2 text-[10px] text-accent/70 hover:text-accent transition-colors font-semibold"
+                      >
+                        ➕ Add Custom
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Optional section */}
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 mb-4 border-t border-border pt-4">
+                Optional Fields <span className="text-muted-foreground/40">(skip any)</span>
+              </p>
+              <div className="space-y-5">
+                {APPEARANCE_FIELDS.filter(f => !f.required).map(field => (
+                  <div key={field.key} className="opacity-85">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+                        {field.label}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {appearance[field.key] && (
+                          <span className="text-[10px] text-accent font-semibold truncate max-w-[100px]">
+                            {appearance[field.key]}
+                          </span>
+                        )}
+                        {appearance[field.key] && (
+                          <button
+                            onClick={() => setAppearance(prev => { const n = { ...prev }; delete n[field.key]; return n; })}
+                            className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                          >
+                            Skip
+                          </button>
+                        )}
+                        {!appearance[field.key] && (
+                          <span className="text-[10px] text-muted-foreground/40 italic">optional</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {field.options.map(opt => (
+                        <button
+                          key={opt}
+                          onClick={() => setAppearanceField(field.key, opt)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                            appearance[field.key] === opt
+                              ? "bg-accent/25 text-accent border-accent/60"
+                              : "bg-card/60 text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-accent/30"
+                          }`}
+                        >
+                          {appearance[field.key] === opt && <Check size={9} className="inline mr-1" />}{opt}
+                        </button>
+                      ))}
+                    </div>
+                    {showCustom[field.key] ? (
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          autoFocus
+                          value={customInputVal[field.key] ?? ""}
+                          onChange={e => setCustomInputVal(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === "Enter") addCustomForField(field.key); }}
+                          placeholder="Type custom value..."
+                          maxLength={48}
+                          className="flex-1 h-8 rounded-lg border border-accent/40 bg-card px-3 text-xs text-white focus:outline-none focus:border-accent/60"
+                        />
+                        <button
+                          onClick={() => addCustomForField(field.key)}
+                          disabled={!(customInputVal[field.key] ?? "").trim()}
+                          className="px-3 h-8 rounded-lg bg-accent/15 text-accent/80 text-xs font-bold border border-accent/30 hover:bg-accent/25 transition-colors disabled:opacity-40"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowCustom(prev => ({ ...prev, [field.key]: true }))}
+                        className="mt-1.5 text-[10px] text-muted-foreground/50 hover:text-accent/70 transition-colors font-semibold"
+                      >
+                        ➕ Add Custom
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 4: Genre (Art Style + Sub-genre) ── */}
+        {step === 4 && (
           <div className="space-y-6">
             {/* Step A: Art Style */}
             <div>
@@ -288,7 +536,7 @@ export function Create() {
               </div>
             </div>
 
-            {/* Step B: Sub-genres (shows after art style is picked) */}
+            {/* Step B: Sub-genres */}
             {artStyle && (
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -352,8 +600,8 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 4: Age + Bio ── */}
-        {step === 4 && (
+        {/* ── Step 5: Age + Bio ── */}
+        {step === 5 && (
           <div className="space-y-5">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
@@ -381,8 +629,8 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 5: Greeting ── */}
-        {step === 5 && (
+        {/* ── Step 6: Greeting ── */}
+        {step === 6 && (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">What do they say the first time you meet?</p>
             <textarea
@@ -395,8 +643,8 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 6: Tags ── */}
-        {step === 6 && (
+        {/* ── Step 7: Tags ── */}
+        {step === 7 && (
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">Add comma-separated tags to help others discover this entity</p>
             <input
@@ -417,8 +665,8 @@ export function Create() {
           </div>
         )}
 
-        {/* Step 6 summary — appears inline below tags */}
-        {step === 6 && (
+        {/* Step 7 summary */}
+        {step === 7 && (
           <div className="mt-6 p-4 rounded-xl bg-card border border-border space-y-2">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Summary</p>
             <div className="flex justify-between text-sm">
@@ -435,6 +683,18 @@ export function Create() {
                 <span className="font-semibold text-white">{subGenres.join(", ")}</span>
               </div>
             )}
+            {appearance.species && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Species</span>
+                <span className="font-semibold text-white">{appearance.species}{hybridSpecies ? ` (${hybridSpecies})` : ""}</span>
+              </div>
+            )}
+            {(appearance.hair_color || appearance.hair_length) && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Hair</span>
+                <span className="font-semibold text-white">{[appearance.hair_color, appearance.hair_length].filter(Boolean).join(", ")}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Visibility</span>
               <span className="font-semibold text-white">🔒 Private</span>
@@ -446,7 +706,7 @@ export function Create() {
           </div>
         )}
 
-        {/* Navigation — inside scroll area so it always sits below content */}
+        {/* Navigation */}
         <div className="flex gap-3 mt-8">
           {step > 1 && (
             <button
@@ -464,7 +724,10 @@ export function Create() {
               disabled={!canAdvance()}
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-bold uppercase tracking-wider box-glow-pink hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Continue <ChevronRight size={18} />
+              {step === 3 && !canAdvance()
+                ? `Fill required fields (${requiredFilled}/${requiredTotal})`
+                : <>Continue <ChevronRight size={18} /></>
+              }
             </button>
           ) : (
             <button

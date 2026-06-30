@@ -223,6 +223,10 @@ router.post("/characters", async (req, res): Promise<void> => {
   const styleDescriptor = deriveStyleDescriptor(parsed.data.genre, subGenres);
   const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
 
+  // Extract appearance fields from request body
+  const ap = (createBody.appearance ?? {}) as Record<string, string>;
+  const hybridSpecies = typeof createBody.hybridSpecies === "string" ? createBody.hybridSpecies : undefined;
+
   // Save immediately with genre placeholder — avatar generated async after save
   const initialAvatarUrl = getGenreDefaultAvatar(parsed.data.genre);
 
@@ -267,19 +271,59 @@ router.post("/characters", async (req, res): Promise<void> => {
 
   (async () => {
     try {
-      console.log('[CHARACTER AVATAR] Starting generation for:', characterName, 'style:', styleDescriptor);
+      // Build appearance prompt from user-supplied fields
+      const apParts: string[] = [];
+      if (ap.hair_color || ap.hair_length) apParts.push(`${[ap.hair_color, ap.hair_length].filter(Boolean).join(" ")} hair`);
+      if (ap.eye_color) apParts.push(`${ap.eye_color} eyes`);
+      if (ap.occupation_look) apParts.push(`wearing ${ap.occupation_look}`);
+      if (ap.outfit_fit) apParts.push(`${ap.outfit_fit} outfit`);
+      if (ap.outfit_cleavage_cut) apParts.push(`${ap.outfit_cleavage_cut} cut`);
+      if (ap.clothing_material_finish) apParts.push(`made of ${ap.clothing_material_finish}`);
+      if (ap.legwear_socks_style) apParts.push(ap.legwear_socks_style);
+      if (ap.build) apParts.push(`${ap.build} build`);
+      if (ap.height) apParts.push(`${ap.height} height`);
+      if (ap.chest_size) apParts.push(`${ap.chest_size} chest`);
+      if (ap.ass_size) apParts.push(`${ap.ass_size} ass`);
+      if (ap.thigh_hip_size) apParts.push(`${ap.thigh_hip_size} hips`);
+      if (ap.skin_tone) apParts.push(`${ap.skin_tone} skin`);
+      if (ap.skin_texture_realism) apParts.push(ap.skin_texture_realism);
+      if (ap.species) apParts.push(ap.species === "Hybrid" && hybridSpecies ? `hybrid (${hybridSpecies})` : ap.species);
+      if (ap.ear_type) apParts.push(`${ap.ear_type} ears`);
+      if (ap.hairstyle) apParts.push(`${ap.hairstyle} hairstyle`);
+      if (ap.bangs_style) apParts.push(ap.bangs_style);
+      if (ap.makeup_style) apParts.push(`${ap.makeup_style} makeup`);
+      if (ap.facial_expression_default) apParts.push(`${ap.facial_expression_default} expression`);
+      if (ap.eye_detail_enhancer) apParts.push(`${ap.eye_detail_enhancer} eyes`);
+      if (ap.posture) apParts.push(`${ap.posture} posture`);
+      const details = [ap.distinguishing_feature, ap.body_markings, ap.accessory, ap.tail_wings].filter(Boolean);
+      if (details.length) apParts.push(...details);
+      if (ap.color_palette) apParts.push(ap.color_palette);
+      if (ap.environment_setting) apParts.push(ap.environment_setting);
+      if (ap.camera_angle) apParts.push(ap.camera_angle);
+      if (ap.camera_shot_type) apParts.push(ap.camera_shot_type);
+      if (ap.view_direction) apParts.push(ap.view_direction);
+      if (ap.image_focus) apParts.push(ap.image_focus);
+      if (ap.lighting_style) apParts.push(ap.lighting_style);
+      if (ap.rendering_engine) apParts.push(ap.rendering_engine);
+      if (ap.gender_base_mesh) apParts.push(ap.gender_base_mesh);
+
+      const appearanceDesc = apParts.join(", ");
+      const sceneDescription = appearanceDesc || "close-up portrait, looking at camera, soft studio lighting, high detail";
+      const extendedStyleDescriptor = appearanceDesc ? `${styleDescriptor}, ${appearanceDesc}` : styleDescriptor;
+
+      console.log('[CHARACTER AVATAR] Starting generation for:', characterName, 'style:', extendedStyleDescriptor);
       const avatarUrl = await generateCharacterSelfie({
         characterName,
         genre: characterGenre,
         systemPrompt: "",
         teaserDescription: null,
         imageSeed,
-        sceneDescription: "close-up portrait, looking at camera, soft studio lighting, high detail",
+        sceneDescription,
         nsfwEnabled: false,
         subGenres,
-        styleDescriptor,
+        styleDescriptor: extendedStyleDescriptor,
       });
-      await updateSupabaseCharacter(characterId, { avatarUrl, styleDescriptor });
+      await updateSupabaseCharacter(characterId, { avatarUrl, styleDescriptor: extendedStyleDescriptor });
       console.log('[CHARACTER AVATAR] Generated successfully:', characterName, '->', avatarUrl);
     } catch (err: any) {
       console.log('[CHARACTER AVATAR] Generation failed, saving style descriptor:', err?.message);
