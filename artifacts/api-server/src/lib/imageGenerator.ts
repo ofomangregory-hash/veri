@@ -1,5 +1,43 @@
 import { logger } from "./logger";
 
+// ── Default canvas dimensions ─────────────────────────────────────────────────
+// 9:16 vertical format (portrait) — optimal for full-body and half-body character frames.
+// Callers can override by passing explicit width/height to tryPollinations if needed.
+const DEFAULT_WIDTH  = 768;
+const DEFAULT_HEIGHT = 1344;
+
+// ── Style-detection keyword lists ─────────────────────────────────────────────
+// If the combined prompt already contains an explicit non-anime art direction,
+// we skip the anime-assist enhancement to respect the user's intent.
+const EXPLICIT_PHOTOREALISTIC_KEYWORDS = [
+  "photorealistic", "photoreal", "3d render", "3d-render", "pixar style",
+  "live action", "photography", "realistic photograph", "hyperrealistic",
+  "cinematic photography", "dslr", "8k photo",
+];
+
+// If ANY of these are already present in the styleDescriptor or subGenres,
+// the assist tags are skipped — the character already has a clear style directive.
+const EXISTING_ANIME_KEYWORDS = [
+  "anime", "cell shad", "manga", "illustration", "digital art",
+  "line art", "2d ", "2d,", "hand-drawn",
+];
+
+// Subtle quality assist appended when no art-style directive is detected.
+// These guide Pollinations/Flux toward crisp, vibrant portrait aesthetics
+// without overriding any user-specified look.
+const STYLE_ASSIST_TAGS =
+  "anime aesthetic, detailed illustration, vibrant colors, clear outlines, sharp focus";
+
+function hasExplicitPhotorealistic(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return EXPLICIT_PHOTOREALISTIC_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+function hasAnimeStyleDirective(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return EXISTING_ANIME_KEYWORDS.some(kw => lower.includes(kw));
+}
+
 const GENRE_STYLE_PREFIX: Record<string, string> = {
   "Anime":     "modern high-quality anime style, clean digital line art, smooth cell shading, soft gradients, vibrant lighting, polished textures, highly detailed 2D illustration",
   "Realistic": "realistic, photorealistic, detailed photography, lifelike",
@@ -96,21 +134,58 @@ function getImagePositionInHistory(userId: string, characterId: string, url: str
 // Module-level throttle — enforce 1s minimum gap between all image requests
 let lastImageRequestTime = 0;
 
+// ── Smart assistant prompt builder ────────────────────────────────────────────
+//
+// Prompt structure: [characterName], [styleDescriptor], [...subGenres], [sceneDescription]
+//
+// The styleDescriptor already carries anatomy when built from the character's
+// appearance fields (e.g. "Black Long hair, Blue eyes, Slim build, Large chest,
+// Avatar Portrait (Close-up), Looking at viewer").  These anatomy terms are
+// composed at character-creation time and saved as the character's
+// extendedStyleDescriptor, so they travel with every subsequent generation.
+//
+// Conditional style-assist rule:
+//   • If the combined prompt already includes an anime/illustration directive → skip assist
+//   • If the combined prompt contains a photorealistic/3D directive → skip assist (respect intent)
+//   • Otherwise → append STYLE_ASSIST_TAGS to gently guide toward crisp portraits
+//
+// Aspect ratio:
+//   • Default 768×1344 (9:16 vertical) — supports full-body and half-body frames naturally
+//   • Callers may override width/height for special cases (e.g. square thumbnails)
+//
 async function tryPollinations(
   characterName: string,
   stylePrefix: string,
   subGenres: string[],
   sceneDescription: string,
   imageSeed: number,
+  width = DEFAULT_WIDTH,
+  height = DEFAULT_HEIGHT,
 ): Promise<string | null> {
-  // Prompt structure: {name}, {styleDescriptor}, {subGenres...}, {sceneDescription}
   const parts = [characterName, stylePrefix, ...subGenres, sceneDescription].filter(Boolean);
+  const combined = parts.join(", ");
+
+  // ── Conditional style-assist ───────────────────────────────────────────────
+  // Only inject if neither an anime directive NOR a photorealistic directive exists.
+  // This keeps user-specified styles fully intact while improving vague prompts.
+  const photoReal = hasExplicitPhotorealistic(combined);
+  const alreadyAnimated = hasAnimeStyleDirective(combined);
+
+  if (!photoReal && !alreadyAnimated) {
+    parts.push(STYLE_ASSIST_TAGS);
+    console.log("[STYLE ASSIST] No art-style directive detected — appending assist tags");
+  } else {
+    console.log(
+      `[STYLE ASSIST] Skipping — detected: ${photoReal ? "photorealistic" : "anime/illustration"} style`
+    );
+  }
+
   const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
   const encodedPrompt = encodeURIComponent(cleanPrompt);
-  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=512&height=512&nologo=true&seed=${imageSeed}`;
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=${width}&height=${height}&nologo=true&seed=${imageSeed}`;
 
   console.log("Image prompt:", cleanPrompt);
-  console.log("Pollinations URL:", url);
+  console.log(`Pollinations URL (${width}×${height}):`, url);
 
   // Enforce 1s minimum gap between all Pollinations requests
   const now = Date.now();
@@ -217,7 +292,7 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
       ? baseSeed
       : Math.floor(Math.random() * 10000000000);
 
-    // Primary: Pollinations with full prompt
+    // Primary: Pollinations with full prompt and vertical canvas (DEFAULT_WIDTH × DEFAULT_HEIGHT)
     const result = await tryPollinations(characterName, styleDesc, subGenres, sceneDescription, seed);
 
     if (result) {
