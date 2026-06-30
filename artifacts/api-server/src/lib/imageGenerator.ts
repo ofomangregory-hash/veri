@@ -32,6 +32,8 @@ export interface GenerateSelfieOptions {
   tags?: string[];
   subGenres?: string[];
   styleDescriptor?: string | null;
+  userId?: number | string | null;
+  characterId?: string | null;
 }
 
 export function deriveStyleDescriptor(genre: string, tags: string[]): string {
@@ -54,6 +56,8 @@ export interface GenerateAvatarOptions {
   nsfwEnabled?: boolean;
   avatarUrl?: string | null;
   subGenres?: string[];
+  userId?: number | string | null;
+  characterId?: string | null;
 }
 
 function getStylePrefix(genre: string): string {
@@ -68,6 +72,27 @@ function sanitizePrompt(raw: string): string {
     .trim();
 }
 
+// ── Count-based duplicate prevention ─────────────────────────────────────────
+// Tracks the last IMAGE_HISTORY_WINDOW image URLs generated per user+character.
+// If the same URL appears within the last 30 images, a fresh seed is used instead.
+const IMAGE_HISTORY_WINDOW = 30;
+const imageHistory = new Map<string, string[]>(); // key: "userId:characterId"
+
+function recordImageUrl(userId: string, characterId: string, url: string): void {
+  const key = `${userId}:${characterId}`;
+  const history = imageHistory.get(key) ?? [];
+  history.push(url);
+  if (history.length > IMAGE_HISTORY_WINDOW) history.shift();
+  imageHistory.set(key, history);
+}
+
+function getImagePositionInHistory(userId: string, characterId: string, url: string): number | null {
+  const key = `${userId}:${characterId}`;
+  const history = imageHistory.get(key) ?? [];
+  const idx = [...history].reverse().indexOf(url);
+  return idx === -1 ? null : idx + 1; // 1 = most recent, 30 = oldest tracked
+}
+
 // Module-level throttle — enforce 1s minimum gap between all image requests
 let lastImageRequestTime = 0;
 
@@ -75,9 +100,11 @@ async function tryPollinations(
   characterName: string,
   stylePrefix: string,
   subGenres: string[],
+  sceneDescription: string,
   imageSeed: number,
 ): Promise<string | null> {
-  const parts = [characterName, stylePrefix, ...subGenres].filter(Boolean);
+  // Prompt structure: {name}, {styleDescriptor}, {subGenres...}, {sceneDescription}
+  const parts = [characterName, stylePrefix, ...subGenres, sceneDescription].filter(Boolean);
   const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
   const encodedPrompt = encodeURIComponent(cleanPrompt);
   const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=512&height=512&nologo=true&seed=${imageSeed}`;
@@ -158,24 +185,63 @@ export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Prom
     nsfwEnabled: opts.nsfwEnabled ?? false,
     avatarUrl: opts.avatarUrl,
     subGenres: opts.subGenres,
+    userId: opts.userId,
+    characterId: opts.characterId,
   });
 }
 
 export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Promise<string> {
-  const { characterName, genre, avatarUrl, subGenres = [] } = opts;
+  const {
+    characterName,
+    genre,
+    avatarUrl,
+    subGenres = [],
+    sceneDescription,
+    userId,
+    characterId,
+  } = opts;
 
   const styleDesc = opts.styleDescriptor ?? getStylePrefix(genre);
-  const seed = parseInt(opts.imageSeed, 10) || Math.floor(Math.random() * 10000000000);
-  console.log(`[IMAGE SEED] ${characterName} — seed: ${seed}`);
+  const baseSeed = parseInt(opts.imageSeed, 10) || Math.floor(Math.random() * 10000000000);
+  console.log(`[IMAGE SEED] ${characterName} — seed: ${baseSeed}`);
   console.log(`[STYLE] ${characterName} — using style: ${styleDesc}`);
 
-  // Primary: Pollinations with character-specific prompt
-  const result = await tryPollinations(characterName, styleDesc, subGenres, seed);
-  if (result) return result;
+  const trackingKey = userId != null && characterId != null
+    ? { userId: String(userId), characterId }
+    : null;
 
-  // Fallback: generic portrait prompt
-  const genericResult = await tryPollinations(characterName, "portrait, detailed face", [], seed);
-  if (genericResult) return genericResult;
+  // Attempt generation, applying dedupe if tracking keys are available
+  const MAX_DEDUPE_ATTEMPTS = 3;
+  for (let dedupeAttempt = 0; dedupeAttempt < MAX_DEDUPE_ATTEMPTS; dedupeAttempt++) {
+    const seed = dedupeAttempt === 0
+      ? baseSeed
+      : Math.floor(Math.random() * 10000000000);
+
+    // Primary: Pollinations with full prompt
+    const result = await tryPollinations(characterName, styleDesc, subGenres, sceneDescription, seed);
+
+    if (result) {
+      if (trackingKey) {
+        const posInHistory = getImagePositionInHistory(trackingKey.userId, trackingKey.characterId, result);
+        const isDuplicate = posInHistory !== null && posInHistory <= IMAGE_HISTORY_WINDOW;
+        const allowRepeat = posInHistory === null || posInHistory >= IMAGE_HISTORY_WINDOW;
+        console.log(`[IMAGE DEDUPE] ${characterName} — image last seen ${posInHistory ?? "never"} images ago, allowing repeat: ${allowRepeat}`);
+        if (isDuplicate && dedupeAttempt < MAX_DEDUPE_ATTEMPTS - 1) {
+          console.log(`[IMAGE DEDUPE] ${characterName} — duplicate within last ${IMAGE_HISTORY_WINDOW}, retrying with fresh seed`);
+          continue;
+        }
+        recordImageUrl(trackingKey.userId, trackingKey.characterId, result);
+      }
+      return result;
+    }
+  }
+
+  // Fallback: generic portrait prompt (no subGenres, no sceneDescription)
+  const genericResult = await tryPollinations(characterName, "portrait, detailed face", [], "", baseSeed);
+  if (genericResult) {
+    if (trackingKey) recordImageUrl(trackingKey.userId, trackingKey.characterId, genericResult);
+    return genericResult;
+  }
 
   // Fallback: existing avatar_url from character record
   if (avatarUrl) {
