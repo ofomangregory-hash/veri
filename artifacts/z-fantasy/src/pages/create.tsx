@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Sparkles, ChevronLeft, ChevronRight, Check,
+  Sparkles, ChevronLeft, ChevronRight, Check, RefreshCw, Save, MessageCircle, Pencil,
 } from "lucide-react";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 
@@ -15,8 +15,6 @@ const SUB_GENRES = [
   "Thriller", "Drama", "Action", "Elf", "Vampire", "Demon", "Angel", "Warrior", "Mage",
 ];
 const MAX_SUBGENRES = 2;
-
-// ── Appearance field definitions ───────────────────────────────────────────────
 
 interface AppearanceFieldDef {
   key: string;
@@ -38,7 +36,7 @@ const APPEARANCE_FIELDS: AppearanceFieldDef[] = [
   { key: "image_focus",           label: "Image Focus",              required: true,  options: ["Face Focus", "Upper Body Focus", "Outfit Focus", "Atmospheric/Background Focus"] },
   { key: "negative_prompts_filter", label: "Negative Prompts Filter", required: true, options: ["Low Quality Filter", "Deformed Hands Filter", "Asymmetry Filter", "Text/Watermark Scrub"] },
   { key: "species",               label: "Species / Race",           required: true,  options: ["Human", "Elf", "Demon", "Angel", "Vampire", "Android", "Hybrid"] },
-  // Optional (28)
+  // Optional (29)
   { key: "height",                label: "Height",                   required: false, options: ["Short", "Average", "Tall"] },
   { key: "build",                 label: "Build",                    required: false, options: ["Slim", "Athletic", "Average", "Curvy"] },
   { key: "skin_tone",             label: "Skin Tone",                required: false, options: ["Fair", "Light", "Medium", "Tan", "Dark"] },
@@ -71,14 +69,14 @@ const APPEARANCE_FIELDS: AppearanceFieldDef[] = [
 
 const REQUIRED_APPEARANCE_KEYS = APPEARANCE_FIELDS.filter(f => f.required).map(f => f.key);
 
-const STEPS = [
+// 6-step wizard + Step 7 is post-creation preview
+const WIZARD_STEPS = [
   { id: 1, title: "Entity Name",         subtitle: "Choose or type your companion's identity" },
-  { id: 2, title: "Visual Form",         subtitle: "Avatar auto-generated from your choices" },
-  { id: 3, title: "Appearance Details",  subtitle: "Define the look that shapes every image" },
-  { id: 4, title: "Origin Genre",        subtitle: "Choose art style and character type" },
-  { id: 5, title: "Core Data",           subtitle: "Age & biographical directives" },
-  { id: 6, title: "First Contact",       subtitle: "Their opening transmission" },
-  { id: 7, title: "Signal Tags",         subtitle: "Classify your entity's attributes" },
+  { id: 2, title: "Appearance Details",  subtitle: "Define the look that shapes every image" },
+  { id: 3, title: "Origin Genre",        subtitle: "Choose art style and character type" },
+  { id: 4, title: "Core Data",           subtitle: "Age & biographical directives" },
+  { id: 5, title: "First Contact",       subtitle: "Their opening transmission" },
+  { id: 6, title: "Signal Tags",         subtitle: "Classify your entity's attributes" },
 ];
 
 const VALID_GENRES = ["Anime", "Fantasy", "Modern", "Sci-Fi", "Dark Goth"] as const;
@@ -98,6 +96,113 @@ function getToken() {
     .Telegram?.WebApp?.initData ?? "mock_init_data_for_dev";
 }
 
+// ── Appearance chip field — reused in wizard step 2 and step 7 edit ────────────
+function AppearanceChipSection({
+  field,
+  value,
+  hybridSpeciesValue,
+  customInputVal,
+  showCustom,
+  onSelect,
+  onHybridChange,
+  onCustomInputChange,
+  onAddCustom,
+  onToggleCustom,
+  onClear,
+}: {
+  field: AppearanceFieldDef;
+  value: string;
+  hybridSpeciesValue?: string;
+  customInputVal: string;
+  showCustom: boolean;
+  onSelect: (val: string) => void;
+  onHybridChange?: (val: string) => void;
+  onCustomInputChange: (val: string) => void;
+  onAddCustom: () => void;
+  onToggleCustom: () => void;
+  onClear?: () => void;
+}) {
+  return (
+    <div className={field.required ? "" : "opacity-85"}>
+      <div className="flex items-center justify-between mb-2">
+        <label className={`text-xs font-bold uppercase tracking-wider ${field.required ? "text-muted-foreground" : "text-muted-foreground/70"}`}>
+          {field.label} {field.required && <span className="text-primary">*</span>}
+        </label>
+        <div className="flex items-center gap-2">
+          {value && (
+            <span className={`text-[10px] font-semibold truncate max-w-[100px] ${field.required ? "text-primary" : "text-accent"}`}>
+              {field.required && "✓ "}{value}
+            </span>
+          )}
+          {value && !field.required && onClear && (
+            <button onClick={onClear} className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+              Skip
+            </button>
+          )}
+          {!value && !field.required && (
+            <span className="text-[10px] text-muted-foreground/40 italic">optional</span>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {field.options.map(opt => (
+          <button
+            key={opt}
+            onClick={() => onSelect(opt)}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+              value === opt
+                ? field.required
+                  ? "bg-primary/30 text-primary border-primary/60 box-glow-pink"
+                  : "bg-accent/25 text-accent border-accent/60"
+                : field.required
+                ? "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/30"
+                : "bg-card/60 text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-accent/30"
+            }`}
+          >
+            {value === opt && <Check size={9} className="inline mr-1" />}{opt}
+          </button>
+        ))}
+      </div>
+      {field.key === "species" && (value === "Hybrid" || hybridSpeciesValue) && onHybridChange && (
+        <input
+          value={hybridSpeciesValue ?? ""}
+          onChange={e => onHybridChange(e.target.value)}
+          placeholder="Hybrid of which species? e.g. Elf-Demon"
+          maxLength={64}
+          className="mt-2 w-full h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:border-accent transition-colors"
+        />
+      )}
+      {showCustom ? (
+        <div className="flex gap-2 mt-2">
+          <input
+            autoFocus
+            value={customInputVal}
+            onChange={e => onCustomInputChange(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") onAddCustom(); }}
+            placeholder="Type custom value..."
+            maxLength={48}
+            className="flex-1 h-8 rounded-lg border border-accent/50 bg-card px-3 text-xs text-white focus:outline-none focus:border-accent"
+          />
+          <button
+            onClick={onAddCustom}
+            disabled={!customInputVal.trim()}
+            className="px-3 h-8 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={onToggleCustom}
+          className="mt-2 text-[10px] text-accent/70 hover:text-accent transition-colors font-semibold"
+        >
+          ➕ Add Custom
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Create() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -106,24 +211,24 @@ export function Create() {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
-  // ── Step 1: Name ──
+  // ── Step 1: Name ──────────────────────────────────────────────────────────────
   const [name, setName] = useState("");
   const [usingCustomName, setUsingCustomName] = useState(false);
   const [customNameInput, setCustomNameInput] = useState("");
 
-  // ── Step 3: Appearance ──
+  // ── Step 2: Appearance ────────────────────────────────────────────────────────
   const [appearance, setAppearance] = useState<Record<string, string>>({});
   const [hybridSpecies, setHybridSpecies] = useState("");
   const [customInputVal, setCustomInputVal] = useState<Record<string, string>>({});
   const [showCustom, setShowCustom] = useState<Record<string, boolean>>({});
 
-  // ── Step 4: Genre ──
+  // ── Step 3: Genre ─────────────────────────────────────────────────────────────
   const [artStyle, setArtStyle] = useState<"Anime" | "Realistic" | "">("");
   const [subGenres, setSubGenres] = useState<string[]>([]);
   const [customSubGenreInput, setCustomSubGenreInput] = useState("");
   const [showCustomSubGenre, setShowCustomSubGenre] = useState(false);
 
-  // ── Steps 5-7 ──
+  // ── Steps 4-6 ────────────────────────────────────────────────────────────────
   const [age, setAge] = useState("");
   const [bio, setBio] = useState("");
   const [greeting, setGreeting] = useState("");
@@ -131,12 +236,60 @@ export function Create() {
   const [isNsfw, setIsNsfw] = useState(false);
   const [visibility, setVisibility] = useState<"public" | "private">("private");
 
+  // ── Step 7: Post-creation state ───────────────────────────────────────────────
+  const [createdCharId, setCreatedCharId] = useState<string | null>(null);
+  const [createdAvatarUrl, setCreatedAvatarUrl] = useState("");
+  const [createdRegenCount, setCreatedRegenCount] = useState(0);
+
+  // Regen avatar
+  const [regenDescription, setRegenDescription] = useState("");
+  const [showRegenInput, setShowRegenInput] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
+  // Edit fields on step 7
+  const [editName, setEditName] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [editGreeting, setEditGreeting] = useState("");
+  const [editTagsInput, setEditTagsInput] = useState("");
+  const [editAppearance, setEditAppearance] = useState<Record<string, string>>({});
+  const [editHybridSpecies, setEditHybridSpecies] = useState("");
+  const [editSubGenres, setEditSubGenres] = useState<string[]>([]);
+  const [editArtStyle, setEditArtStyle] = useState<"Anime" | "Realistic" | "">("");
+  const [editCustomInputVal, setEditCustomInputVal] = useState<Record<string, string>>({});
+  const [editShowCustom, setEditShowCustom] = useState<Record<string, boolean>>({});
+  const [editShowCustomSubGenre, setEditShowCustomSubGenre] = useState(false);
+  const [editCustomSubGenreInput, setEditCustomSubGenreInput] = useState("");
+  const [isSavingEdits, setIsSavingEdits] = useState(false);
+
+  // ── Avatar polling after creation ─────────────────────────────────────────────
+  useEffect(() => {
+    if (step !== 7 || !createdCharId) return;
+    let cancelled = false;
+    const checkAvatar = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch(`/api/characters/${createdCharId}`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json() as { avatarUrl?: string };
+        if (data.avatarUrl && !data.avatarUrl.includes("picsum.photos")) {
+          setCreatedAvatarUrl(data.avatarUrl);
+        }
+      } catch { /* silent */ }
+    };
+    const t1 = setTimeout(checkAvatar, 10000);
+    const t2 = setTimeout(checkAvatar, 30000);
+    const t3 = setTimeout(checkAvatar, 75000);
+    return () => { cancelled = true; clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [step, createdCharId]);
+
   const resolvedName = usingCustomName ? customNameInput.trim() : name;
 
+  // ── Wizard helpers ────────────────────────────────────────────────────────────
   function setAppearanceField(key: string, value: string) {
     setAppearance(prev => ({ ...prev, [key]: value }));
   }
-
   function addCustomForField(key: string) {
     const val = (customInputVal[key] ?? "").trim();
     if (!val) return;
@@ -144,7 +297,6 @@ export function Create() {
     setCustomInputVal(prev => ({ ...prev, [key]: "" }));
     setShowCustom(prev => ({ ...prev, [key]: false }));
   }
-
   function addCustomSubGenre() {
     const val = customSubGenreInput.trim();
     if (!val || subGenres.length >= MAX_SUBGENRES) return;
@@ -152,7 +304,6 @@ export function Create() {
     setCustomSubGenreInput("");
     setShowCustomSubGenre(false);
   }
-
   function toggleSubGenre(sg: string) {
     setSubGenres(prev => {
       if (prev.includes(sg)) return prev.filter(x => x !== sg);
@@ -161,29 +312,55 @@ export function Create() {
     });
   }
 
+  // ── Edit helpers (step 7) ─────────────────────────────────────────────────────
+  function setEditAppearanceField(key: string, value: string) {
+    setEditAppearance(prev => ({ ...prev, [key]: value }));
+  }
+  function addEditCustomForField(key: string) {
+    const val = (editCustomInputVal[key] ?? "").trim();
+    if (!val) return;
+    setEditAppearanceField(key, val);
+    setEditCustomInputVal(prev => ({ ...prev, [key]: "" }));
+    setEditShowCustom(prev => ({ ...prev, [key]: false }));
+  }
+  function addEditCustomSubGenre() {
+    const val = editCustomSubGenreInput.trim();
+    if (!val || editSubGenres.length >= MAX_SUBGENRES) return;
+    setEditSubGenres(prev => [...prev, val]);
+    setEditCustomSubGenreInput("");
+    setEditShowCustomSubGenre(false);
+  }
+  function toggleEditSubGenre(sg: string) {
+    setEditSubGenres(prev => {
+      if (prev.includes(sg)) return prev.filter(x => x !== sg);
+      if (prev.length >= MAX_SUBGENRES) return prev;
+      return [...prev, sg];
+    });
+  }
+
+  // ── canAdvance ────────────────────────────────────────────────────────────────
   function canAdvance(): boolean {
     if (step === 1) return resolvedName.length > 0;
-    if (step === 3) return REQUIRED_APPEARANCE_KEYS.every(k => !!appearance[k]);
-    if (step === 4) return artStyle !== "" && subGenres.length >= 1;
+    if (step === 2) return REQUIRED_APPEARANCE_KEYS.every(k => !!appearance[k]);
+    if (step === 3) return artStyle !== "" && subGenres.length >= 1;
     return true;
   }
 
   function next() {
     if (!canAdvance()) return;
-    if (step < STEPS.length) setStep(s => s + 1);
+    if (step < WIZARD_STEPS.length) setStep(s => s + 1);
   }
-
   function prev() {
     if (step > 1) setStep(s => s - 1);
   }
 
+  // ── Submit (Awaken) ───────────────────────────────────────────────────────────
   async function handleSubmit() {
     if (!resolvedName) {
       toast({ title: "Name is required", variant: "destructive" });
       setStep(1);
       return;
     }
-
     setSubmitting(true);
     try {
       const extraTags = tagsInput
@@ -217,10 +394,24 @@ export function Create() {
         throw new Error(err.error ?? "Creation failed");
       }
 
-      const char = await res.json() as { characterId: string };
+      const char = await res.json() as { characterId: string; avatarUrl?: string };
       queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+
+      // Initialize edit state from wizard state
+      setCreatedCharId(char.characterId);
+      setCreatedAvatarUrl(char.avatarUrl ?? "");
+      setCreatedRegenCount(0);
+      setEditName(resolvedName);
+      setEditBio(bio);
+      setEditGreeting(greeting);
+      setEditTagsInput(tagsInput);
+      setEditAppearance({ ...appearance });
+      setEditHybridSpecies(hybridSpecies);
+      setEditSubGenres([...subGenres]);
+      setEditArtStyle(artStyle);
+
       toast({ title: "✨ Entity Manifested!", description: `${resolvedName} is now live.` });
-      setLocation(`/chat/${char.characterId}`);
+      setStep(7);
     } catch (err) {
       toast({
         title: "Manifestation Failed",
@@ -232,14 +423,398 @@ export function Create() {
     }
   }
 
-  const progressPct = (step / STEPS.length) * 100;
-  const currentStep = STEPS[step - 1];
-  const allSubGenreOptions = [...SUB_GENRES, ...subGenres.filter(s => !SUB_GENRES.includes(s))];
+  // ── Save edits (step 7) ───────────────────────────────────────────────────────
+  async function handleSaveEdits() {
+    if (!createdCharId) return;
+    setIsSavingEdits(true);
+    try {
+      const extraTags = editTagsInput
+        ? editTagsInput.split(",").map(t => t.trim()).filter(Boolean)
+        : [];
+      const tags = [...editSubGenres, ...extraTags];
 
-  // Count required vs filled for step 3 progress hint
+      const res = await fetch(`/api/characters/${createdCharId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          name: editName,
+          bio: editBio,
+          initialGreeting: editGreeting,
+          tags,
+          subGenres: editSubGenres,
+          genre: resolveGenre(editArtStyle, editSubGenres),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? "Save failed");
+      }
+      toast({ title: "✅ Changes saved!" });
+    } catch (err) {
+      toast({
+        title: "Save failed",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingEdits(false);
+    }
+  }
+
+  // ── Regenerate avatar (step 7) ────────────────────────────────────────────────
+  async function handleRegenerate() {
+    if (!createdCharId) return;
+    setIsRegenerating(true);
+    try {
+      const res = await fetch(`/api/characters/${createdCharId}/regenerate-avatar`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ changeDescription: regenDescription }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? "Regeneration failed");
+      }
+      const data = await res.json() as { avatarUrl: string; regenerateCount: number };
+      setCreatedAvatarUrl(data.avatarUrl);
+      setCreatedRegenCount(data.regenerateCount);
+      setRegenDescription("");
+      setShowRegenInput(false);
+      toast({ title: "🎨 New avatar generated!" });
+    } catch (err) {
+      toast({
+        title: "Regeneration failed",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRegenerating(false);
+    }
+  }
+
+  // ── Computed ──────────────────────────────────────────────────────────────────
+  const progressPct = (step / WIZARD_STEPS.length) * 100;
+  const currentStep = step <= WIZARD_STEPS.length ? WIZARD_STEPS[step - 1] : null;
+  const allSubGenreOptions = [...SUB_GENRES, ...subGenres.filter(s => !SUB_GENRES.includes(s))];
+  const allEditSubGenreOptions = [...SUB_GENRES, ...editSubGenres.filter(s => !SUB_GENRES.includes(s))];
   const requiredFilled = REQUIRED_APPEARANCE_KEYS.filter(k => !!appearance[k]).length;
   const requiredTotal = REQUIRED_APPEARANCE_KEYS.length;
+  const regenIsFree = createdRegenCount < 3;
+  const isPlaceholderAvatar = !createdAvatarUrl || createdAvatarUrl.includes("picsum.photos");
 
+  // ── Step 7: Preview & Confirm ─────────────────────────────────────────────────
+  if (step === 7) {
+    return (
+      <div className="flex flex-col h-[100dvh] bg-background overflow-y-auto pb-32">
+        {/* Step 7 Header */}
+        <div className="shrink-0 px-4 pt-4 pb-3 border-b border-border/50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-bold uppercase tracking-widest text-glow-pink">Entity Manifested</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">Review, edit & refine before chatting</p>
+            </div>
+            <button
+              onClick={() => setLocation(`/chat/${createdCharId}`)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs uppercase tracking-wider box-glow-pink hover:bg-primary/90 transition-all active:scale-95"
+            >
+              <MessageCircle size={14} /> Chat
+            </button>
+          </div>
+        </div>
+
+        <div className="px-4 py-5 space-y-6">
+          {/* Avatar */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative">
+              {createdAvatarUrl ? (
+                <img
+                  src={createdAvatarUrl}
+                  alt={editName}
+                  className="w-40 h-40 rounded-2xl object-cover border-2 border-primary/40 box-glow-pink"
+                />
+              ) : (
+                <div className="w-40 h-40 rounded-2xl bg-primary/10 border-2 border-primary/30 flex items-center justify-center text-5xl">
+                  🎨
+                </div>
+              )}
+              {isPlaceholderAvatar && (
+                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-card border border-border rounded-full px-2 py-0.5 text-[9px] text-muted-foreground whitespace-nowrap">
+                  ⏳ Generating…
+                </div>
+              )}
+            </div>
+            <p className="text-xl font-bold text-white">{editName}</p>
+
+            {/* Regenerate avatar section */}
+            <div className="w-full">
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={() => setShowRegenInput(v => !v)}
+                  disabled={isRegenerating}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-secondary/50 text-secondary font-bold text-xs hover:border-secondary hover:bg-secondary/10 transition-all disabled:opacity-50"
+                >
+                  <RefreshCw size={13} className={isRegenerating ? "animate-spin" : ""} />
+                  {isRegenerating ? "Generating…" : "Regenerate Avatar"}
+                </button>
+                <span className={`text-xs font-bold px-2 py-1 rounded-full border ${
+                  regenIsFree
+                    ? "text-green-400 border-green-400/40 bg-green-400/10"
+                    : "text-cyan-400 border-cyan-400/40 bg-cyan-400/10"
+                }`}>
+                  {regenIsFree ? `Free (${3 - createdRegenCount} left)` : "5 🃏"}
+                </span>
+              </div>
+
+              {showRegenInput && (
+                <div className="space-y-2">
+                  <input
+                    autoFocus
+                    value={regenDescription}
+                    onChange={e => setRegenDescription(e.target.value)}
+                    placeholder="Describe what to change… e.g. 'make hair longer, add wings'"
+                    maxLength={200}
+                    className="w-full h-11 rounded-xl border border-secondary/50 bg-card px-3 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:border-secondary transition-colors"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowRegenInput(false)}
+                      className="px-3 py-2 rounded-xl border border-border text-muted-foreground text-xs font-semibold hover:text-white transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleRegenerate}
+                      disabled={isRegenerating}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-secondary text-secondary-foreground font-bold text-xs uppercase tracking-wider hover:bg-secondary/90 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {isRegenerating ? (
+                        <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Generating…</>
+                      ) : (
+                        <><RefreshCw size={13} /> Regenerate {!regenIsFree && "(-5 🃏)"}</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Edit Section ─────────────────────────────────────────────────── */}
+          <div className="space-y-6">
+            {/* Name */}
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                <Pencil size={10} /> Entity Name
+              </label>
+              <input
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                maxLength={48}
+                className="w-full h-11 rounded-xl border border-border bg-card px-4 text-sm font-bold text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-all"
+              />
+            </div>
+
+            {/* Art Style + Sub-genres */}
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Art Style</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["Anime", "Realistic"] as const).map(style => (
+                    <button
+                      key={style}
+                      onClick={() => setEditArtStyle(style)}
+                      className={`py-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
+                        editArtStyle === style
+                          ? "border-primary/60 bg-primary/15 text-primary box-glow-pink"
+                          : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                      }`}
+                    >
+                      <span className="text-xl">{style === "Anime" ? "🌸" : "📷"}</span>
+                      {style}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Character Types</p>
+                  <span className="text-xs text-muted-foreground">{editSubGenres.length}/{MAX_SUBGENRES}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {allEditSubGenreOptions.map(sg => {
+                    const selected = editSubGenres.includes(sg);
+                    const maxed = editSubGenres.length >= MAX_SUBGENRES && !selected;
+                    return (
+                      <button key={sg} disabled={maxed} onClick={() => toggleEditSubGenre(sg)}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          selected ? "bg-primary/30 text-primary border-primary/60 box-glow-pink"
+                            : maxed ? "bg-card/40 text-muted-foreground/40 border-border/40 cursor-not-allowed"
+                            : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/30"
+                        }`}>
+                        {selected && <Check size={10} className="inline mr-1" />}{sg}
+                      </button>
+                    );
+                  })}
+                </div>
+                {editShowCustomSubGenre ? (
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      autoFocus
+                      value={editCustomSubGenreInput}
+                      onChange={e => setEditCustomSubGenreInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") addEditCustomSubGenre(); }}
+                      placeholder="Type a custom type..."
+                      maxLength={32}
+                      className="flex-1 h-8 rounded-lg border border-accent/50 bg-card px-3 text-xs text-white focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      onClick={addEditCustomSubGenre}
+                      disabled={!editCustomSubGenreInput.trim() || editSubGenres.length >= MAX_SUBGENRES}
+                      className="px-3 h-8 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors disabled:opacity-40"
+                    >
+                      Add
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditShowCustomSubGenre(true)}
+                    className="mt-2 text-[10px] text-accent/70 hover:text-accent font-semibold transition-colors"
+                  >
+                    ➕ Add Custom
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Appearance Details */}
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-primary mb-4">
+                Appearance Details
+              </p>
+              <div className="space-y-5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2">Required</p>
+                {APPEARANCE_FIELDS.filter(f => f.required).map(field => (
+                  <AppearanceChipSection
+                    key={field.key}
+                    field={field}
+                    value={editAppearance[field.key] ?? ""}
+                    hybridSpeciesValue={editHybridSpecies}
+                    customInputVal={editCustomInputVal[field.key] ?? ""}
+                    showCustom={!!editShowCustom[field.key]}
+                    onSelect={val => setEditAppearanceField(field.key, val)}
+                    onHybridChange={val => setEditHybridSpecies(val)}
+                    onCustomInputChange={val => setEditCustomInputVal(prev => ({ ...prev, [field.key]: val }))}
+                    onAddCustom={() => addEditCustomForField(field.key)}
+                    onToggleCustom={() => setEditShowCustom(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
+                  />
+                ))}
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40 pt-4 border-t border-border">Optional</p>
+                {APPEARANCE_FIELDS.filter(f => !f.required).map(field => (
+                  <AppearanceChipSection
+                    key={field.key}
+                    field={field}
+                    value={editAppearance[field.key] ?? ""}
+                    customInputVal={editCustomInputVal[field.key] ?? ""}
+                    showCustom={!!editShowCustom[field.key]}
+                    onSelect={val => setEditAppearanceField(field.key, val)}
+                    onCustomInputChange={val => setEditCustomInputVal(prev => ({ ...prev, [field.key]: val }))}
+                    onAddCustom={() => addEditCustomForField(field.key)}
+                    onToggleCustom={() => setEditShowCustom(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
+                    onClear={() => setEditAppearance(prev => { const n = { ...prev }; delete n[field.key]; return n; })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Age + Bio */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Apparent Age</label>
+                <input
+                  value={editBio ? age : ""}
+                  onChange={e => setAge(e.target.value)}
+                  placeholder="e.g. 24, Ancient, Unknown"
+                  className="w-full h-11 rounded-xl border border-border bg-card px-4 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Core Directives (Bio)</label>
+                <textarea
+                  value={editBio}
+                  onChange={e => setEditBio(e.target.value)}
+                  placeholder="Define their personality, history, and desires..."
+                  rows={4}
+                  className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 resize-none transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Greeting */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">First Contact</label>
+              <textarea
+                value={editGreeting}
+                onChange={e => setEditGreeting(e.target.value)}
+                placeholder={`"I've been waiting for you... longer than you know."`}
+                rows={4}
+                className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 resize-none transition-all"
+              />
+            </div>
+
+            {/* Tags */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Signal Tags</label>
+              <input
+                value={editTagsInput}
+                onChange={e => setEditTagsInput(e.target.value)}
+                placeholder="Tsundere, Hacker, Boss, Stoic…"
+                className="w-full h-11 rounded-xl border border-border bg-card px-4 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-all"
+              />
+              {editTagsInput && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {editTagsInput.split(",").map(t => t.trim()).filter(Boolean).map(tag => (
+                    <span key={tag} className="px-2.5 py-1 rounded-full bg-primary/15 border border-primary/40 text-primary text-xs font-semibold">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Sticky bottom bar */}
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur border-t border-border flex gap-3">
+          <button
+            onClick={handleSaveEdits}
+            disabled={isSavingEdits}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-secondary/50 text-secondary font-bold text-sm uppercase tracking-wider hover:bg-secondary/10 transition-all active:scale-95 disabled:opacity-50"
+          >
+            {isSavingEdits ? (
+              <><div className="w-4 h-4 border-2 border-secondary/30 border-t-secondary rounded-full animate-spin" /> Saving…</>
+            ) : (
+              <><Save size={16} /> Save Changes</>
+            )}
+          </button>
+          <button
+            onClick={() => setLocation(`/chat/${createdCharId}`)}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm uppercase tracking-wider box-glow-pink hover:bg-primary/90 transition-all active:scale-95"
+          >
+            <MessageCircle size={16} /> Go to Chat
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Wizard (Steps 1–6) ────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-[100dvh] bg-background">
       {/* Header */}
@@ -253,7 +828,7 @@ export function Create() {
 
         {/* Progress bar */}
         <div className="flex items-center gap-2 mb-1">
-          {STEPS.map(s => (
+          {WIZARD_STEPS.map(s => (
             <div
               key={s.id}
               className={`h-1 flex-1 rounded-full transition-all duration-300 ${
@@ -263,22 +838,24 @@ export function Create() {
           ))}
         </div>
         <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-          <span>Step {step} of {STEPS.length}</span>
+          <span>Step {step} of {WIZARD_STEPS.length}</span>
           <span>{Math.round(progressPct)}%</span>
         </div>
       </div>
 
-      {/* Step content + nav buttons in one scrollable area */}
+      {/* Step content */}
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-[120px]">
-        <div className="mb-6">
-          <h2 className="text-lg font-bold text-white">{currentStep.title}</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">{currentStep.subtitle}</p>
-          {step === 3 && (
-            <p className="text-[10px] text-primary/80 mt-1 font-semibold">
-              Required: {requiredFilled}/{requiredTotal} · Optional fields can be skipped
-            </p>
-          )}
-        </div>
+        {currentStep && (
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-white">{currentStep.title}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">{currentStep.subtitle}</p>
+            {step === 2 && (
+              <p className="text-[10px] text-primary/80 mt-1 font-semibold">
+                Required: {requiredFilled}/{requiredTotal} · Optional fields can be skipped
+              </p>
+            )}
+          </div>
+        )}
 
         {/* ── Step 1: Name ── */}
         {step === 1 && (
@@ -329,26 +906,8 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 2: Visual Form ── */}
+        {/* ── Step 2: Appearance Details ── */}
         {step === 2 && (
-          <div className="flex flex-col items-center gap-6 py-6">
-            <div className="w-24 h-24 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-4xl">
-              🎨
-            </div>
-            <p className="text-sm text-center text-muted-foreground leading-relaxed max-w-xs">
-              Your character's avatar will be generated automatically based on your{" "}
-              <span className="text-foreground font-semibold">name</span>,{" "}
-              <span className="text-foreground font-semibold">art style</span>, and{" "}
-              <span className="text-foreground font-semibold">appearance details</span>.
-            </p>
-            <p className="text-xs text-center text-muted-foreground/60">
-              You can update it from the admin panel after creation.
-            </p>
-          </div>
-        )}
-
-        {/* ── Step 3: Appearance Details ── */}
-        {step === 3 && (
           <div className="space-y-6">
             {/* Required section */}
             <div>
@@ -357,72 +916,19 @@ export function Create() {
               </p>
               <div className="space-y-5">
                 {APPEARANCE_FIELDS.filter(f => f.required).map(field => (
-                  <div key={field.key}>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        {field.label} <span className="text-primary">*</span>
-                      </label>
-                      {appearance[field.key] && (
-                        <span className="text-[10px] text-primary font-semibold truncate max-w-[120px]">
-                          ✓ {appearance[field.key]}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {field.options.map(opt => (
-                        <button
-                          key={opt}
-                          onClick={() => setAppearanceField(field.key, opt)}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                            appearance[field.key] === opt
-                              ? "bg-primary/30 text-primary border-primary/60 box-glow-pink"
-                              : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/30"
-                          }`}
-                        >
-                          {appearance[field.key] === opt && <Check size={9} className="inline mr-1" />}{opt}
-                        </button>
-                      ))}
-                    </div>
-                    {/* Special: Hybrid follow-up */}
-                    {field.key === "species" && (appearance[field.key] === "Hybrid" || hybridSpecies) && (
-                      <input
-                        autoFocus
-                        value={hybridSpecies}
-                        onChange={e => setHybridSpecies(e.target.value)}
-                        placeholder="Hybrid of which species? e.g. Elf-Demon"
-                        maxLength={64}
-                        className="mt-2 w-full h-9 rounded-lg border border-accent/50 bg-card px-3 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:border-accent transition-colors"
-                      />
-                    )}
-                    {/* Add Custom */}
-                    {showCustom[field.key] ? (
-                      <div className="flex gap-2 mt-2">
-                        <input
-                          autoFocus
-                          value={customInputVal[field.key] ?? ""}
-                          onChange={e => setCustomInputVal(prev => ({ ...prev, [field.key]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === "Enter") addCustomForField(field.key); }}
-                          placeholder="Type custom value..."
-                          maxLength={48}
-                          className="flex-1 h-8 rounded-lg border border-accent/50 bg-card px-3 text-xs text-white focus:outline-none focus:border-accent"
-                        />
-                        <button
-                          onClick={() => addCustomForField(field.key)}
-                          disabled={!(customInputVal[field.key] ?? "").trim()}
-                          className="px-3 h-8 rounded-lg bg-accent/20 text-accent text-xs font-bold border border-accent/40 hover:bg-accent/30 transition-colors disabled:opacity-40"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setShowCustom(prev => ({ ...prev, [field.key]: true }))}
-                        className="mt-2 text-[10px] text-accent/70 hover:text-accent transition-colors font-semibold"
-                      >
-                        ➕ Add Custom
-                      </button>
-                    )}
-                  </div>
+                  <AppearanceChipSection
+                    key={field.key}
+                    field={field}
+                    value={appearance[field.key] ?? ""}
+                    hybridSpeciesValue={hybridSpecies}
+                    customInputVal={customInputVal[field.key] ?? ""}
+                    showCustom={!!showCustom[field.key]}
+                    onSelect={val => setAppearanceField(field.key, val)}
+                    onHybridChange={val => setHybridSpecies(val)}
+                    onCustomInputChange={val => setCustomInputVal(prev => ({ ...prev, [field.key]: val }))}
+                    onAddCustom={() => addCustomForField(field.key)}
+                    onToggleCustom={() => setShowCustom(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
+                  />
                 ))}
               </div>
             </div>
@@ -434,83 +940,27 @@ export function Create() {
               </p>
               <div className="space-y-5">
                 {APPEARANCE_FIELDS.filter(f => !f.required).map(field => (
-                  <div key={field.key} className="opacity-85">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
-                        {field.label}
-                      </label>
-                      <div className="flex items-center gap-2">
-                        {appearance[field.key] && (
-                          <span className="text-[10px] text-accent font-semibold truncate max-w-[100px]">
-                            {appearance[field.key]}
-                          </span>
-                        )}
-                        {appearance[field.key] && (
-                          <button
-                            onClick={() => setAppearance(prev => { const n = { ...prev }; delete n[field.key]; return n; })}
-                            className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                          >
-                            Skip
-                          </button>
-                        )}
-                        {!appearance[field.key] && (
-                          <span className="text-[10px] text-muted-foreground/40 italic">optional</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {field.options.map(opt => (
-                        <button
-                          key={opt}
-                          onClick={() => setAppearanceField(field.key, opt)}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                            appearance[field.key] === opt
-                              ? "bg-accent/25 text-accent border-accent/60"
-                              : "bg-card/60 text-muted-foreground/70 border-border/60 hover:text-foreground hover:border-accent/30"
-                          }`}
-                        >
-                          {appearance[field.key] === opt && <Check size={9} className="inline mr-1" />}{opt}
-                        </button>
-                      ))}
-                    </div>
-                    {showCustom[field.key] ? (
-                      <div className="flex gap-2 mt-2">
-                        <input
-                          autoFocus
-                          value={customInputVal[field.key] ?? ""}
-                          onChange={e => setCustomInputVal(prev => ({ ...prev, [field.key]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === "Enter") addCustomForField(field.key); }}
-                          placeholder="Type custom value..."
-                          maxLength={48}
-                          className="flex-1 h-8 rounded-lg border border-accent/40 bg-card px-3 text-xs text-white focus:outline-none focus:border-accent/60"
-                        />
-                        <button
-                          onClick={() => addCustomForField(field.key)}
-                          disabled={!(customInputVal[field.key] ?? "").trim()}
-                          className="px-3 h-8 rounded-lg bg-accent/15 text-accent/80 text-xs font-bold border border-accent/30 hover:bg-accent/25 transition-colors disabled:opacity-40"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setShowCustom(prev => ({ ...prev, [field.key]: true }))}
-                        className="mt-1.5 text-[10px] text-muted-foreground/50 hover:text-accent/70 transition-colors font-semibold"
-                      >
-                        ➕ Add Custom
-                      </button>
-                    )}
-                  </div>
+                  <AppearanceChipSection
+                    key={field.key}
+                    field={field}
+                    value={appearance[field.key] ?? ""}
+                    customInputVal={customInputVal[field.key] ?? ""}
+                    showCustom={!!showCustom[field.key]}
+                    onSelect={val => setAppearanceField(field.key, val)}
+                    onCustomInputChange={val => setCustomInputVal(prev => ({ ...prev, [field.key]: val }))}
+                    onAddCustom={() => addCustomForField(field.key)}
+                    onToggleCustom={() => setShowCustom(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
+                    onClear={() => setAppearance(prev => { const n = { ...prev }; delete n[field.key]; return n; })}
+                  />
                 ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Step 4: Genre (Art Style + Sub-genre) ── */}
-        {step === 4 && (
+        {/* ── Step 3: Origin Genre ── */}
+        {step === 3 && (
           <div className="space-y-6">
-            {/* Step A: Art Style */}
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
                 Step A — Art Style <span className="text-primary">*</span>
@@ -536,7 +986,6 @@ export function Create() {
               </div>
             </div>
 
-            {/* Step B: Sub-genres */}
             {artStyle && (
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -567,7 +1016,6 @@ export function Create() {
                     );
                   })}
                 </div>
-
                 {showCustomSubGenre ? (
                   <div className="flex gap-2 mt-3">
                     <input
@@ -600,8 +1048,8 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 5: Age + Bio ── */}
-        {step === 5 && (
+        {/* ── Step 4: Core Data ── */}
+        {step === 4 && (
           <div className="space-y-5">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
@@ -629,8 +1077,8 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 6: Greeting ── */}
-        {step === 6 && (
+        {/* ── Step 5: First Contact ── */}
+        {step === 5 && (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">What do they say the first time you meet?</p>
             <textarea
@@ -643,8 +1091,8 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 7: Tags ── */}
-        {step === 7 && (
+        {/* ── Step 6: Signal Tags + Summary ── */}
+        {step === 6 && (
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">Add comma-separated tags to help others discover this entity</p>
             <input
@@ -662,46 +1110,44 @@ export function Create() {
                 ))}
               </div>
             )}
-          </div>
-        )}
 
-        {/* Step 7 summary */}
-        {step === 7 && (
-          <div className="mt-6 p-4 rounded-xl bg-card border border-border space-y-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Summary</p>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Name</span>
-              <span className="font-bold text-white">{resolvedName}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Art Style</span>
-              <span className="font-semibold text-white">{artStyle || "—"}</span>
-            </div>
-            {subGenres.length > 0 && (
+            {/* Summary */}
+            <div className="mt-4 p-4 rounded-xl bg-card border border-border space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Summary</p>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Types</span>
-                <span className="font-semibold text-white">{subGenres.join(", ")}</span>
+                <span className="text-muted-foreground">Name</span>
+                <span className="font-bold text-white">{resolvedName}</span>
               </div>
-            )}
-            {appearance.species && (
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Species</span>
-                <span className="font-semibold text-white">{appearance.species}{hybridSpecies ? ` (${hybridSpecies})` : ""}</span>
+                <span className="text-muted-foreground">Art Style</span>
+                <span className="font-semibold text-white">{artStyle || "—"}</span>
               </div>
-            )}
-            {(appearance.hair_color || appearance.hair_length) && (
+              {subGenres.length > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Types</span>
+                  <span className="font-semibold text-white">{subGenres.join(", ")}</span>
+                </div>
+              )}
+              {appearance.species && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Species</span>
+                  <span className="font-semibold text-white">{appearance.species}{hybridSpecies ? ` (${hybridSpecies})` : ""}</span>
+                </div>
+              )}
+              {(appearance.hair_color || appearance.hair_length) && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Hair</span>
+                  <span className="font-semibold text-white">{[appearance.hair_color, appearance.hair_length].filter(Boolean).join(", ")}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Hair</span>
-                <span className="font-semibold text-white">{[appearance.hair_color, appearance.hair_length].filter(Boolean).join(", ")}</span>
+                <span className="text-muted-foreground">Visibility</span>
+                <span className="font-semibold text-white">🔒 Private</span>
               </div>
-            )}
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Visibility</span>
-              <span className="font-semibold text-white">🔒 Private</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Cost</span>
-              <span className="font-bold text-cyan-400">-25 🃏 Neon Cards</span>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Cost</span>
+                <span className="font-bold text-cyan-400">-25 🃏 Neon Cards</span>
+              </div>
             </div>
           </div>
         )}
@@ -718,13 +1164,13 @@ export function Create() {
             </button>
           )}
 
-          {step < STEPS.length ? (
+          {step < WIZARD_STEPS.length ? (
             <button
               onClick={next}
               disabled={!canAdvance()}
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-bold uppercase tracking-wider box-glow-pink hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {step === 3 && !canAdvance()
+              {step === 2 && !canAdvance()
                 ? `Fill required fields (${requiredFilled}/${requiredTotal})`
                 : <>Continue <ChevronRight size={18} /></>
               }
@@ -741,9 +1187,7 @@ export function Create() {
                   Manifesting...
                 </>
               ) : (
-                <>
-                  <Sparkles size={18} /> <Check size={16} /> Awaken
-                </>
+                <><Sparkles size={18} /> <Check size={16} /> Awaken</>
               )}
             </button>
           )}
