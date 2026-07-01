@@ -140,7 +140,7 @@ export async function addCsMessage(
   try {
     const { data, error } = await supabase
       .from("customer_support_messages")
-      .insert({ thread_id: threadId, sender_type: senderType, sender_id: senderId, message, read: senderType === "agent" })
+      .insert({ thread_id: threadId, sender_type: senderType, sender_id: senderId, message, direction: senderType === "user" ? "inbound" : "outbound", read: senderType === "agent" })
       .select()
       .single();
 
