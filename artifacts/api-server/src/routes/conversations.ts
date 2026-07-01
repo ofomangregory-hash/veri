@@ -377,8 +377,10 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
 
   // ── Intimacy + content level ──────────────────────────────────────────────
   const intimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
-  const charNsfw = true; // NSFW always enabled globally
-  const contentLevel = getContentLevel(intimacy, charNsfw);
+  const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
+  // Force NSFW at high intimacy (>50%) regardless of character/user settings
+  const effectiveNsfw = charNsfw || intimacy > 50;
+  const contentLevel = getContentLevel(intimacy, effectiveNsfw);
   const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
 
   // ── Fetch local DB row early — appearance columns + styleDescriptor in one query ──
@@ -507,7 +509,7 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
         teaserDescription: character.teaserDescription,
         imageSeed: resolvedSeed,
         sceneDescription: triggerScene,
-        nsfwEnabled: charNsfw,
+        nsfwEnabled: effectiveNsfw,
         contentLevelWords: contentWords,
         styleDescriptor: resolvedStyle,
       });
@@ -549,7 +551,7 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
         imageSeed: resolvedSeed,
         sceneDescription: loopScene,
         avatarUrl: loopAvatarUrl || undefined,
-        nsfwEnabled: charNsfw,
+        nsfwEnabled: effectiveNsfw,
         contentLevelWords: contentWords,
         styleDescriptor: resolvedStyle,
       });
@@ -586,7 +588,7 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
         // Prefer an additional avatar; fall back to character's main avatar so that
         // Pollinations failures return a real image, not the dicebear placeholder.
         avatarUrl: blurredAvatarUrl || character.avatarUrl || undefined,
-        nsfwEnabled: false,
+        nsfwEnabled: true,
         contentLevelWords: contentWords,
         styleDescriptor: resolvedStyle,
       });
@@ -689,9 +691,11 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   const character = await getSupabaseCharacterById(params.data.characterId);
   if (!character) { res.status(404).json({ error: "Character not found" }); return; }
 
-  const charNsfw = true; // NSFW always enabled globally
+  const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
   const intimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
-  const contentLevel = getContentLevel(intimacy, charNsfw);
+  // Force NSFW at high intimacy (>50%) regardless of character/user settings
+  const effectiveNsfw = charNsfw || intimacy > 50;
+  const contentLevel = getContentLevel(intimacy, effectiveNsfw);
   const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
 
   // Seed + style resolution for selfie
@@ -739,7 +743,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
       imageSeed: selfieResolvedSeed,
       sceneDescription: [parsed.data.description, selfieLocalAppearanceDesc].filter(Boolean).join(", "),
       avatarUrl: character.avatarUrl ?? null,
-      nsfwEnabled: charNsfw,
+      nsfwEnabled: effectiveNsfw,
       contentLevelWords: contentWords,
       styleDescriptor: selfieResolvedStyle,
     });
@@ -1037,8 +1041,10 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
   let scenarioImageUrl: string | null = null;
   if (parsed.data.giftType === "secret_key" && character) {
     const newIntimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
-    const charNsfw = true; // NSFW always enabled globally
-    const contentLevel = getContentLevel(newIntimacy, charNsfw);
+    const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
+    // Force NSFW at high intimacy (>50%) regardless of character/user settings
+    const giftEffectiveNsfw = charNsfw || newIntimacy > 50;
+    const contentLevel = getContentLevel(newIntimacy, giftEffectiveNsfw);
     const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
     let giftResolvedSeed = character.imageSeed ?? null;
     if (!giftResolvedSeed) {
@@ -1072,7 +1078,7 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
         imageSeed: giftFreshSeed,
         sceneDescription: [giftScene, giftLocalAppearanceDesc].filter(Boolean).join(", "),
         avatarUrl: character.avatarUrl ?? null,
-        nsfwEnabled: charNsfw,
+        nsfwEnabled: giftEffectiveNsfw,
         contentLevelWords: contentWords,
         styleDescriptor: giftResolvedStyle,
       });
