@@ -19,8 +19,9 @@ declare global {
   }
 }
 
-const SUPREME_ADMIN_USERNAME = "zxeleen";
-const SUPREME_ADMIN_ID = "8704633862";
+// Set ADMIN_TELEGRAM_ID and ADMIN_TELEGRAM_USERNAME in environment secrets.
+const SUPREME_ADMIN_USERNAME = (process.env.ADMIN_TELEGRAM_USERNAME ?? "").trim();
+const SUPREME_ADMIN_ID = (process.env.ADMIN_TELEGRAM_ID ?? "").trim();
 
 function generateReferralCode(): string {
   return crypto.randomBytes(6).toString("hex");

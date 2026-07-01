@@ -11,7 +11,6 @@ export function BottomNav() {
     me?.isAdmin ||
     me?.staffPrivileges === "full_admin" ||
     me?.staffPrivileges === "limited_admin" ||
-    me?.id === "8704633862" ||
     me?.id === "666666";
 
   const tabs = [

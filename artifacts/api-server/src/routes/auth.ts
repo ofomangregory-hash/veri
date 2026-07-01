@@ -115,7 +115,8 @@ router.post("/auth/daily-claim", async (req, res): Promise<void> => {
 
   const now = new Date();
   const tier = user.subscriptionTier ?? "Free";
-  const isSupremeAdmin = req.isSupremeAdmin || tier === "supreme_admin" || user.username === "zxeleen";
+  const adminUsername = (process.env.ADMIN_TELEGRAM_USERNAME ?? "").trim();
+  const isSupremeAdmin = req.isSupremeAdmin || tier === "supreme_admin" || (adminUsername !== "" && user.username === adminUsername);
 
   // Cooldown interval: supreme_admin=6h, premium tiers=12h, free=24h
   const intervalHours = isSupremeAdmin ? 6 : (tier === "Gold" || tier === "Silver" || tier === "Bronze") ? 12 : 24;

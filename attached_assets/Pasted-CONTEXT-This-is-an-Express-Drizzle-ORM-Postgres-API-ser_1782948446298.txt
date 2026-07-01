@@ -1,0 +1,19 @@
+CONTEXT: This is an Express + Drizzle ORM + Postgres API server (deployed on Railway, code pushed via GitHub). The Postgres database is hosted on Supabase, accessed directly via a raw connection string (not the Supabase JS client) for this specific query.
+
+BUG: In conversations.ts, there are two places (around line 387 and line 708) that run a Drizzle query selecting all columns from the "characters" table by character_id. This query has been failing in production with:
+
+cause_message: 'column "art_style" does not exist'
+cause_code: '42703'
+
+This means the "characters" table in the actual production database is missing the art_style column (and possibly other recently-added appearance columns) that the Drizzle schema definition expects. This is a schema drift issue — the Drizzle schema was updated in code, but a migration/push was never run against the correct production database.
+
+IMPORTANT: A previous attempt to fix this was run against the wrong database (a different Replit-provisioned dev database), which is why the error kept reappearing in production even after being "confirmed fixed." The actual production DATABASE_URL (the one Railway's deployed app uses) points to Supabase's Postgres — I will provide that connection string separately as a secret.
+
+TASK:
+1. I will add the correct production DATABASE_URL as a Replit secret (I'll tell you the secret name once added — likely PROD_DATABASE_URL or similar).
+2. Once I've added it, run drizzle-kit push (or equivalent) using that specific DATABASE_URL — NOT any other database this Replit environment might default to — to sync the "characters" table schema with the current Drizzle schema definition (this should add art_style and any other missing columns).
+3. Before running it, show me a diff/summary of exactly which columns will be added, so I can confirm it's purely additive (ADD COLUMN only) with no drops or type changes on existing data.
+4. Do not modify the query logic in conversations.ts, the catch blocks, or any other file — this should be purely a schema sync against the correct database.
+5. After running it, tell me clearly so I can redeploy the app on Railway and verify with a fresh production log that the error is gone.
+
+Wait for me to provide the secret before proceeding with step 2.

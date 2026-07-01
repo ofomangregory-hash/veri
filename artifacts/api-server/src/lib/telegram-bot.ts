@@ -18,7 +18,9 @@ interface MediaTrigger { keyword: string; url: string; mediaType: "photo" | "vid
 
 // ── In-memory admin sessions (password-unlocked non-owner admins) ──────────────
 const adminSessions = new Set<number>();
-const ADMIN_PASSWORD = "ofomangregory";
+// Set ADMIN_BOT_PASSWORD env var to enable password-based admin unlock in the bot.
+// If not set, this feature is disabled.
+const ADMIN_PASSWORD = process.env.ADMIN_BOT_PASSWORD ?? "";
 
 // ── Pending multi-step states ─────────────────────────────────────────────────
 const pendingPhotoFor = new Map<number, string>(); // chatId → characterId (for /setcharphoto)
@@ -187,28 +189,29 @@ function buildWizardPrompt(w: WizardState): string {
 let bot: TelegramBot | null = null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-const HARDCODED_ADMIN_ID = "8704633862";
+// Admin ID is sourced from the ADMIN_TELEGRAM_ID environment secret — not hardcoded.
+const HARDCODED_ADMIN_ID = (process.env.ADMIN_TELEGRAM_ID ?? '').trim();
 
 /** Escape Markdown special chars so user-provided strings don't break formatting */
 function escMd(s: string): string {
-  return s.replace(/[_*[\]()~`>#+=|{}.!-]/g, "\\$&");
+  return s.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
 }
 
 /** Supreme admin check — bypasses all restrictions */
 function isSupremeAdmin(idOrMsg: number | string | { from?: { id?: number } }): boolean {
   let id: string;
-  if (typeof idOrMsg === "object" && "from" in idOrMsg) {
-    id = String(idOrMsg.from?.id ?? "");
+  if (typeof idOrMsg === 'object' && 'from' in idOrMsg) {
+    id = String(idOrMsg.from?.id ?? '');
   } else {
     id = String(idOrMsg);
   }
-  return id === HARDCODED_ADMIN_ID || id === (process.env.ADMIN_TELEGRAM_ID ?? "");
+  return HARDCODED_ADMIN_ID !== '' && id === HARDCODED_ADMIN_ID;
 }
 
 function isAdmin(msg: Message): boolean {
   const id = msg.from?.id;
   if (!id) return false;
-  return String(id) === process.env.ADMIN_TELEGRAM_ID || String(id) === HARDCODED_ADMIN_ID || adminSessions.has(id);
+  return (HARDCODED_ADMIN_ID !== '' && String(id) === HARDCODED_ADMIN_ID) || adminSessions.has(id);
 }
 
 async function syncUser(userId: string, username?: string): Promise<void> {
@@ -810,7 +813,8 @@ export function startTelegramBot(): TelegramBot | null {
 
       const now = new Date();
       const dailyTierCheck = user.subscriptionTier ?? "Free";
-      const isSupremeAdminBot = dailyTierCheck === "supreme_admin" || user.username === "zxeleen";
+      const adminUsername = (process.env.ADMIN_TELEGRAM_USERNAME ?? "").trim();
+      const isSupremeAdminBot = dailyTierCheck === "supreme_admin" || (adminUsername !== "" && user.username === adminUsername);
       const dailyIntervalHours = isSupremeAdminBot ? 6 : (dailyTierCheck === "Gold" || dailyTierCheck === "Silver" || dailyTierCheck === "Bronze") ? 12 : 24;
       const dailyIntervalMs = dailyIntervalHours * 60 * 60 * 1000;
       if (user.lastDailyClaim) {
@@ -3256,7 +3260,8 @@ export function startTelegramBot(): TelegramBot | null {
       }
 
       // ── Password unlock ──────────────────────────────────────────────────────
-      if (text.trim() === ADMIN_PASSWORD) {
+      // Only attempt unlock when ADMIN_BOT_PASSWORD is configured (fail closed when unset).
+      if (ADMIN_PASSWORD !== "" && text.trim() === ADMIN_PASSWORD) {
         if (msg.from?.id) {
           adminSessions.add(msg.from.id);
           // Persist so it survives bot restarts

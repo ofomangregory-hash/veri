@@ -24,7 +24,8 @@ async function runAutoGiftClaim(): Promise<void> {
     for (const user of candidates) {
       try {
         const tier = user.subscriptionTier ?? "Free";
-        const isSupreme = tier === "supreme_admin" || user.username === "zxeleen";
+        const adminUsername = (process.env.ADMIN_TELEGRAM_USERNAME ?? "").trim();
+        const isSupreme = tier === "supreme_admin" || (adminUsername !== "" && user.username === adminUsername);
         const intervalMs = (isSupreme ? 6 : 12) * 60 * 60 * 1000;
         const cutoff = new Date(now.getTime() - intervalMs);
 

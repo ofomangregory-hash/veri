@@ -92,17 +92,16 @@ function serializeUser(u: typeof usersTable.$inferSelect) {
 }
 
 // ── Admin secret phrase verification ─────────────────────────────────────────
-// The phrase is compared server-side using a timing-safe hash check.
-// Set ADMIN_SECRET env var to your chosen passphrase.  If not set, falls back
-// to the legacy default so existing deployments keep working.
-const LEGACY_PHRASE = "gregoryomofoman";
+// Set ADMIN_SECRET env var to your chosen passphrase.
+// If not set, secret-phrase-based admin unlock is disabled.
 const ADMIN_SECRET_HASH = (() => {
-  const secret = process.env.ADMIN_SECRET?.trim() || LEGACY_PHRASE;
+  const secret = process.env.ADMIN_SECRET?.trim();
+  if (!secret) return null;
   return crypto.createHash("sha256").update(secret).digest("hex");
 })();
 
 function phraseMatchesSecret(input: string): boolean {
-  if (!input) return false;
+  if (!input || !ADMIN_SECRET_HASH) return false;
   const inputHash = crypto.createHash("sha256").update(input.trim()).digest("hex");
   try {
     return crypto.timingSafeEqual(Buffer.from(inputHash, "hex"), Buffer.from(ADMIN_SECRET_HASH, "hex"));
