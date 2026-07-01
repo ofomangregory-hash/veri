@@ -23,11 +23,10 @@ const EXISTING_ANIME_KEYWORDS = [
   "line art", "2d ", "2d,", "hand-drawn",
 ];
 
-// Cel-shaded vector anime quality assist — appended when no art-style directive is detected.
-// Anchors Pollinations/Flux to crisp digital line-art and cel-shading without overriding
-// any explicit user-specified look.
+// Flat cel-shaded vector anime quality assist — appended when no art-style directive is detected.
+// Uses explicit hard-edge / flat-color anchors to eliminate any soft, painterly, or airbrushed output.
 const STYLE_ASSIST_TAGS =
-  "clean anime cel-shading, crisp fine lineart outlines, vibrant vector art, smooth digital color gradients, minimalist flat white background, sharp focus, digital illustration, modern anime style, precise details";
+  "ultra-sharp 2D vector anime style, hard cel-shading, explicit heavy black lineart outlines, 100% flat digital coloring, high contrast color blocking, crisp clean shapes, no gradients, minimal geometric white background, perfectly drawn hands and anatomy";
 
 // Heavy 2.5D anime NSFW anchors — injected when nsfwEnabled=true.
 // These override the softer STYLE_ASSIST_TAGS and steer Flux toward
@@ -35,15 +34,15 @@ const STYLE_ASSIST_TAGS =
 const NSFW_ANIME_ANCHORS =
   "highly detailed 2.5D anime digital illustration, uncensored anime style, perfect anatomy, voluptuous proportions, vibrant colors, clean crisp linework, soft skin textures, soft rendering, depth of field, dramatic studio lighting, explicit content, sharp focus, masterpiece artwork";
 
-// Always appended to every selfie/avatar prompt to enforce half-body or full-body
-// framing and eliminate tight facial crops.
+// Always appended to every selfie/avatar prompt to enforce full-body framing
+// down to feet, eliminating chest/stomach crops.
 const PORTRAIT_FRAMING =
-  "either full-body shot or half-body shot composition, clean anime cel-shading, crisp fine lineart outlines, vibrant vector art, smooth digital color gradients, minimalist flat white background, sharp focus, digital illustration, modern anime style, precise details";
+  "full-body portrait composition, showing complete clothing and legs down to feet, wide aspect ratio framing, cinematic clear focus";
 
 // Negative prompt — appended as &negative= query param to aggressively suppress
-// heavy textures, tight facial crops, and non-cel-shaded rendering styles.
+// soft airbrushed textures, tight crops, and non-cel-shaded rendering styles.
 const NEGATIVE_PROMPT =
-  "close-up, headshot, face zoom, cropped limbs, oil painting, canvas texture, watercolor, smudged shading, realistic skin texture, heavy brushes, blurry lines, airbrushed, 3D render, dark muddy shadows, messy sketch";
+  "soft shading, airbrushed, watercolor, smudge, blur, smooth gradients, ambient volumetric lighting, lens flare, bloom effect, volumetric dust, 3D appearance, realistic skin pores, photorealism, heavy shadows, cropped hips, headshot, close-up, face zoom, cropped limbs, oil painting, canvas texture, smudged shading, realistic skin texture, heavy brushes, blurry lines, 3D render, dark muddy shadows, messy sketch";
 
 function hasExplicitPhotorealistic(prompt: string): boolean {
   const lower = prompt.toLowerCase();
