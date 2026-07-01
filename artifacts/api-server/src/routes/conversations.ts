@@ -395,6 +395,8 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
     console.error("[conversations] local char query failed:", {
       message: err?.message,
       code: err?.code,
+      cause_message: err?.cause?.message,
+      cause_code: err?.cause?.code,
       stack: err?.stack,
       characterId: params.data.characterId,
     });
@@ -703,8 +705,22 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   } else {
     console.log(`[IMAGE SEED] ${character.name} — using saved seed: ${selfieResolvedSeed}`);
   }
-  const [_selfieCharRow] = await db.select().from(charactersTable)
-    .where(eq(charactersTable.characterId, params.data.characterId));
+  let _selfieCharRow: typeof charactersTable.$inferSelect | undefined;
+  try {
+    const _selfieRows = await db.select().from(charactersTable)
+      .where(eq(charactersTable.characterId, params.data.characterId));
+    _selfieCharRow = _selfieRows[0];
+  } catch (err: any) {
+    console.error("[conversations/selfie] local char query failed:", {
+      message: err?.message,
+      code: err?.code,
+      cause_message: err?.cause?.message,
+      cause_code: err?.cause?.code,
+      stack: err?.stack,
+      characterId: params.data.characterId,
+    });
+    _selfieCharRow = undefined;
+  }
   const _selfieArtStyle = (_selfieCharRow?.artStyle as string | undefined) ??
     (character.genre === "Anime" ? "Anime" : undefined);
   let selfieResolvedStyle = _selfieCharRow?.styleDescriptor ?? null;
