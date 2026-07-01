@@ -1,10 +1,10 @@
 import { logger } from "./logger";
 
 // ── Default canvas dimensions ─────────────────────────────────────────────────
-// 9:16 vertical format (portrait) — optimal for full-body and half-body character frames.
+// 1920×1080 — cinematic widescreen used for all selfie, inchat, and avatar images.
 // Callers can override by passing explicit width/height to tryPollinations if needed.
-const DEFAULT_WIDTH  = 768;
-const DEFAULT_HEIGHT = 1344;
+const DEFAULT_WIDTH  = 1920;
+const DEFAULT_HEIGHT = 1080;
 
 // ── Style-detection keyword lists ─────────────────────────────────────────────
 // If the combined prompt already contains an explicit non-anime art direction,
@@ -74,10 +74,25 @@ export interface GenerateSelfieOptions {
   characterId?: string | null;
 }
 
-export function deriveStyleDescriptor(genre: string, tags: string[]): string {
+// ── Style descriptor templates ────────────────────────────────────────────────
+const ANIME_STYLE_DESCRIPTOR =
+  "modern high-quality anime style, clean digital line art, smooth cell shading, soft gradients, vibrant lighting, polished textures, highly detailed 2D illustration";
+
+const REALISTIC_STYLE_DESCRIPTOR =
+  "photorealistic, DSLR photograph, 35mm lens, sharp focus, natural studio lighting, cinematic composition, intricate textures, volumetric atmosphere, professional color grading, 8k resolution";
+
+// artStyle takes precedence over genre/tag detection.
+// Pass artStyle="Realistic" for photorealistic output; artStyle="Anime" (or omit) for anime.
+// Genre/tag fallbacks remain for callers that don't supply artStyle yet.
+export function deriveStyleDescriptor(genre: string, tags: string[], artStyle?: string): string {
+  // ── Primary branch: explicit artStyle selection ───────────────────────────
+  if (artStyle === "Realistic") return REALISTIC_STYLE_DESCRIPTOR;
+  if (artStyle === "Anime")     return ANIME_STYLE_DESCRIPTOR;
+
+  // ── Fallback: derive from genre / tags ────────────────────────────────────
   const tagLower = (tags ?? []).map(t => t.toLowerCase());
-  if (tagLower.includes("anime") || genre === "Anime") return "modern high-quality anime style, clean digital line art, smooth cell shading, soft gradients, vibrant lighting, polished textures, highly detailed 2D illustration";
-  if (tagLower.includes("realistic") || genre === "Realistic") return "realistic digital painting, photorealistic, highly detailed";
+  if (tagLower.includes("anime") || genre === "Anime") return ANIME_STYLE_DESCRIPTOR;
+  if (tagLower.includes("realistic") || genre === "Realistic") return REALISTIC_STYLE_DESCRIPTOR;
   if (tagLower.includes("3d") || tagLower.includes("pixar")) return "3D render, Pixar style, soft lighting";
   if (genre === "Dark Goth" || tagLower.includes("vampire") || tagLower.includes("goth")) return "gothic dark art, cinematic shadows, dramatic lighting";
   if (genre === "Sci-Fi" || tagLower.includes("android") || tagLower.includes("cyberpunk")) return "cyberpunk digital art, neon aesthetic, futuristic";
@@ -182,7 +197,7 @@ async function tryPollinations(
 
   const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
   const encodedPrompt = encodeURIComponent(cleanPrompt);
-  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=${width}&height=${height}&nologo=true&seed=${imageSeed}`;
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=${width}&height=${height}&nologo=true&enhance=true&safe=false&seed=${imageSeed}`;
 
   console.log("Image prompt:", cleanPrompt);
   console.log(`Pollinations URL (${width}×${height}):`, url);
