@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, jsonb, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -17,6 +17,16 @@ export const charactersTable = pgTable("characters", {
   triggerMetadataArray: jsonb("trigger_metadata_array"),
   imageSeed: text("image_seed"),
   styleDescriptor: text("style_descriptor"),
+  // ── Columns that exist in production but were absent from this schema ──────
+  promotionalText: text("promotional_text"),
+  subGenres: text("sub_genres").array().notNull().default([]),
+  statusLevel: integer("status_level").default(0),
+  tagline: text("tagline"),
+  background: text("background"),
+  personality: text("personality"),
+  regenerateCount: integer("regenerate_count").default(0),
+  finalStepCompleted: boolean("final_step_completed").default(false),
+  appearancePrompt: text("appearance_prompt"),
   // ── Appearance fields ──────────────────────────────────────────────────────
   hairColor: text("hair_color"),
   hairLength: text("hair_length"),
