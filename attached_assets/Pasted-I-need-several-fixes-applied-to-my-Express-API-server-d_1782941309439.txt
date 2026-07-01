@@ -1,0 +1,49 @@
+I need several fixes applied to my Express API server (deployed on Railway, DB on Supabase). Please locate the relevant files and make these exact changes. Show me a diff for each before applying.
+
+1. FIX PROXY IMAGE AUTH ISSUE
+Find where routes are registered (likely index.ts or app.ts) and where authMiddleware is defined (src/middlewares/auth.ts).
+a) Move the /api/proxy-image route registration so it happens BEFORE app.use('/api', authMiddleware) is called — this route must not require Telegram auth.
+b) As a safety net, add this at the very top of authMiddleware itself:
+   if (req.path === '/proxy-image' || req.path.startsWith('/proxy-image')) {
+     return next();
+   }
+c) Do not change auth behavior for any other route.
+
+2. FIX getAdminUnreadCount
+In supabaseCS.ts, replace the getAdminUnreadCount function entirely with:
+
+export async function getAdminUnreadCount(): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('customer_support_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('read', false)
+      .eq('direction', 'inbound');
+
+    if (error) {
+      console.error('getAdminUnreadCount error:', error.message);
+      return 0;
+    }
+    return count ?? 0;
+  } catch (err: any) {
+    console.error('getAdminUnreadCount catch:', err?.message);
+    return 0;
+  }
+}
+
+3. FIX DEPRECATED TELEGRAM METHOD
+Search the codebase for any call to deleteWebHook (capital H) from node-telegram-bot-api and rename it to deleteWebhook (lowercase h). Don't change any other bot setup logic.
+
+4. ADD REAL ERROR LOGGING TO addCsMessage
+Find addCsMessage (likely near getAdminUnreadCount in supabaseCS.ts). It currently only logs "addCsMessage: failed" with no detail, which is hiding the real bug. Update it to:
+a) Log the actual Supabase error object on failure: error.message, error.code, error.details, error.hint.
+b) Return a clear success/failure boolean (or throw a typed error) instead of failing silently.
+c) Do not change the insert logic itself yet — I need to see the real underlying error first.
+
+5. ADD REAL ERROR LOGGING TO THE CHARACTERS QUERY IN conversations.ts
+Around line 385 of conversations.ts, there's a query that selects from "characters" by character_id that is currently failing with only a generic "Failed query" log. Update it to:
+a) Wrap it in try/catch if not already, and log the full underlying error: error.message, error.code, and error.stack.
+b) If this uses Drizzle with a .single()-style call, check and log whether the failure is "zero rows returned" vs an actual connection/query failure — these need different handling.
+c) Do not change the query logic itself yet — I need to see the real error message first.
+
+Do not touch any other files or logic beyond what's described above. After each change, show me the diff before applying it.

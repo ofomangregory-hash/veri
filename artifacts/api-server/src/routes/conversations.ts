@@ -382,8 +382,25 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
   const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
 
   // ── Fetch local DB row early — appearance columns + styleDescriptor in one query ──
-  const [_localCharRow] = await db.select().from(charactersTable)
-    .where(eq(charactersTable.characterId, params.data.characterId));
+  let _localCharRow: typeof charactersTable.$inferSelect | undefined;
+  try {
+    const rows = await db.select().from(charactersTable)
+      .where(eq(charactersTable.characterId, params.data.characterId));
+    _localCharRow = rows[0];
+    if (!_localCharRow) {
+      // Zero rows — character exists in Supabase but not in local DB (pre-migration or new char)
+      console.warn("[conversations] local DB has no row for characterId:", params.data.characterId, "— appearance fields will be empty");
+    }
+  } catch (err: any) {
+    console.error("[conversations] local char query failed:", {
+      message: err?.message,
+      code: err?.code,
+      stack: err?.stack,
+      characterId: params.data.characterId,
+    });
+    // Non-fatal — continue without appearance data
+    _localCharRow = undefined;
+  }
   const localAppearanceDesc = buildLocalAppearanceDesc(_localCharRow);
   const physicalAppearanceBlock = localAppearanceDesc
     ? `\nPHYSICAL APPEARANCE — always reflect these traits consistently in descriptions, never contradict them:\n${localAppearanceDesc}.\n`

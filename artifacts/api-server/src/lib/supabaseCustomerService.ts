@@ -144,16 +144,44 @@ export async function addCsMessage(
       .select()
       .single();
 
-    if (error) { logger.warn({ error }, "addCsMessage: failed"); return null; }
+    if (error) {
+      console.error("addCsMessage insert error:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        threadId,
+        senderType,
+        senderId,
+      });
+      logger.warn({ error }, "addCsMessage: insert failed");
+      return null;
+    }
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("customer_service_threads")
       .update({ last_message_at: new Date().toISOString() })
       .eq("id", threadId);
 
+    if (updateError) {
+      console.error("addCsMessage thread update error:", {
+        message: updateError.message,
+        code: updateError.code,
+        details: updateError.details,
+        threadId,
+      });
+    }
+
     return mapCsMessage(data);
-  } catch (err) {
-    logger.warn({ err }, "addCsMessage: failed");
+  } catch (err: any) {
+    console.error("addCsMessage caught exception:", {
+      message: err?.message,
+      code: err?.code,
+      stack: err?.stack,
+      threadId,
+      senderType,
+    });
+    logger.warn({ err }, "addCsMessage: exception");
     return null;
   }
 }
