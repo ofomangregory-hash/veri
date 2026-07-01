@@ -1,0 +1,50 @@
+Do not modify auth.ts, authMiddleware, or proxy/image-proxy route logic anywhere in this task.
+
+SECTION 1 — Step 7 nav bar overlap (still broken after previous fix)
+Scope: create.tsx only.
+
+Read-only first:
+1. Show the exact current CSS/classes on the Step 7 fixed action bar (the element containing the Confirm button) — paste the real JSX/className as it exists right now.
+2. Show the exact CSS/z-index of the bottom navigation bar component.
+3. Confirm whether these two elements share the same stacking context — a z-index only works relative to elements in the same parent stacking context, so check if the Step 7 bar is nested inside a parent with its own z-index/transform/overflow that's clipping or containing it regardless of the z-50 value.
+4. Check for any `overflow: hidden` or `transform` on parent containers of the Step 7 bar that would clip it regardless of z-index.
+
+Diagnose the real cause, fix it, then confirm the Confirm button visibly renders above the bottom nav bar before claiming it's done.
+
+SECTION 2 — Avatar prompt duplication and missing fields
+Scope: the image generation service (imageGenerator.ts / wherever the Pollinations prompt is built) and characters.ts only.
+
+Confirmed bug: the appearance description is being included TWICE in the final avatar prompt — once inside extendedStyleDescriptor, once again as sceneDescription. Fix this so the appearance block appears exactly once.
+
+Also confirmed: cultural_style is missing from the avatar prompt entirely (it should be included alongside the other appearance fields) and hybrid_species is fetched but never actually appended — the text "(Hybrid)" shows but not the actual hybrid species value (e.g. "Elf-Demon"). Fix both so they're correctly read and appended in the existing fixed field order.
+
+Show before/after code for all three fixes.
+
+SECTION 3 — Physical appearance traits missing from AI chat system prompt
+Scope: conversations.ts only.
+
+Confirmed bug: the system prompt sent to the AI model for actual chat conversations only includes character.name, character.systemPrompt (bio), character.teaserDescription, character.genre, and character.subGenres. None of the 40 appearance columns (hair_color, eye_color, build, chest_size, skin_tone, species, etc.) are ever passed to the AI, which is why the AI ignores physical details during chat.
+
+Fix: fetch all appearance columns from the character record and stitch them into a high-priority block in the system prompt, e.g.:
+
+"Your physical appearance: {hairColor} {hairLength} hair, {eyeColor} eyes, {build} build, {skinTone} skin, {species}{hybridSpecies if applicable}, {chestSize}, {assSize}, wearing {outfitFit} {clothingMaterialFinish}, {accessory}, {distinguishingFeature}, {bodyMarkings}. You must consistently reflect these physical characteristics in your descriptions and never contradict them."
+
+Only include fields that are actually set (skip null/empty ones). Show before/after code.
+
+SECTION 4 — Appearance fields missing from in-chat image generation
+Scope: conversations.ts only (the generateCharacterSelfie call sites for trigger/auto/blurred images).
+
+Confirmed bug: seed and styleDescriptor are correctly used, but appearance fields (hair, eyes, build, etc.) are NOT included in trigger/auto/blurred image prompts — they currently only use generic scene text like "casual portrait" or "teaser preview, close portrait" with no appearance details appended.
+
+Fix: every in-chat image generation call (auto, selfie, blurred, trigger, and the user-driven Generate Image button) must append the character's full set appearance fields to the prompt, in the same fixed order and position already used in avatar generation (after the fix in Section 2), so all images stay visually consistent with the avatar. Show before/after code.
+
+SECTION 5 — Read-only: appearance data for the character created before Step 7 existed
+Scope: read-only, no changes.
+
+For the character created earlier through the original 6-step flow (before Step 7/multi-select were added), whose admin appearance section shows everything unmarked:
+1. Query the actual character record in both local DB and Supabase and show the values currently saved in all appearance columns for that specific character.
+2. Show the code in admin.tsx that reads/pre-fills the appearance section when admin opens this character's edit view, and confirm whether it's reading from the same columns or if there's a field-name/data-format mismatch (e.g. array vs string) between what was saved and what admin expects.
+
+Report findings only — do not change anything for Section 5.
+
+For Sections 1-4, show your work (what was found, what was wrong, exact code change) before claiming anything is fixed. Do not touch any files outside what's scoped in each section.

@@ -33,6 +33,56 @@ import { addVaultItem, unlockVaultItemByUrl } from "../lib/supabaseVault";
 const router: IRouter = Router();
 router.use(authMiddleware);
 
+// ── Appearance description builder ────────────────────────────────────────────
+// Builds a concise, ordered appearance string from local DB columns for use in
+// both the AI system prompt (Section 3) and all image generation prompts (Section 4).
+// Returns "" when the row is null/undefined (no local row for this character).
+function buildLocalAppearanceDesc(row: typeof charactersTable.$inferSelect | undefined | null): string {
+  if (!row) return "";
+  const parts: string[] = [];
+  const hairParts = [row.hairColor, row.hairLength].filter(Boolean);
+  if (hairParts.length) parts.push(`${hairParts.join(" ")} hair`);
+  if (row.eyeColor) parts.push(`${row.eyeColor} eyes`);
+  if (row.build) parts.push(`${row.build} build`);
+  if (row.height) parts.push(`${row.height} height`);
+  if (row.skinTone) parts.push(`${row.skinTone} skin`);
+  if (row.skinTextureRealism) parts.push(row.skinTextureRealism);
+  if (row.species) {
+    const speciesLabel = row.species === "Hybrid" && row.hybridSpecies ? row.hybridSpecies : row.species;
+    parts.push(speciesLabel);
+  }
+  if (row.earType) parts.push(`${row.earType} ears`);
+  if (row.chestSize) parts.push(`${row.chestSize} chest`);
+  if (row.assSize) parts.push(`${row.assSize} ass`);
+  if (row.thighHipSize) parts.push(`${row.thighHipSize} hips`);
+  if (row.hairstyle) parts.push(`${row.hairstyle} hairstyle`);
+  if (row.bangsStyle) parts.push(row.bangsStyle);
+  if (row.makeupStyle) parts.push(`${row.makeupStyle} makeup`);
+  if (row.facialExpressionDefault) parts.push(`${row.facialExpressionDefault} expression`);
+  if (row.eyeDetailEnhancer) parts.push(`${row.eyeDetailEnhancer} eyes`);
+  if (row.posture) parts.push(`${row.posture} posture`);
+  if (row.tailWings) parts.push(row.tailWings);
+  if (row.bodyMarkings) parts.push(row.bodyMarkings);
+  if (row.distinguishingFeature) parts.push(row.distinguishingFeature);
+  if (row.accessory) parts.push(row.accessory);
+  if (row.outfitFit) parts.push(`${row.outfitFit} outfit`);
+  if (row.outfitCleavageCut) parts.push(`${row.outfitCleavageCut} cut`);
+  if (row.clothingMaterialFinish) parts.push(`made of ${row.clothingMaterialFinish}`);
+  if (row.legwearSocksStyle) parts.push(row.legwearSocksStyle);
+  if (row.colorPalette) parts.push(row.colorPalette);
+  if (row.culturalStyle) parts.push(row.culturalStyle);
+  if (row.occupationLook) parts.push(`wearing ${row.occupationLook}`);
+  if (row.environmentSetting) parts.push(row.environmentSetting);
+  if (row.lightingStyle) parts.push(row.lightingStyle);
+  if (row.cameraShotType) parts.push(row.cameraShotType);
+  if (row.cameraAngle) parts.push(row.cameraAngle);
+  if (row.viewDirection) parts.push(row.viewDirection);
+  if (row.imageFocus) parts.push(row.imageFocus);
+  if (row.renderingEngine) parts.push(row.renderingEngine);
+  if (row.genderBaseMesh) parts.push(row.genderBaseMesh);
+  return parts.filter(Boolean).join(", ");
+}
+
 // ─── Push-notification delay (cached 5 min) ───────────────────────────────────
 let _notifyDelayCache: { ms: number; at: number } | null = null;
 async function getNotifyDelayMs(): Promise<number> {
@@ -305,6 +355,14 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
   const contentLevel = getContentLevel(intimacy, charNsfw);
   const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
 
+  // ── Fetch local DB row early — appearance columns + styleDescriptor in one query ──
+  const [_localCharRow] = await db.select().from(charactersTable)
+    .where(eq(charactersTable.characterId, params.data.characterId));
+  const localAppearanceDesc = buildLocalAppearanceDesc(_localCharRow);
+  const physicalAppearanceBlock = localAppearanceDesc
+    ? `\nPHYSICAL APPEARANCE — always reflect these traits consistently in descriptions, never contradict them:\n${localAppearanceDesc}.\n`
+    : "";
+
   // ── Generate AI reply ─────────────────────────────────────────────────────
   const affectionLevel = conv.affectionPoints >= 100 ? 4 : conv.affectionPoints >= 40 ? 3 : conv.affectionPoints >= 15 ? 2 : 1;
   const systemPrompt = `
@@ -316,7 +374,7 @@ Character background: ${character.systemPrompt}
 Teaser: ${character.teaserDescription}
 Genre: ${character.genre ?? 'Fantasy'}
 Sub-genres: ${character.subGenres?.join(', ')}
-
+${physicalAppearanceBlock}
 RESPONSE STYLE:
 - Write with vivid, immersive detail — describe every physical sensation, reaction, and emotion in full
 - Mix dialogue with *asterisk actions* naturally e.g. *her breath catches* *she grabs his wrist*
@@ -375,9 +433,8 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
     console.log(`[IMAGE SEED] ${character.name} — using saved seed: ${resolvedSeed}`);
   }
 
-  // Style: reuse saved or derive from genre+tags and persist
-  const [_localStyleRow] = await db.select({ styleDescriptor: charactersTable.styleDescriptor }).from(charactersTable).where(eq(charactersTable.characterId, params.data.characterId));
-  let resolvedStyle = _localStyleRow?.styleDescriptor ?? null;
+  // Style: use row already fetched above (_localCharRow) → fallback to genre+tags
+  let resolvedStyle = _localCharRow?.styleDescriptor ?? null;
   if (!resolvedStyle) {
     resolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? []);
     console.log(`[STYLE] ${character.name} — derived and saved: ${resolvedStyle}`);
@@ -398,7 +455,7 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
   if (triggeredWord) {
     const forceBlurred = overDailyLimit && !isAdminUser;
     try {
-      const triggerScene = `${triggeredWord} themed intimate scene, ${contentWords}`;
+      const triggerScene = [`${triggeredWord} themed intimate scene`, contentWords, localAppearanceDesc].filter(Boolean).join(", ");
       autoImageUrl = await generateCharacterSelfie({
         characterName: character.name,
         genre: character.genre ?? "Fantasy",
@@ -435,7 +492,7 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
     const forceBlurred = overDailyLimit && !isAdminUser;
     try {
       const loopAvatarUrl = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
-      const loopScene = `casual portrait, ${contentWords}`;
+      const loopScene = ["casual portrait", contentWords, localAppearanceDesc].filter(Boolean).join(", ");
       autoImageUrl = await generateCharacterSelfie({
         characterName: character.name,
         genre: character.genre ?? "Fantasy",
@@ -469,7 +526,7 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
   if ((newMsgCount % 5) === 0) {
     try {
       const blurredAvatarUrl = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
-      const blurredScene = `teaser preview, close portrait, ${contentWords}`;
+      const blurredScene = ["teaser preview, close portrait", contentWords, localAppearanceDesc].filter(Boolean).join(", ");
       blurredImageUrl = await generateCharacterSelfie({
         characterName: character.name,
         genre: character.genre ?? "Fantasy",
@@ -589,8 +646,9 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   } else {
     console.log(`[IMAGE SEED] ${character.name} — using saved seed: ${selfieResolvedSeed}`);
   }
-  const [_selfieStyleRow] = await db.select({ styleDescriptor: charactersTable.styleDescriptor }).from(charactersTable).where(eq(charactersTable.characterId, params.data.characterId));
-  let selfieResolvedStyle = _selfieStyleRow?.styleDescriptor ?? null;
+  const [_selfieCharRow] = await db.select().from(charactersTable)
+    .where(eq(charactersTable.characterId, params.data.characterId));
+  let selfieResolvedStyle = _selfieCharRow?.styleDescriptor ?? null;
   if (!selfieResolvedStyle) {
     selfieResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? []);
     console.log(`[STYLE] ${character.name} — derived and saved: ${selfieResolvedStyle}`);
@@ -598,6 +656,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   } else {
     console.log(`[STYLE] ${character.name} — using style: ${selfieResolvedStyle}`);
   }
+  const selfieLocalAppearanceDesc = buildLocalAppearanceDesc(_selfieCharRow);
 
   let imageUrl: string;
   let matched = false;
@@ -609,7 +668,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
       systemPrompt: character.systemPrompt ?? "",
       teaserDescription: character.teaserDescription,
       imageSeed: selfieResolvedSeed,
-      sceneDescription: parsed.data.description,
+      sceneDescription: [parsed.data.description, selfieLocalAppearanceDesc].filter(Boolean).join(", "),
       avatarUrl: character.avatarUrl ?? null,
       nsfwEnabled: charNsfw,
       contentLevelWords: contentWords,
@@ -624,6 +683,9 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   }
 
   const selfieAffectionLevel = intimacy >= 3 ? 4 : intimacy >= 2 ? 3 : intimacy >= 1 ? 2 : 1;
+  const selfiePhysicalBlock = selfieLocalAppearanceDesc
+    ? `\nPHYSICAL APPEARANCE — always reflect these traits consistently in descriptions, never contradict them:\n${selfieLocalAppearanceDesc}.\n`
+    : "";
   const systemPrompt = `
 You are ${character.name}, a character in an AI companion app.
 
@@ -633,7 +695,7 @@ Character background: ${character.systemPrompt}
 Teaser: ${character.teaserDescription}
 Genre: ${character.genre ?? 'Fantasy'}
 Sub-genres: ${character.subGenres?.join(', ')}
-
+${selfiePhysicalBlock}
 RESPONSE STYLE:
 - Write with vivid, immersive detail — describe every physical sensation, reaction, and emotion in full
 - Mix dialogue with *asterisk actions* naturally e.g. *her breath catches* *she grabs his wrist*
@@ -909,8 +971,9 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     } else {
       console.log(`[IMAGE SEED] ${character.name} — using saved seed: ${giftResolvedSeed}`);
     }
-    const [_giftStyleRow] = await db.select({ styleDescriptor: charactersTable.styleDescriptor }).from(charactersTable).where(eq(charactersTable.characterId, params.data.characterId));
-    let giftResolvedStyle = _giftStyleRow?.styleDescriptor ?? null;
+    const [_giftCharRow] = await db.select().from(charactersTable)
+      .where(eq(charactersTable.characterId, params.data.characterId));
+    let giftResolvedStyle = _giftCharRow?.styleDescriptor ?? null;
     if (!giftResolvedStyle) {
       giftResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? []);
       console.log(`[STYLE] ${character.name} — derived and saved: ${giftResolvedStyle}`);
@@ -918,6 +981,7 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     } else {
       console.log(`[STYLE] ${character.name} — using style: ${giftResolvedStyle}`);
     }
+    const giftLocalAppearanceDesc = buildLocalAppearanceDesc(_giftCharRow);
     try {
       scenarioImageUrl = await generateCharacterSelfie({
         characterName: character.name,
@@ -925,7 +989,7 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
         systemPrompt: character.systemPrompt ?? "",
         teaserDescription: character.teaserDescription,
         imageSeed: giftResolvedSeed,
-        sceneDescription: "intimate gift scene, secret revealed, close and personal",
+        sceneDescription: ["intimate gift scene, secret revealed, close and personal", giftLocalAppearanceDesc].filter(Boolean).join(", "),
         nsfwEnabled: charNsfw,
         contentLevelWords: contentWords,
         styleDescriptor: giftResolvedStyle,

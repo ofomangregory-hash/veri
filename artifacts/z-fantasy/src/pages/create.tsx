@@ -911,8 +911,8 @@ export function Create() {
           </div>
         </div>
 
-        {/* ── Sticky bottom action bar — z-50 ensures it sits ABOVE the app nav bar ── */}
-        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-background/95 backdrop-blur border-t border-border flex gap-3"
+        {/* ── Sticky bottom action bar — z-[60] sits ABOVE the app nav bar (z-50) ── */}
+        <div className="fixed bottom-0 left-0 right-0 z-[60] p-4 bg-background/95 backdrop-blur border-t border-border flex gap-3"
           style={{ paddingBottom: "max(16px, calc(16px + env(safe-area-inset-bottom)))" }}>
           <button
             onClick={handleSaveEdits}

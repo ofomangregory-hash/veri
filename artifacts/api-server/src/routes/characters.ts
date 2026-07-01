@@ -276,7 +276,11 @@ router.post("/characters", async (req, res): Promise<void> => {
       if (ap.thigh_hip_size) apParts.push(`${ap.thigh_hip_size} hips`);
       if (ap.skin_tone) apParts.push(`${ap.skin_tone} skin`);
       if (ap.skin_texture_realism) apParts.push(ap.skin_texture_realism);
-      if (ap.species) apParts.push(ap.species === "Hybrid" && hybridSpecies ? `hybrid (${hybridSpecies})` : ap.species);
+      // Hybrid species: emit the actual species name (e.g. "Elf-Demon") not just "Hybrid"
+      if (ap.species) {
+        const resolvedHybridSpecies = hybridSpecies || ap.hybrid_species;
+        apParts.push(ap.species === "Hybrid" && resolvedHybridSpecies ? resolvedHybridSpecies : ap.species);
+      }
       if (ap.ear_type) apParts.push(`${ap.ear_type} ears`);
       if (ap.hairstyle) apParts.push(`${ap.hairstyle} hairstyle`);
       if (ap.bangs_style) apParts.push(ap.bangs_style);
@@ -287,6 +291,8 @@ router.post("/characters", async (req, res): Promise<void> => {
       const details = [ap.distinguishing_feature, ap.body_markings, ap.accessory, ap.tail_wings].filter(Boolean);
       if (details.length) apParts.push(...details);
       if (ap.color_palette) apParts.push(ap.color_palette);
+      // cultural_style was previously missing — added here
+      if (ap.cultural_style) apParts.push(ap.cultural_style);
       if (ap.environment_setting) apParts.push(ap.environment_setting);
       if (ap.camera_angle) apParts.push(ap.camera_angle);
       if (ap.camera_shot_type) apParts.push(ap.camera_shot_type);
@@ -297,7 +303,9 @@ router.post("/characters", async (req, res): Promise<void> => {
       if (ap.gender_base_mesh) apParts.push(ap.gender_base_mesh);
 
       const appearanceDesc = apParts.join(", ");
-      const sceneDescription = appearanceDesc || "close-up portrait, looking at camera, soft studio lighting, high detail";
+      // Anatomy lives in extendedStyleDescriptor — sceneDescription is a neutral portrait cue only.
+      // Do NOT set sceneDescription = appearanceDesc here; that duplicates anatomy in the Pollinations prompt.
+      const sceneDescription = "character portrait, looking at viewer";
       const extendedStyleDescriptor = appearanceDesc ? `${styleDescriptor}, ${appearanceDesc}` : styleDescriptor;
 
       console.log('[CHARACTER AVATAR] Starting generation for:', characterName, 'style:', extendedStyleDescriptor);
