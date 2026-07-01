@@ -18,9 +18,15 @@ import proxyRouter from "./proxy";
 
 const router: IRouter = Router();
 
+// ── Public routes — registered BEFORE any auth middleware ─────────────────────
+// The proxy-image endpoint is called by <img> tags which cannot send
+// Authorization headers, so it must be handled before any auth layer runs.
+router.use(proxyRouter);
 router.use(healthRouter);
 router.use(bannersRouter);
 router.use(leaderboardRouter);
+
+// ── Authenticated routes ───────────────────────────────────────────────────────
 router.use(authRouter);
 router.use(charactersRouter);
 router.use(conversationsRouter);
@@ -33,6 +39,5 @@ router.use(customerServiceRouter);
 router.use(questsRouter);
 router.use(referralsRouter);
 router.use(eventsRouter);
-router.use(proxyRouter);
 
 export default router;

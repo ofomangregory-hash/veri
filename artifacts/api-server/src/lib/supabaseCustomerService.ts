@@ -177,23 +177,20 @@ export async function markThreadRead(threadId: string): Promise<void> {
 }
 
 export async function getAdminUnreadCount(): Promise<number> {
-  if (!supabase) return 0;
   try {
     const { count, error } = await supabase
-      .from("customer_support_messages")
-      .select("*", { count: "exact", head: true })
-      .eq("read", false)
-      .eq("direction", "inbound");
+      .from('customer_support_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('read', false)
+      .eq('direction', 'inbound');
 
     if (error) {
-      console.error("getAdminUnreadCount actual error:", error.message, error.code);
-      logger.warn({ error }, "getAdminUnreadCount: failed");
+      console.error('getAdminUnreadCount error:', error.message);
       return 0;
     }
     return count ?? 0;
-  } catch (err) {
-    console.error("getAdminUnreadCount caught:", err);
-    logger.warn({ err }, "getAdminUnreadCount: failed");
+  } catch (err: any) {
+    console.error('getAdminUnreadCount catch:', err?.message);
     return 0;
   }
 }
