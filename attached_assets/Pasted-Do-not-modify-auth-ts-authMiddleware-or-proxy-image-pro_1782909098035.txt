@@ -1,0 +1,38 @@
+Do not modify auth.ts, authMiddleware, or proxy/image-proxy route logic anywhere in this task.
+
+SECTION 1 — Remove 16 appearance fields from UI/prompts
+Scope: create.tsx, admin.tsx, and anywhere appearance fields are read into prompt-building logic.
+
+Remove the following fields entirely from all UI (Step 2 in create.tsx, Quick Create + Character Drawer in admin.tsx) and from all prompt-building/API payload logic:
+skin_tone, voice_tone, facial_expression_default, occupation_look, camera_shot_type, view_direction, camera_angle, eye_detail_enhancer, clothing_material_finish, lighting_style, rendering_engine, image_focus, skin_texture_realism, body_markings, color_palette, cultural_style
+
+Do NOT remove the underlying DB columns — only remove from UI, prompt-building, and payloads going forward, so existing character data isn't lost.
+
+SECTION 2 — Fixed shot-type rules replacing camera_shot_type
+Scope: character creation avatar route (characters.ts) and conversations.ts (selfie/blurred/auto/trigger routes).
+
+- Avatar generation: default to "full body portrait" UNLESS the user's Regenerate Avatar description text explicitly specifies otherwise (e.g. mentions "close-up", "bust shot", "half body") — in that case respect their text instead.
+- Blurred, Auto-loop, and Trigger images: alternate between "full body shot" and "half body/bust shot" on each successive generation for the same character (track an alternating flag or use even/odd generation count per character).
+- Selfie and user-driven Generate Image: leave as-is, no forced shot type.
+
+Append the resolved shot type to the prompt in the same fixed position the camera fields previously occupied.
+
+SECTION 3 — Remove character-creation cap for all paid tiers
+Scope: wherever paid-tier character-creation limits are enforced.
+
+Find wherever a paid user's character-creation count is checked/capped (e.g. "Gold tier can create up to N characters"). Remove this cap entirely for ALL paid tiers — paid users should be able to create unlimited characters regardless of tier. Do not touch the free-tier limit if one exists — confirm it's untouched.
+
+SECTION 4 — Admin appearance display bug (read-only investigation + fix)
+Scope: admin appearance view/Character Drawer only.
+
+Read-only first: for every character in the system, check:
+1. Does a local Drizzle DB row exist with appearance columns populated?
+2. For characters with no local DB row, does Supabase's style_descriptor contain a parseable appearance blob?
+3. Categorize each character: (a) local DB has full data — confirm display actually works, don't assume, (b) local DB row missing entirely, (c) local DB row exists but some fields are null/empty.
+
+Then fix the admin appearance view so existing data displays correctly in all cases:
+- If local DB row is missing but Supabase has a style_descriptor blob, backfill the local DB row from that blob at read time (preferred), so future views are correct without requiring a manual admin save first.
+
+Show your work for all 4 sections — what was found, what was wrong, and the exact code change — before claiming anything is fixed.
+
+Do not touch any other files outside what's scoped in each section.

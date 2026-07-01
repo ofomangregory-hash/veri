@@ -28,77 +28,46 @@ interface AppearanceFieldDef {
 const MULTI_SELECT_APPEARANCE_KEYS = new Set([
   "distinguishing_feature",
   "accessory",
-  "body_markings",
-  "color_palette",
-  "cultural_style",
   "negative_prompts_filter",
 ]);
 
 const APPEARANCE_FIELDS: AppearanceFieldDef[] = [
-  // Required (11)
+  // Required (7)
   { key: "hair_color",            label: "Hair Color",               required: true,  options: ["Black", "Brown", "Blonde", "Red", "White", "Pink", "Blue", "Purple"] },
   { key: "hair_length",           label: "Hair Length",              required: true,  options: ["Short", "Medium", "Long"] },
   { key: "eye_color",             label: "Eye Color",                required: true,  options: ["Brown", "Blue", "Green", "Hazel", "Gray", "Violet"] },
-  { key: "camera_shot_type",      label: "Camera Shot Type",         required: true,  options: ["Avatar Portrait (Close-up)", "Bust Shot", "Upper Body", "Full Body Portrait"] },
-  { key: "view_direction",        label: "View Direction",           required: true,  options: ["Looking at viewer", "Looking away", "Profile side-view", "Looking over shoulder"] },
   { key: "gender_base_mesh",      label: "Gender / Base Mesh",       required: true,  options: ["Female", "Male", "Non-binary", "Androgynous"] },
   { key: "environment_setting",   label: "Environment Setting",      required: true,  options: ["Studio Room", "Blurred Indoor Bokeh", "Outdoor Nature", "Cyberpunk Cityscape", "Abstract Gradient"] },
-  { key: "rendering_engine",      label: "Rendering Engine",         required: true,  options: ["Clean Digital Line Art", "Soft Cell Shading", "Photorealistic Vector", "Hyper-Detailed 2D"] },
-  { key: "image_focus",           label: "Image Focus",              required: true,  options: ["Face Focus", "Upper Body Focus", "Outfit Focus", "Atmospheric/Background Focus"] },
   {
     key: "negative_prompts_filter", label: "Negative Prompts Filter", required: true,
     multiSelect: true,
     options: ["Low Quality Filter", "Deformed Hands Filter", "Asymmetry Filter", "Text/Watermark Scrub"],
   },
   { key: "species",               label: "Species / Race",           required: true,  options: ["Human", "Elf", "Demon", "Angel", "Vampire", "Android", "Hybrid"] },
-  // Optional (29)
+  // Optional
   { key: "height",                label: "Height",                   required: false, options: ["Short", "Average", "Tall"] },
   { key: "build",                 label: "Build",                    required: false, options: ["Slim", "Athletic", "Average", "Curvy"] },
-  { key: "skin_tone",             label: "Skin Tone",                required: false, options: ["Fair", "Light", "Medium", "Tan", "Dark"] },
   { key: "ear_type",              label: "Ear Type",                 required: false, options: ["Human", "Pointed", "Animal"] },
   {
     key: "distinguishing_feature", label: "Distinguishing Feature",  required: false,
     multiSelect: true,
     options: ["Freckles", "Scar", "Tattoo", "Birthmark", "Heterochromia", "None"],
   },
-  { key: "voice_tone",            label: "Voice Tone",               required: false, options: ["Soft", "Husky", "Cheerful", "Stoic", "Playful"] },
   { key: "hairstyle",             label: "Hairstyle",                required: false, options: ["Straight", "Wavy", "Curly", "Braided", "Ponytail", "Twin-tails"] },
-  { key: "facial_expression_default", label: "Default Expression",   required: false, options: ["Smiling", "Neutral", "Serious", "Playful", "Shy"] },
   {
     key: "accessory",             label: "Accessory",                required: false,
     multiSelect: true,
     options: ["Glasses", "Earrings", "Necklace", "Headband", "None"],
   },
   { key: "tail_wings",            label: "Tail / Wings",             required: false, options: ["Tail", "Wings", "Both", "None"] },
-  {
-    key: "body_markings",         label: "Body Markings",            required: false,
-    multiSelect: true,
-    options: ["Freckles", "Tattoos", "Scars", "Birthmarks", "None"],
-  },
   { key: "posture",               label: "Posture",                  required: false, options: ["Confident", "Reserved", "Energetic", "Calm"] },
-  {
-    key: "color_palette",         label: "Color Palette",            required: false,
-    multiSelect: true,
-    options: ["Warm tones", "Cool tones", "Monochrome", "Pastel", "Neon"],
-  },
-  { key: "occupation_look",       label: "Occupation Look",          required: false, options: ["Casual", "Formal", "Uniformed", "Armored", "Streetwear"] },
-  {
-    key: "cultural_style",        label: "Cultural Style",           required: false,
-    multiSelect: true,
-    options: ["Western", "Eastern", "Futuristic", "Medieval", "Tribal"],
-  },
   { key: "ass_size",              label: "Ass Size",                 required: false, options: ["Subtle", "Balanced", "Well-rounded", "Voluptuous", "Exaggerated"] },
   { key: "chest_size",            label: "Chest Size",               required: false, options: ["Small", "Medium", "Large", "Ample", "Voluptuous", "Exaggerated"] },
-  { key: "camera_angle",          label: "Camera Angle",             required: false, options: ["Eye Level", "Low Angle", "High Angle", "Cinematic Dutch Angle"] },
-  { key: "eye_detail_enhancer",   label: "Eye Detail Enhancer",      required: false, options: ["Sparkling", "Glowing", "Sharp", "Droopy", "Pupilless"] },
-  { key: "clothing_material_finish", label: "Clothing Material / Finish", required: false, options: ["Matte Fabric", "Leather", "Silk/Satin", "Glossy Latex", "Denim", "Lace", "Metallic Plate"] },
   { key: "legwear_socks_style",   label: "Legwear / Socks Style",    required: false, options: ["Thigh-high stockings", "Fishnets", "Crew socks", "Barefoot", "Tights", "None"] },
-  { key: "lighting_style",        label: "Lighting Style",           required: false, options: ["Studio Lighting", "Cinematic Soft Glow", "Dramatic Shadows", "Neon Rim Lighting", "Golden Hour"] },
   { key: "bangs_style",           label: "Bangs Style",              required: false, options: ["Blunt Bangs", "Side-swept Bangs", "Curtain Bangs", "See-through Bangs", "Forehead Exposed"] },
   { key: "makeup_style",          label: "Makeup Style",             required: false, options: ["Natural", "Gothic", "Glamour", "Cosplay/Alt", "None"] },
   { key: "outfit_fit",            label: "Outfit Fit",               required: false, options: ["Skin-tight", "Form-fitting", "Regular Fit", "Loose", "Oversized"] },
   { key: "thigh_hip_size",        label: "Thigh / Hip Size",         required: false, options: ["Slim", "Proportional", "Wide", "Thick", "Hourglass"] },
-  { key: "skin_texture_realism",  label: "Skin Texture Realism",     required: false, options: ["Smooth 2D", "Textured Matt", "Pore Detail (Realistic Mode)", "Flawless Satin"] },
   { key: "outfit_cleavage_cut",   label: "Outfit Cleavage / Cut",    required: false, options: ["High Neck", "V-Neck", "Plunging", "Off-shoulder", "Backless", "Covered"] },
 ];
 

@@ -77,8 +77,6 @@ function buildLocalAppearanceDesc(row: typeof charactersTable.$inferSelect | und
   if (row.eyeColor) parts.push(`${row.eyeColor} eyes`);
   if (row.build) parts.push(`${row.build} build`);
   if (row.height) parts.push(`${row.height} height`);
-  if (row.skinTone) parts.push(`${row.skinTone} skin`);
-  if (row.skinTextureRealism) parts.push(row.skinTextureRealism);
   if (row.species) {
     const speciesLabel = row.species === "Hybrid" && row.hybridSpecies ? row.hybridSpecies : row.species;
     parts.push(speciesLabel);
@@ -90,29 +88,25 @@ function buildLocalAppearanceDesc(row: typeof charactersTable.$inferSelect | und
   if (row.hairstyle) parts.push(`${row.hairstyle} hairstyle`);
   if (row.bangsStyle) parts.push(row.bangsStyle);
   if (row.makeupStyle) parts.push(`${row.makeupStyle} makeup`);
-  if (row.facialExpressionDefault) parts.push(`${row.facialExpressionDefault} expression`);
-  if (row.eyeDetailEnhancer) parts.push(`${row.eyeDetailEnhancer} eyes`);
   if (row.posture) parts.push(`${row.posture} posture`);
   if (row.tailWings) parts.push(row.tailWings);
-  if (row.bodyMarkings) parts.push(row.bodyMarkings);
   if (row.distinguishingFeature) parts.push(row.distinguishingFeature);
   if (row.accessory) parts.push(row.accessory);
   if (row.outfitFit) parts.push(`${row.outfitFit} outfit`);
   if (row.outfitCleavageCut) parts.push(`${row.outfitCleavageCut} cut`);
-  if (row.clothingMaterialFinish) parts.push(`made of ${row.clothingMaterialFinish}`);
   if (row.legwearSocksStyle) parts.push(row.legwearSocksStyle);
-  if (row.colorPalette) parts.push(row.colorPalette);
-  if (row.culturalStyle) parts.push(row.culturalStyle);
-  if (row.occupationLook) parts.push(`wearing ${row.occupationLook}`);
   if (row.environmentSetting) parts.push(row.environmentSetting);
-  if (row.lightingStyle) parts.push(row.lightingStyle);
-  if (row.cameraShotType) parts.push(row.cameraShotType);
-  if (row.cameraAngle) parts.push(row.cameraAngle);
-  if (row.viewDirection) parts.push(row.viewDirection);
-  if (row.imageFocus) parts.push(row.imageFocus);
-  if (row.renderingEngine) parts.push(row.renderingEngine);
   if (row.genderBaseMesh) parts.push(row.genderBaseMesh);
   return parts.filter(Boolean).join(", ");
+}
+
+// ── Per-character alternating shot-type counter (Section 2 — blurred/auto/trigger) ──
+// Odd count → "full body shot", even count → "half body, bust shot"
+const _charBgImageGenCount = new Map<string, number>();
+function getNextBgShotType(characterId: string): string {
+  const n = (_charBgImageGenCount.get(characterId) ?? 0) + 1;
+  _charBgImageGenCount.set(characterId, n);
+  return n % 2 === 1 ? "full body shot" : "half body, bust shot";
 }
 
 // ─── Push-notification delay (cached 5 min) ───────────────────────────────────
@@ -487,7 +481,8 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
   if (triggeredWord) {
     const forceBlurred = overDailyLimit && !isAdminUser;
     try {
-      const triggerScene = [`${triggeredWord} themed intimate scene`, contentWords, localAppearanceDesc].filter(Boolean).join(", ");
+      const triggerShotType = getNextBgShotType(params.data.characterId);
+      const triggerScene = [`${triggeredWord} themed intimate scene`, triggerShotType, contentWords, localAppearanceDesc].filter(Boolean).join(", ");
       autoImageUrl = await generateCharacterSelfie({
         characterName: character.name,
         genre: character.genre ?? "Fantasy",
@@ -524,7 +519,8 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
     const forceBlurred = overDailyLimit && !isAdminUser;
     try {
       const loopAvatarUrl = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
-      const loopScene = ["casual portrait", contentWords, localAppearanceDesc].filter(Boolean).join(", ");
+      const loopShotType = getNextBgShotType(params.data.characterId);
+      const loopScene = ["casual portrait", loopShotType, contentWords, localAppearanceDesc].filter(Boolean).join(", ");
       autoImageUrl = await generateCharacterSelfie({
         characterName: character.name,
         genre: character.genre ?? "Fantasy",
@@ -558,7 +554,8 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
   if ((newMsgCount % 5) === 0) {
     try {
       const blurredAvatarUrl = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
-      const blurredScene = ["teaser preview, close portrait", contentWords, localAppearanceDesc].filter(Boolean).join(", ");
+      const blurredShotType = getNextBgShotType(params.data.characterId);
+      const blurredScene = ["teaser preview", blurredShotType, contentWords, localAppearanceDesc].filter(Boolean).join(", ");
       blurredImageUrl = await generateCharacterSelfie({
         characterName: character.name,
         genre: character.genre ?? "Fantasy",

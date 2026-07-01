@@ -432,11 +432,45 @@ router.patch("/admin/characters/:characterId/overlay", async (req, res): Promise
   res.json({ key, value });
 });
 
-// GET /admin/characters/:characterId/appearance — read appearance columns from local DB
+// GET /admin/characters/:characterId/appearance — read appearance columns from local DB.
+// If no local row exists (Supabase-only character), create a stub row from Supabase data so
+// future admin saves work correctly, then return empty appearance (all nulls) with 200.
 router.get("/admin/characters/:characterId/appearance", adminOnly, async (req, res): Promise<void> => {
   const { characterId } = req.params;
-  const [row] = await db.select().from(charactersTable).where(eq(charactersTable.characterId, characterId));
-  if (!row) { res.status(404).json({ error: "Character not found" }); return; }
+  let row: typeof charactersTable.$inferSelect | undefined;
+  try {
+    [row] = await db.select().from(charactersTable).where(eq(charactersTable.characterId, characterId));
+  } catch {
+    // Table may not exist yet on first boot — treat as missing row
+    row = undefined;
+  }
+
+  if (!row) {
+    // No local DB row — fetch minimal data from Supabase and create a stub so future saves work
+    try {
+      const supabaseChar = await getSupabaseCharacterById(characterId);
+      if (supabaseChar) {
+        await db.insert(charactersTable).values({
+          characterId,
+          name: supabaseChar.name,
+          creatorId: supabaseChar.creatorId ?? "",
+          genre: supabaseChar.genre ?? "Fantasy",
+          imageSeed: supabaseChar.imageSeed ?? null,
+          styleDescriptor: null,
+        }).onConflictDoNothing();
+      }
+    } catch (err) {
+      logger.warn({ err, characterId }, "appearance GET: could not backfill local stub from Supabase");
+    }
+    // Return empty appearance (all nulls) — admin can now fill in and save
+    const emptyAppearance: Record<string, null> = {};
+    for (const key of Object.keys(APPEARANCE_KEY_TO_DRIZZLE)) {
+      emptyAppearance[key] = null;
+    }
+    res.json({ appearance: emptyAppearance, hybridSpecies: null });
+    return;
+  }
+
   const appearance: Record<string, string | null> = {};
   for (const [key, col] of Object.entries(APPEARANCE_KEY_TO_DRIZZLE)) {
     appearance[key] = (row[col as keyof typeof row] as string | null | undefined) ?? null;

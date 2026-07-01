@@ -190,10 +190,10 @@ router.post("/characters", async (req, res): Promise<void> => {
     }
   }
 
-  if (!req.isAdmin) {
+  if (!req.isAdmin && !isPaid) {
     const { total } = await listSupabaseCharacters({ creatorId: req.telegramUserId, limit: 1, offset: 0 });
     if (total >= MAX_CHARACTER_SLOTS) {
-      res.status(402).json({ error: `Character slot limit reached. Maximum ${MAX_CHARACTER_SLOTS} characters allowed.` });
+      res.status(402).json({ error: `Character slot limit reached. Maximum ${MAX_CHARACTER_SLOTS} characters allowed. Upgrade to Premium for unlimited characters!` });
       return;
     }
   }
@@ -264,18 +264,14 @@ router.post("/characters", async (req, res): Promise<void> => {
       const apParts: string[] = [];
       if (ap.hair_color || ap.hair_length) apParts.push(`${[ap.hair_color, ap.hair_length].filter(Boolean).join(" ")} hair`);
       if (ap.eye_color) apParts.push(`${ap.eye_color} eyes`);
-      if (ap.occupation_look) apParts.push(`wearing ${ap.occupation_look}`);
       if (ap.outfit_fit) apParts.push(`${ap.outfit_fit} outfit`);
       if (ap.outfit_cleavage_cut) apParts.push(`${ap.outfit_cleavage_cut} cut`);
-      if (ap.clothing_material_finish) apParts.push(`made of ${ap.clothing_material_finish}`);
       if (ap.legwear_socks_style) apParts.push(ap.legwear_socks_style);
       if (ap.build) apParts.push(`${ap.build} build`);
       if (ap.height) apParts.push(`${ap.height} height`);
       if (ap.chest_size) apParts.push(`${ap.chest_size} chest`);
       if (ap.ass_size) apParts.push(`${ap.ass_size} ass`);
       if (ap.thigh_hip_size) apParts.push(`${ap.thigh_hip_size} hips`);
-      if (ap.skin_tone) apParts.push(`${ap.skin_tone} skin`);
-      if (ap.skin_texture_realism) apParts.push(ap.skin_texture_realism);
       // Hybrid species: emit the actual species name (e.g. "Elf-Demon") not just "Hybrid"
       if (ap.species) {
         const resolvedHybridSpecies = hybridSpecies || ap.hybrid_species;
@@ -285,22 +281,13 @@ router.post("/characters", async (req, res): Promise<void> => {
       if (ap.hairstyle) apParts.push(`${ap.hairstyle} hairstyle`);
       if (ap.bangs_style) apParts.push(ap.bangs_style);
       if (ap.makeup_style) apParts.push(`${ap.makeup_style} makeup`);
-      if (ap.facial_expression_default) apParts.push(`${ap.facial_expression_default} expression`);
-      if (ap.eye_detail_enhancer) apParts.push(`${ap.eye_detail_enhancer} eyes`);
       if (ap.posture) apParts.push(`${ap.posture} posture`);
-      const details = [ap.distinguishing_feature, ap.body_markings, ap.accessory, ap.tail_wings].filter(Boolean);
+      const details = [ap.distinguishing_feature, ap.accessory, ap.tail_wings].filter(Boolean);
       if (details.length) apParts.push(...details);
-      if (ap.color_palette) apParts.push(ap.color_palette);
-      // cultural_style was previously missing — added here
-      if (ap.cultural_style) apParts.push(ap.cultural_style);
       if (ap.environment_setting) apParts.push(ap.environment_setting);
-      if (ap.camera_angle) apParts.push(ap.camera_angle);
-      if (ap.camera_shot_type) apParts.push(ap.camera_shot_type);
-      if (ap.view_direction) apParts.push(ap.view_direction);
-      if (ap.image_focus) apParts.push(ap.image_focus);
-      if (ap.lighting_style) apParts.push(ap.lighting_style);
-      if (ap.rendering_engine) apParts.push(ap.rendering_engine);
       if (ap.gender_base_mesh) apParts.push(ap.gender_base_mesh);
+      // Section 2: fixed shot type — "full body portrait" by default for avatar generation
+      apParts.push("full body portrait");
 
       const appearanceDesc = apParts.join(", ");
       // Anatomy lives in extendedStyleDescriptor — sceneDescription is a neutral portrait cue only.
@@ -512,6 +499,13 @@ router.post("/characters/:characterId/regenerate-avatar", async (req, res): Prom
     `[AVATAR REGENERATE] ${character.name} — attempt #${attemptNum}, cost: ${costLabel}, seed kept: ${existingImageSeed}`,
   );
 
+  // ── Section 2: resolve shot type — respect user-specified type in changeDescription, else default ──
+  const EXPLICIT_SHOT_KEYWORDS = ["close-up", "closeup", "bust shot", "bust-shot", "half body", "half-body", "upper body", "upper-body", "full body", "full-body"];
+  const userSpecifiedShot = changeDescription && EXPLICIT_SHOT_KEYWORDS.some(kw => changeDescription.toLowerCase().includes(kw));
+  const avatarShotType = userSpecifiedShot ? "" : "full body portrait";
+  const regenSceneBase = enhancedDescriptor || "looking at camera, soft studio lighting, high detail";
+  const regenSceneDescription = [regenSceneBase, avatarShotType].filter(Boolean).join(", ");
+
   // ── Generate with the SAME locked seed ─────────────────────────────────────────
   let newAvatarUrl: string;
   try {
@@ -521,7 +515,7 @@ router.post("/characters/:characterId/regenerate-avatar", async (req, res): Prom
       systemPrompt: "",
       teaserDescription: null,
       imageSeed: existingImageSeed,
-      sceneDescription: enhancedDescriptor || "close-up portrait, looking at camera, soft studio lighting, high detail",
+      sceneDescription: regenSceneDescription,
       nsfwEnabled: false,
       subGenres: character.subGenres ?? [],
       styleDescriptor: enhancedDescriptor || undefined,
