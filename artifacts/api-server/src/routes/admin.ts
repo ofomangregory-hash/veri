@@ -697,7 +697,11 @@ router.post("/admin/characters/create", async (req, res): Promise<void> => {
   const subGenresArray: string[] = Array.isArray((req.body as Record<string, unknown>).subGenres)
     ? ((req.body as Record<string, unknown>).subGenres as string[]).slice(0, 2)
     : [];
-  const styleDescriptor = deriveStyleDescriptor(safeGenre, subGenresArray);
+  // artStyle may be sent from admin form; fall back to genre detection
+  const adminArtStyle = typeof (req.body as Record<string, unknown>).artStyle === "string"
+    ? ((req.body as Record<string, unknown>).artStyle as string)
+    : (safeGenre === "Anime" ? "Anime" : undefined);
+  const styleDescriptor = deriveStyleDescriptor(safeGenre, subGenresArray, adminArtStyle);
   let finalAvatarUrl = avatarUrl ?? null;
   if (!finalAvatarUrl) {
     try {

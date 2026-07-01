@@ -149,6 +149,74 @@ router.get("/characters/:characterId/avatars", async (req, res): Promise<void> =
   res.json(avatars.map(a => ({ id: a.id, avatarUrl: a.avatarUrl, isPrimary: a.isPrimary })));
 });
 
+// ── Draft Avatar — generate a preview WITHOUT creating a character record ──────────
+// Called from Step 7 (Signal Tags) of the create wizard. No Neon Card deduction.
+// Returns avatarUrl + imageSeed so Step 8 (Preview & Confirm) can display and re-use the seed.
+router.post("/characters/draft-avatar", async (req, res): Promise<void> => {
+  const body = req.body as Record<string, unknown>;
+  const name           = String(body.name ?? "Character").trim() || "Character";
+  const genre          = String(body.genre ?? "Modern");
+  const artStyle       = typeof body.artStyle === "string" ? body.artStyle : undefined;
+  const subGenres: string[] = Array.isArray(body.subGenres) ? (body.subGenres as string[]).slice(0, 2) : [];
+  const appearance     = ((body.appearance ?? {}) as Record<string, string>);
+  const hybridSpecies  = typeof body.hybridSpecies === "string" ? body.hybridSpecies : "";
+  const descriptionNotes = typeof body.descriptionNotes === "string" ? (body.descriptionNotes as string).trim() : "";
+  // Re-use seed if caller already has one (for "regenerate draft" from Step 8)
+  const providedSeed   = typeof body.imageSeed === "string" ? body.imageSeed : null;
+  const imageSeed      = providedSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
+
+  const styleDescriptor = deriveStyleDescriptor(genre, subGenres, artStyle);
+  const ap = appearance;
+
+  // Build appearance parts (identical logic to POST /characters background job)
+  const apParts: string[] = [];
+  if (ap.hair_color || ap.hair_length) apParts.push(`${[ap.hair_color, ap.hair_length].filter(Boolean).join(" ")} hair`);
+  if (ap.eye_color) apParts.push(`${ap.eye_color} eyes`);
+  if (ap.outfit_fit) apParts.push(`${ap.outfit_fit} outfit`);
+  if (ap.outfit_cleavage_cut) apParts.push(`${ap.outfit_cleavage_cut} cut`);
+  if (ap.legwear_socks_style) apParts.push(ap.legwear_socks_style);
+  if (ap.build) apParts.push(`${ap.build} build`);
+  if (ap.height) apParts.push(`${ap.height} height`);
+  if (ap.chest_size) apParts.push(`${ap.chest_size} chest`);
+  if (ap.ass_size) apParts.push(`${ap.ass_size} ass`);
+  if (ap.thigh_hip_size) apParts.push(`${ap.thigh_hip_size} hips`);
+  if (ap.species) {
+    apParts.push(ap.species === "Hybrid" && hybridSpecies ? hybridSpecies : ap.species);
+  }
+  if (ap.ear_type) apParts.push(`${ap.ear_type} ears`);
+  if (ap.hairstyle) apParts.push(`${ap.hairstyle} hairstyle`);
+  if (ap.bangs_style) apParts.push(ap.bangs_style);
+  if (ap.makeup_style) apParts.push(`${ap.makeup_style} makeup`);
+  if (ap.posture) apParts.push(`${ap.posture} posture`);
+  const details = [ap.distinguishing_feature, ap.accessory, ap.tail_wings].filter(Boolean);
+  if (details.length) apParts.push(...details);
+  if (ap.environment_setting) apParts.push(ap.environment_setting);
+  if (ap.gender_base_mesh) apParts.push(ap.gender_base_mesh);
+  if (descriptionNotes) apParts.push(descriptionNotes);
+  apParts.push("full body portrait");
+
+  const appearanceDesc = apParts.join(", ");
+  const extendedStyleDescriptor = appearanceDesc ? `${styleDescriptor}, ${appearanceDesc}` : styleDescriptor;
+
+  try {
+    const avatarUrl = await generateCharacterSelfie({
+      characterName: name,
+      genre,
+      systemPrompt: "",
+      teaserDescription: null,
+      imageSeed,
+      sceneDescription: "character portrait, looking at viewer",
+      nsfwEnabled: false,
+      subGenres,
+      styleDescriptor: extendedStyleDescriptor,
+    });
+    res.json({ avatarUrl, imageSeed });
+  } catch (err: any) {
+    logger.warn({ err }, "draft-avatar generation failed");
+    res.status(500).json({ error: "Avatar generation failed — try again" });
+  }
+});
+
 router.post("/characters", async (req, res): Promise<void> => {
   const parsed = CreateCharacterBody.safeParse(req.body);
   if (!parsed.success) {
@@ -207,18 +275,23 @@ router.post("/characters", async (req, res): Promise<void> => {
         : false)
     : false;
 
-  const imageSeed = String(Math.floor(Math.random() * 9000000000) + 1000000000);
   const createBody = req.body as Record<string, unknown>;
+  const artStyle = typeof createBody.artStyle === "string" ? createBody.artStyle : undefined;
+  const descriptionNotes = typeof createBody.descriptionNotes === "string" ? (createBody.descriptionNotes as string).trim() : "";
+  const draftAvatarUrl = typeof createBody.draftAvatarUrl === "string" ? (createBody.draftAvatarUrl as string) : null;
+  const draftImageSeed = typeof createBody.draftImageSeed === "string" ? (createBody.draftImageSeed as string) : null;
+  const imageSeed = draftImageSeed ?? String(Math.floor(Math.random() * 9000000000) + 1000000000);
   const subGenres: string[] = Array.isArray(createBody.subGenres)
     ? (createBody.subGenres as string[]).slice(0, 2)
     : [];
-  const styleDescriptor = deriveStyleDescriptor(parsed.data.genre, subGenres);
-  const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}. Be in character at all times.`;
+  const styleDescriptor = deriveStyleDescriptor(parsed.data.genre, subGenres, artStyle);
+  const descriptionBlock = descriptionNotes ? ` Additional details: ${descriptionNotes}.` : "";
+  const systemPrompt = `You are ${parsed.data.name}, ${parsed.data.bio ?? "a mysterious AI companion"}. Age: ${parsed.data.age ?? "unknown"}. Initial greeting: ${parsed.data.initialGreeting ?? "Hello, I've been waiting for you..."}. Genre: ${parsed.data.genre}.${descriptionBlock} Be in character at all times.`;
 
   const ap = (createBody.appearance ?? {}) as Record<string, string>;
   const hybridSpecies = typeof createBody.hybridSpecies === "string" ? createBody.hybridSpecies : undefined;
 
-  const initialAvatarUrl = getGenreDefaultAvatar(parsed.data.genre);
+  const initialAvatarUrl = draftAvatarUrl ?? getGenreDefaultAvatar(parsed.data.genre);
 
   const character = await createSupabaseCharacter({
     creatorId: req.telegramUserId,
@@ -254,12 +327,18 @@ router.post("/characters", async (req, res): Promise<void> => {
 
   res.status(201).json(serializeCharacter(character));
 
-  // Generate avatar in the background
+  // Generate avatar in the background (skipped if draftAvatarUrl was pre-generated)
   const characterId = character.characterId;
   const characterName = character.name;
   const characterGenre = character.genre ?? parsed.data.genre;
 
   (async () => {
+    // If caller supplied a draft avatar, just persist the style descriptor and skip generation
+    if (draftAvatarUrl) {
+      await updateSupabaseCharacter(characterId, { styleDescriptor, avatarUrl: draftAvatarUrl }).catch(() => {});
+      console.log('[CHARACTER AVATAR] Draft avatar re-used, skipping generation:', characterName);
+      return;
+    }
     try {
       const apParts: string[] = [];
       if (ap.hair_color || ap.hair_length) apParts.push(`${[ap.hair_color, ap.hair_length].filter(Boolean).join(" ")} hair`);
@@ -287,6 +366,7 @@ router.post("/characters", async (req, res): Promise<void> => {
       if (ap.environment_setting) apParts.push(ap.environment_setting);
       if (ap.gender_base_mesh) apParts.push(ap.gender_base_mesh);
       // Section 2: fixed shot type — "full body portrait" by default for avatar generation
+      if (descriptionNotes) apParts.push(descriptionNotes);
       apParts.push("full body portrait");
 
       const appearanceDesc = apParts.join(", ");
@@ -308,6 +388,8 @@ router.post("/characters", async (req, res): Promise<void> => {
         genre: characterGenre,
         imageSeed,
         styleDescriptor: extendedStyleDescriptor,
+        artStyle: artStyle ?? null,
+        characterDescriptionNotes: descriptionNotes || null,
         // Appearance columns — snake_case ap keys → camelCase Drizzle columns
         hairColor:              ap.hair_color              || null,
         hairLength:             ap.hair_length             || null,
@@ -351,6 +433,8 @@ router.post("/characters", async (req, res): Promise<void> => {
         target: charactersTable.characterId,
         set: {
           styleDescriptor: extendedStyleDescriptor,
+          artStyle: artStyle ?? null,
+          characterDescriptionNotes: descriptionNotes || null,
           hairColor:              ap.hair_color              || null,
           hairLength:             ap.hair_length             || null,
           eyeColor:               ap.eye_color               || null,

@@ -58,6 +58,9 @@ export const charactersTable = pgTable("characters", {
   skinTextureRealism: text("skin_texture_realism"),
   negativePromptsFilter: text("negative_prompts_filter"),
   outfitCleavageCut: text("outfit_cleavage_cut"),
+  // ── artStyle + freeform description ───────────────────────────────────────
+  artStyle: text("art_style"),
+  characterDescriptionNotes: text("character_description_notes"),
 });
 
 export const insertCharacterSchema = createInsertSchema(charactersTable).omit({ characterId: true });

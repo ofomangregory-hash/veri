@@ -1,0 +1,44 @@
+Do not modify auth.ts, authMiddleware, or proxy/image-proxy route logic anywhere in this task.
+
+SECTION A — Wire artStyle into deriveStyleDescriptor callers
+Scope: characters.ts, conversations.ts, admin.ts only.
+
+deriveStyleDescriptor now accepts artStyle as a third parameter, but no caller passes it — they all still call deriveStyleDescriptor(genre, subGenres) with two arguments. Find every call site and update them to pass the character's artStyle field as the third argument: deriveStyleDescriptor(genre, subGenres, artStyle). Confirm artStyle is actually being read from the character record/request payload at each call site — if it's missing from any payload, trace where it should come from and fix that too.
+
+After this change, test by creating one Anime character and one Realistic character, and paste the actual styleDescriptor saved for each — confirm they're now genuinely different templates, not both falling through to the same one.
+
+SECTION B — Confirm avatar shot-type fix actually takes effect once Section A is wired
+Scope: characters.ts avatar route only, verification after Section A lands.
+
+Once artStyle is properly wired, generate a fresh avatar (not regenerated) and paste the exact final prompt string sent to Pollinations. Confirm "full body portrait" appears and is not being overridden or contradicted by anything else in the prompt.
+
+SECTION C — Confirm admin appearance fix works against the LIVE production database
+Scope: read-only, no changes.
+
+Confirm the earlier schema push (`pnpm --filter @workspace/db run push`) was applied to the SAME database Railway/production actually connects to, not a separate local/dev database inside Replit's own environment. Show the DATABASE_URL (or equivalent) used by the push command and compare it against what's configured in the live Railway environment. If they're different databases, the characters table may still not exist in production, and the blank-appearance bug will persist there even though it looks fixed in Replit's dev preview.
+
+Report findings only for Section C — do not change anything until confirmed which database is actually live.
+
+SECTION D — Restructure create flow: new description step + delayed payment + draft-before-confirm
+Scope: create.tsx and the character creation/regenerate routes (characters.ts) only.
+
+Steps 1-5 unchanged (Name, Appearance Details, Origin Genre, Core Data, First Contact).
+
+NEW Step 6 — "Describe Your Character"
+- Display a read-only summary of the structured appearance fields already selected in Step 2 (hair, eyes, build, etc.) at the top of this step.
+- Below that, a free-text box where the user can add or modify details in their own words.
+- Optional — user can skip.
+- Save this text to a new column, character_description_notes (text, nullable) on the characters table.
+
+Step 7 — Signal Tags (renumbered from current Step 6)
+- Same as today: Tags input + summary — but REMOVE any cost/payment display or Neon Card deduction from this step.
+- Tapping the action button here generates a DRAFT avatar preview (using all fields + character_description_notes combined into the prompt) WITHOUT creating the character record yet, WITHOUT deducting Neon Cards, and lands the user on Step 8. Hold the draft avatar/data in temporary session state (not DB) until confirmed.
+
+Step 8 — Preview & Confirm (renumbered from current Step 7)
+- Shows the draft avatar + full character summary, fully editable.
+- "Regenerate Avatar" available with existing free-3-then-5-Neon-Card logic, keeping the same seed.
+- Final "Confirm & Awaken" button: the ONLY point where Neon Cards are deducted (existing cost, unchanged) AND the character record is actually created/goes live (local DB + Supabase). Before this button, no character record exists — draft/session state only.
+- If the user backs out or abandons before "Confirm & Awaken," nothing is created and nothing is charged.
+
+PROMPT ASSEMBLY:
+- character_description_notes must be appended to BOTH the avatar/image generation prompt (after existing structured appearance fields, same

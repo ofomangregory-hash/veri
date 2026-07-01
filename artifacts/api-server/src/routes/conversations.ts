@@ -460,9 +460,12 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
   }
 
   // Style: use row already fetched above (_localCharRow) → fallback to genre+tags
+  // artStyle stored in local DB (set at character creation); infer for old Anime-genre chars if missing.
+  const _charArtStyle = (_localCharRow?.artStyle as string | undefined) ??
+    (character.genre === "Anime" ? "Anime" : undefined);
   let resolvedStyle = _localCharRow?.styleDescriptor ?? null;
   if (!resolvedStyle) {
-    resolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? []);
+    resolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? [], _charArtStyle);
     console.log(`[STYLE] ${character.name} — derived and saved: ${resolvedStyle}`);
     void db.update(charactersTable).set({ styleDescriptor: resolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
   } else {
@@ -685,9 +688,11 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   }
   const [_selfieCharRow] = await db.select().from(charactersTable)
     .where(eq(charactersTable.characterId, params.data.characterId));
+  const _selfieArtStyle = (_selfieCharRow?.artStyle as string | undefined) ??
+    (character.genre === "Anime" ? "Anime" : undefined);
   let selfieResolvedStyle = _selfieCharRow?.styleDescriptor ?? null;
   if (!selfieResolvedStyle) {
-    selfieResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? []);
+    selfieResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? [], _selfieArtStyle);
     console.log(`[STYLE] ${character.name} — derived and saved: ${selfieResolvedStyle}`);
     void db.update(charactersTable).set({ styleDescriptor: selfieResolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
   } else {
@@ -1018,9 +1023,11 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
     }
     const [_giftCharRow] = await db.select().from(charactersTable)
       .where(eq(charactersTable.characterId, params.data.characterId));
+    const _giftArtStyle = (_giftCharRow?.artStyle as string | undefined) ??
+      (character.genre === "Anime" ? "Anime" : undefined);
     let giftResolvedStyle = _giftCharRow?.styleDescriptor ?? null;
     if (!giftResolvedStyle) {
-      giftResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? []);
+      giftResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? [], _giftArtStyle);
       console.log(`[STYLE] ${character.name} — derived and saved: ${giftResolvedStyle}`);
       void db.update(charactersTable).set({ styleDescriptor: giftResolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
     } else {

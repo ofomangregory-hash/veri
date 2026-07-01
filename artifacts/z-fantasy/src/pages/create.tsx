@@ -73,14 +73,15 @@ const APPEARANCE_FIELDS: AppearanceFieldDef[] = [
 
 const REQUIRED_APPEARANCE_KEYS = APPEARANCE_FIELDS.filter(f => f.required).map(f => f.key);
 
-// 6-step wizard + Step 7 is post-creation preview
+// 7-step wizard; Step 8 is draft preview, showCreated is post-creation review
 const WIZARD_STEPS = [
-  { id: 1, title: "Entity Name",         subtitle: "Choose or type your companion's identity" },
-  { id: 2, title: "Appearance Details",  subtitle: "Define the look that shapes every image" },
-  { id: 3, title: "Origin Genre",        subtitle: "Choose art style and character type" },
-  { id: 4, title: "Core Data",           subtitle: "Age & biographical directives" },
-  { id: 5, title: "First Contact",       subtitle: "Their opening transmission" },
-  { id: 6, title: "Signal Tags",         subtitle: "Classify your entity's attributes" },
+  { id: 1, title: "Entity Name",               subtitle: "Choose or type your companion's identity" },
+  { id: 2, title: "Appearance Details",         subtitle: "Define the look that shapes every image" },
+  { id: 3, title: "Origin Genre",               subtitle: "Choose art style and character type" },
+  { id: 4, title: "Core Data",                  subtitle: "Age & biographical directives" },
+  { id: 5, title: "First Contact",              subtitle: "Their opening transmission" },
+  { id: 6, title: "Describe Your Character",    subtitle: "Add freeform details to your entity" },
+  { id: 7, title: "Signal Tags",                subtitle: "Classify your entity's attributes" },
 ];
 
 const VALID_GENRES = ["Anime", "Fantasy", "Modern", "Sci-Fi", "Dark Goth"] as const;
@@ -311,7 +312,16 @@ export function Create() {
   const [tagsInput, setTagsInput] = useState("");
   const [isNsfw] = useState(false);
 
-  // ── Step 7: Post-creation state ───────────────────────────────────────────────
+  // ── Step 6: Description notes ─────────────────────────────────────────────────
+  const [descriptionNotes, setDescriptionNotes] = useState("");
+
+  // ── Step 7→8: Draft avatar (generated before character creation) ──────────────
+  const [draftAvatarUrl, setDraftAvatarUrl] = useState("");
+  const [draftImageSeed, setDraftImageSeed] = useState("");
+  const [isDraftGenerating, setIsDraftGenerating] = useState(false);
+
+  // ── Post-creation review state (shown after "Confirm & Awaken") ───────────────
+  const [showCreated, setShowCreated] = useState(false);
   const [createdCharId, setCreatedCharId] = useState<string | null>(null);
   const [createdAvatarUrl, setCreatedAvatarUrl] = useState("");
   const [createdRegenCount, setCreatedRegenCount] = useState(0);
@@ -337,7 +347,7 @@ export function Create() {
 
   // ── Avatar polling after creation ─────────────────────────────────────────────
   useEffect(() => {
-    if (step !== 7 || !createdCharId) return;
+    if (!showCreated || !createdCharId) return;
     let cancelled = false;
     const checkAvatar = async () => {
       if (cancelled) return;
@@ -433,12 +443,18 @@ export function Create() {
       return v.length > 0;
     });
     if (step === 3) return artStyle !== "" && subGenres.length >= 1;
+    // Steps 6 & 7 are always passable (Step 6 description is optional, Step 7 tags are optional)
     return true;
   }
 
   function next() {
     if (!canAdvance()) return;
-    if (step < WIZARD_STEPS.length) setStep(s => s + 1);
+    if (step < WIZARD_STEPS.length) {
+      setStep(s => s + 1);
+    } else {
+      // Step 7 (last wizard step) → generate draft avatar then go to Step 8
+      void handleGenerateDraft();
+    }
   }
   function prev() {
     if (step > 1) setStep(s => s - 1);
@@ -467,6 +483,7 @@ export function Create() {
         body: JSON.stringify({
           name: resolvedName,
           genre: resolveGenre(artStyle, subGenres),
+          artStyle: artStyle || undefined,
           subGenres,
           age: age || undefined,
           bio: bio || undefined,
@@ -476,6 +493,9 @@ export function Create() {
           isNsfw,
           appearance,
           hybridSpecies: hybridSpecies || undefined,
+          descriptionNotes: descriptionNotes || undefined,
+          draftAvatarUrl: draftAvatarUrl || undefined,
+          draftImageSeed: draftImageSeed || undefined,
         }),
       });
 
@@ -500,7 +520,7 @@ export function Create() {
       setEditArtStyle(artStyle);
 
       toast({ title: "✨ Entity Manifested!", description: `${resolvedName} is now live.` });
-      setStep(7);
+      setShowCreated(true);
     } catch (err) {
       toast({
         title: "Manifestation Failed",
@@ -509,6 +529,49 @@ export function Create() {
       });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+
+  // ── Generate draft avatar (Step 7 → Step 8) ───────────────────────────────────
+  // Builds the preview WITHOUT creating the character or deducting Neon Cards.
+  // draftImageSeed is preserved so regenerate re-uses the same seed.
+  async function handleGenerateDraft(regenSeed?: string) {
+    setIsDraftGenerating(true);
+    try {
+      const extraTags = tagsInput ? tagsInput.split(",").map(t => t.trim()).filter(Boolean) : [];
+      const tags = [...subGenres, ...extraTags];
+      const res = await fetch("/api/characters/draft-avatar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({
+          name: resolvedName,
+          genre: resolveGenre(artStyle, subGenres),
+          artStyle: artStyle || undefined,
+          subGenres,
+          appearance,
+          hybridSpecies: hybridSpecies || undefined,
+          descriptionNotes: descriptionNotes || undefined,
+          imageSeed: regenSeed || undefined, // undefined = new seed on first generate
+          tags,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? "Draft generation failed");
+      }
+      const data = await res.json() as { avatarUrl: string; imageSeed: string };
+      setDraftAvatarUrl(data.avatarUrl);
+      setDraftImageSeed(data.imageSeed);
+      setStep(8);
+    } catch (err) {
+      toast({
+        title: "Preview Generation Failed",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDraftGenerating(false);
     }
   }
 
@@ -600,8 +663,122 @@ export function Create() {
   const regenIsFree = createdRegenCount < 3;
   const isPlaceholderAvatar = !createdAvatarUrl || createdAvatarUrl.includes("picsum.photos");
 
-  // ── Step 7: Preview & Confirm ─────────────────────────────────────────────────
-  if (step === 7) {
+  // ── Step 8: Preview & Confirm (draft avatar shown; payment happens on Confirm) ─
+  if (step === 8) {
+    const draftIsPlaceholder = !draftAvatarUrl;
+    return (
+      <div className="flex flex-col h-[100dvh] bg-background overflow-y-auto pb-[200px]">
+        {/* Step 8 Header */}
+        <div className="shrink-0 px-4 pt-4 pb-3 border-b border-border/50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-bold uppercase tracking-widest text-glow-pink">Preview & Confirm</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">Review your entity before awakening</p>
+            </div>
+            <div className="px-3 py-1 rounded-full bg-cyan-400/10 border border-cyan-400/40 text-cyan-400 font-bold flex items-center gap-1 text-sm">
+              -25 🃏
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 py-5 space-y-6">
+          {/* Draft Avatar */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative">
+              {!draftIsPlaceholder ? (
+                <img
+                  src={draftAvatarUrl}
+                  alt={resolvedName}
+                  className="w-48 h-48 rounded-2xl object-cover border-2 border-primary/40 box-glow-pink"
+                />
+              ) : (
+                <div className="w-48 h-48 rounded-2xl bg-primary/10 border-2 border-primary/30 flex items-center justify-center text-5xl">
+                  🎨
+                </div>
+              )}
+            </div>
+            <p className="text-xl font-bold text-white">{resolvedName}</p>
+
+            {/* Regenerate draft */}
+            <button
+              onClick={() => void handleGenerateDraft(draftImageSeed)}
+              disabled={isDraftGenerating}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-secondary/50 text-secondary font-bold text-xs hover:border-secondary hover:bg-secondary/10 transition-all disabled:opacity-50"
+            >
+              <RefreshCw size={13} className={isDraftGenerating ? "animate-spin" : ""} />
+              {isDraftGenerating ? "Generating…" : "Regenerate Draft (Free)"}
+            </button>
+          </div>
+
+          {/* Character summary */}
+          <div className="p-4 rounded-xl bg-card border border-border space-y-2">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Summary</p>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Name</span>
+              <span className="font-bold text-white">{resolvedName}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Art Style</span>
+              <span className="font-semibold text-white">{artStyle || "—"}</span>
+            </div>
+            {subGenres.length > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Types</span>
+                <span className="font-semibold text-white">{subGenres.join(", ")}</span>
+              </div>
+            )}
+            {appearance.species && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Species</span>
+                <span className="font-semibold text-white">{appearance.species}{hybridSpecies ? ` (${hybridSpecies})` : ""}</span>
+              </div>
+            )}
+            {(appearance.hair_color || appearance.hair_length) && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Hair</span>
+                <span className="font-semibold text-white">{[appearance.hair_color, appearance.hair_length].filter(Boolean).join(", ")}</span>
+              </div>
+            )}
+            {descriptionNotes && (
+              <div className="flex flex-col gap-1 text-sm">
+                <span className="text-muted-foreground">Notes</span>
+                <span className="font-semibold text-white/80 text-xs leading-relaxed">{descriptionNotes}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm border-t border-border pt-2 mt-1">
+              <span className="text-muted-foreground">Cost</span>
+              <span className="font-bold text-cyan-400">-25 🃏 Neon Cards</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom action bar */}
+        <div className="fixed bottom-0 left-0 right-0 z-[60] p-4 bg-background/95 backdrop-blur border-t border-border flex gap-3"
+          style={{ paddingBottom: "max(16px, calc(16px + env(safe-area-inset-bottom)))" }}>
+          <button
+            onClick={() => setStep(7)}
+            className="px-4 py-3 rounded-xl border border-border text-muted-foreground hover:text-white transition-all font-semibold text-sm flex items-center gap-2"
+          >
+            <ChevronLeft size={16} /> Back
+          </button>
+          <button
+            onClick={() => void handleSubmit()}
+            disabled={submitting}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-bold uppercase tracking-wider box-glow-pink hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50"
+          >
+            {submitting ? (
+              <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Manifesting...</>
+            ) : (
+              <><Sparkles size={18} /> <Check size={16} /> Confirm & Awaken</>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Post-creation review (after "Confirm & Awaken") ─────────────────────────
+  if (showCreated) {
     return (
       <div className="flex flex-col h-[100dvh] bg-background overflow-y-auto pb-[200px]">
         {/* Step 7 Header */}
@@ -912,9 +1089,11 @@ export function Create() {
       <div className="shrink-0 px-4 pt-4 pb-2">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-xl font-bold uppercase tracking-widest text-glow-pink">Manifest</h1>
-          <div className="px-3 py-1 rounded-full bg-cyan-400/10 border border-cyan-400/40 text-cyan-400 font-bold flex items-center gap-1 text-sm">
-            -25 🃏
-          </div>
+          {step === 8 && (
+            <div className="px-3 py-1 rounded-full bg-cyan-400/10 border border-cyan-400/40 text-cyan-400 font-bold flex items-center gap-1 text-sm">
+              -25 🃏
+            </div>
+          )}
         </div>
 
         {/* Progress bar */}
@@ -1180,8 +1359,83 @@ export function Create() {
           </div>
         )}
 
-        {/* ── Step 6: Signal Tags + Summary ── */}
+
+        {/* ── Step 6: Describe Your Character ── */}
         {step === 6 && (
+          <div className="space-y-5">
+            {/* Read-only appearance summary */}
+            <div className="p-4 rounded-xl bg-card border border-border space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Appearance Summary</p>
+              {(appearance.hair_color || appearance.hair_length) && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Hair</span>
+                  <span className="text-white font-semibold">{[appearance.hair_color, appearance.hair_length].filter(Boolean).join(", ")}</span>
+                </div>
+              )}
+              {appearance.eye_color && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Eyes</span>
+                  <span className="text-white font-semibold">{appearance.eye_color}</span>
+                </div>
+              )}
+              {appearance.species && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Species</span>
+                  <span className="text-white font-semibold">{appearance.species}{hybridSpecies ? ` (${hybridSpecies})` : ""}</span>
+                </div>
+              )}
+              {appearance.build && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Build</span>
+                  <span className="text-white font-semibold">{appearance.build}</span>
+                </div>
+              )}
+              {appearance.gender_base_mesh && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Gender</span>
+                  <span className="text-white font-semibold">{appearance.gender_base_mesh}</span>
+                </div>
+              )}
+              {appearance.environment_setting && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Setting</span>
+                  <span className="text-white font-semibold">{appearance.environment_setting}</span>
+                </div>
+              )}
+              {artStyle && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Art Style</span>
+                  <span className="text-white font-semibold">{artStyle}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Free-text description */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                Additional Details <span className="text-muted-foreground/60 font-normal normal-case">(optional)</span>
+              </label>
+              <p className="text-xs text-muted-foreground mb-3">
+                Add anything not captured above — clothing style, personality quirks, scene context, or a short physical description in your own words. This text is added directly to the image prompt.
+              </p>
+              <textarea
+                value={descriptionNotes}
+                onChange={e => setDescriptionNotes(e.target.value)}
+                placeholder="e.g. wearing a dark trench coat, standing in rain, mysterious expression, glowing red eyes…"
+                rows={5}
+                maxLength={400}
+                className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-white placeholder:text-muted-foreground outline-none focus:border-primary/60 resize-none transition-all"
+              />
+              <div className="flex justify-between mt-1">
+                <span className="text-[10px] text-muted-foreground/60">Optional — skip to continue</span>
+                <span className="text-[10px] text-muted-foreground/60">{descriptionNotes.length}/400</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 7: Signal Tags + Summary (no payment displayed here) ── */}
+        {step === 7 && (
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">Add comma-separated tags to help others discover this entity</p>
             <input
@@ -1233,10 +1487,7 @@ export function Create() {
                 <span className="text-muted-foreground">Visibility</span>
                 <span className="font-semibold text-white">🔒 Private</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Cost</span>
-                <span className="font-bold text-cyan-400">-25 🃏 Neon Cards</span>
-              </div>
+              {/* Cost shown only on Step 8 Preview & Confirm */}
             </div>
           </div>
         )}
@@ -1265,18 +1516,19 @@ export function Create() {
               }
             </button>
           ) : (
+            /* Step 7 (Signal Tags) — generate draft preview, no payment yet */
             <button
-              onClick={handleSubmit}
-              disabled={submitting}
+              onClick={() => void handleGenerateDraft()}
+              disabled={isDraftGenerating}
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-bold uppercase tracking-wider box-glow-pink hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50"
             >
-              {submitting ? (
+              {isDraftGenerating ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Manifesting...
+                  Generating Preview…
                 </>
               ) : (
-                <><Sparkles size={18} /> <Check size={16} /> Awaken</>
+                <><Sparkles size={18} /> Generate Preview</>
               )}
             </button>
           )}
