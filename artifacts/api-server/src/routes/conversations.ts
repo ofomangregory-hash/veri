@@ -33,6 +33,38 @@ import { addVaultItem, unlockVaultItemByUrl } from "../lib/supabaseVault";
 const router: IRouter = Router();
 router.use(authMiddleware);
 
+// ── Gift idempotency guard (Section 2) ───────────────────────────────────────
+// Tracks the last claim timestamp per user+character+giftType (in-memory).
+// Rejects a second identical claim within GIFT_COOLDOWN_MS (10 seconds) with 429.
+// This prevents rapid double-taps from the client counting twice.
+// The NC deduction itself is atomic via SQL WHERE clause, but AP update and
+// transaction logging have no such protection — this guard covers those paths.
+const GIFT_COOLDOWN_MS = 10_000;
+const _giftCooldownMap = new Map<string, number>(); // key: "userId:characterId:giftType" → timestamp
+
+function checkGiftCooldown(userId: number, characterId: string, giftType: string): boolean {
+  const key = `${userId}:${characterId}:${giftType}`;
+  const last = _giftCooldownMap.get(key) ?? 0;
+  return Date.now() - last < GIFT_COOLDOWN_MS;
+}
+
+function recordGiftClaim(userId: number, characterId: string, giftType: string): void {
+  const key = `${userId}:${characterId}:${giftType}`;
+  _giftCooldownMap.set(key, Date.now());
+}
+
+// ── Gift scene variants for secret_key (Section 1) ───────────────────────────
+// Rotates through 6 scenes so repeated gifts produce distinct images.
+// Index is chosen from Math.random() so consecutive gifts always differ.
+const SECRET_KEY_SCENES = [
+  "close intimate scene, silk outfit, warm candlelight, tender gaze",
+  "seductive bedroom scene, lingerie, soft neon glow, inviting pose",
+  "sensual moment, exposed shoulder, moonlit window, longing expression",
+  "passionate embrace scene, disheveled hair, flushed cheeks, desire in eyes",
+  "intimate reveal scene, sheer fabric, back turned, glancing over shoulder",
+  "vulnerable close portrait, wrapped in sheets, dawn light, half-smile",
+] as const;
+
 // ── Appearance description builder ────────────────────────────────────────────
 // Builds a concise, ordered appearance string from local DB columns for use in
 // both the AI system prompt (Section 3) and all image generation prompts (Section 4).
@@ -534,18 +566,26 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
         teaserDescription: character.teaserDescription,
         imageSeed: resolvedSeed,
         sceneDescription: blurredScene,
-        avatarUrl: blurredAvatarUrl || undefined,
+        // Prefer an additional avatar; fall back to character's main avatar so that
+        // Pollinations failures return a real image, not the dicebear placeholder.
+        avatarUrl: blurredAvatarUrl || character.avatarUrl || undefined,
         nsfwEnabled: false,
         contentLevelWords: contentWords,
         styleDescriptor: resolvedStyle,
       });
       if (blurredImageUrl) {
-        console.log('[VAULT SAVE] URL:', blurredImageUrl, 'type: blurred');
-        void addVaultItem(req.telegramUserId, params.data.characterId, character.name, blurredImageUrl, "blurred", true);
+        // Discard dicebear result — it signals total Pollinations failure; don't vault or send it.
+        if (blurredImageUrl.includes("dicebear.com")) {
+          logger.error({ characterName: character.name }, "Blurred image — Pollinations failed entirely, dicebear suppressed");
+          blurredImageUrl = null;
+        } else {
+          console.log('[VAULT SAVE] URL:', blurredImageUrl, 'type: blurred');
+          void addVaultItem(req.telegramUserId, params.data.characterId, character.name, blurredImageUrl, "blurred", true);
+        }
       }
       console.log('Blurred image fired for:', req.telegramUserId, params.data.characterId);
     } catch (err) {
-      logger.warn({ err }, "Blurred image loop failed");
+      logger.error({ err }, "Blurred image loop — unexpected error");
     }
   }
 
@@ -884,6 +924,14 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
   const parsed = SendGiftBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
+  // ── Idempotency guard: reject duplicate claims within 10s ─────────────────
+  if (checkGiftCooldown(req.telegramUserId, params.data.characterId, parsed.data.giftType)) {
+    console.log(`[GIFT COOLDOWN] Duplicate claim rejected: user=${req.telegramUserId} char=${params.data.characterId} type=${parsed.data.giftType}`);
+    res.status(429).json({ error: "Gift already claimed. Please wait a moment before sending another." });
+    return;
+  }
+  recordGiftClaim(req.telegramUserId, params.data.characterId, parsed.data.giftType);
+
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.telegramUserId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
@@ -982,14 +1030,21 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
       console.log(`[STYLE] ${character.name} — using style: ${giftResolvedStyle}`);
     }
     const giftLocalAppearanceDesc = buildLocalAppearanceDesc(_giftCharRow);
+    // Fresh random seed per gift — ensures every secret_key produces a different image
+    // even for the same character (unlike chat images which use the persistent character seed).
+    const giftFreshSeed = String(Math.floor(Math.random() * 10000000000));
+    // Rotate through scene pool so consecutive gifts never produce identical images.
+    const giftScene = SECRET_KEY_SCENES[Math.floor(Math.random() * SECRET_KEY_SCENES.length)];
+    console.log(`[GIFT IMAGE] scene="${giftScene}" freshSeed=${giftFreshSeed}`);
     try {
       scenarioImageUrl = await generateCharacterSelfie({
         characterName: character.name,
         genre: character.genre ?? "Fantasy",
         systemPrompt: character.systemPrompt ?? "",
         teaserDescription: character.teaserDescription,
-        imageSeed: giftResolvedSeed,
-        sceneDescription: ["intimate gift scene, secret revealed, close and personal", giftLocalAppearanceDesc].filter(Boolean).join(", "),
+        imageSeed: giftFreshSeed,
+        sceneDescription: [giftScene, giftLocalAppearanceDesc].filter(Boolean).join(", "),
+        avatarUrl: character.avatarUrl ?? null,
         nsfwEnabled: charNsfw,
         contentLevelWords: contentWords,
         styleDescriptor: giftResolvedStyle,

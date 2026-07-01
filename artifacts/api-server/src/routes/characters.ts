@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db, pool, usersTable, transactionsTable } from "@workspace/db";
+import { db, pool, usersTable, transactionsTable, charactersTable } from "@workspace/db";
 import {
   ListCharactersQueryParams,
   ListCharactersResponse,
@@ -307,6 +307,104 @@ router.post("/characters", async (req, res): Promise<void> => {
       // Do NOT set sceneDescription = appearanceDesc here; that duplicates anatomy in the Pollinations prompt.
       const sceneDescription = "character portrait, looking at viewer";
       const extendedStyleDescriptor = appearanceDesc ? `${styleDescriptor}, ${appearanceDesc}` : styleDescriptor;
+
+      // ── Write local Drizzle row — appearance columns + style for chat/image use ──
+      // POST /characters only writes to Supabase. This insert populates the local DB
+      // immediately so admin appearance pre-fill, chat system-prompt injection, and
+      // in-chat image generation all work without requiring a manual admin save first.
+      // upsert (onConflictDoUpdate) is safe if the row already exists from an earlier run.
+      const resolvedHybridSpecies = hybridSpecies || ap.hybrid_species || null;
+      await db.insert(charactersTable).values({
+        characterId,
+        name: characterName,
+        creatorId: String(req.telegramUserId),
+        genre: characterGenre,
+        imageSeed,
+        styleDescriptor: extendedStyleDescriptor,
+        // Appearance columns — snake_case ap keys → camelCase Drizzle columns
+        hairColor:              ap.hair_color              || null,
+        hairLength:             ap.hair_length             || null,
+        eyeColor:               ap.eye_color               || null,
+        build:                  ap.build                   || null,
+        height:                 ap.height                  || null,
+        skinTone:               ap.skin_tone               || null,
+        skinTextureRealism:     ap.skin_texture_realism    || null,
+        species:                ap.species                 || null,
+        hybridSpecies:          resolvedHybridSpecies      || null,
+        earType:                ap.ear_type                || null,
+        chestSize:              ap.chest_size              || null,
+        assSize:                ap.ass_size                || null,
+        thighHipSize:           ap.thigh_hip_size          || null,
+        hairstyle:              ap.hairstyle               || null,
+        bangsStyle:             ap.bangs_style             || null,
+        makeupStyle:            ap.makeup_style            || null,
+        facialExpressionDefault: ap.facial_expression_default || null,
+        eyeDetailEnhancer:      ap.eye_detail_enhancer     || null,
+        posture:                ap.posture                 || null,
+        tailWings:              ap.tail_wings              || null,
+        bodyMarkings:           ap.body_markings           || null,
+        distinguishingFeature:  ap.distinguishing_feature  || null,
+        accessory:              ap.accessory               || null,
+        outfitFit:              ap.outfit_fit              || null,
+        outfitCleavageCut:      ap.outfit_cleavage_cut     || null,
+        clothingMaterialFinish: ap.clothing_material_finish || null,
+        legwearSocksStyle:      ap.legwear_socks_style     || null,
+        colorPalette:           ap.color_palette           || null,
+        culturalStyle:          ap.cultural_style          || null,
+        occupationLook:         ap.occupation_look         || null,
+        environmentSetting:     ap.environment_setting     || null,
+        lightingStyle:          ap.lighting_style          || null,
+        cameraShotType:         ap.camera_shot_type        || null,
+        cameraAngle:            ap.camera_angle            || null,
+        viewDirection:          ap.view_direction          || null,
+        imageFocus:             ap.image_focus             || null,
+        renderingEngine:        ap.rendering_engine        || null,
+        genderBaseMesh:         ap.gender_base_mesh        || null,
+      }).onConflictDoUpdate({
+        target: charactersTable.characterId,
+        set: {
+          styleDescriptor: extendedStyleDescriptor,
+          hairColor:              ap.hair_color              || null,
+          hairLength:             ap.hair_length             || null,
+          eyeColor:               ap.eye_color               || null,
+          build:                  ap.build                   || null,
+          height:                 ap.height                  || null,
+          skinTone:               ap.skin_tone               || null,
+          skinTextureRealism:     ap.skin_texture_realism    || null,
+          species:                ap.species                 || null,
+          hybridSpecies:          resolvedHybridSpecies      || null,
+          earType:                ap.ear_type                || null,
+          chestSize:              ap.chest_size              || null,
+          assSize:                ap.ass_size                || null,
+          thighHipSize:           ap.thigh_hip_size          || null,
+          hairstyle:              ap.hairstyle               || null,
+          bangsStyle:             ap.bangs_style             || null,
+          makeupStyle:            ap.makeup_style            || null,
+          facialExpressionDefault: ap.facial_expression_default || null,
+          eyeDetailEnhancer:      ap.eye_detail_enhancer     || null,
+          posture:                ap.posture                 || null,
+          tailWings:              ap.tail_wings              || null,
+          bodyMarkings:           ap.body_markings           || null,
+          distinguishingFeature:  ap.distinguishing_feature  || null,
+          accessory:              ap.accessory               || null,
+          outfitFit:              ap.outfit_fit              || null,
+          outfitCleavageCut:      ap.outfit_cleavage_cut     || null,
+          clothingMaterialFinish: ap.clothing_material_finish || null,
+          legwearSocksStyle:      ap.legwear_socks_style     || null,
+          colorPalette:           ap.color_palette           || null,
+          culturalStyle:          ap.cultural_style          || null,
+          occupationLook:         ap.occupation_look         || null,
+          environmentSetting:     ap.environment_setting     || null,
+          lightingStyle:          ap.lighting_style          || null,
+          cameraShotType:         ap.camera_shot_type        || null,
+          cameraAngle:            ap.camera_angle            || null,
+          viewDirection:          ap.view_direction          || null,
+          imageFocus:             ap.image_focus             || null,
+          renderingEngine:        ap.rendering_engine        || null,
+          genderBaseMesh:         ap.gender_base_mesh        || null,
+        },
+      });
+      console.log('[CHARACTER LOCAL DB] Row upserted for:', characterId, characterName);
 
       console.log('[CHARACTER AVATAR] Starting generation for:', characterName, 'style:', extendedStyleDescriptor);
       const avatarUrl = await generateCharacterSelfie({

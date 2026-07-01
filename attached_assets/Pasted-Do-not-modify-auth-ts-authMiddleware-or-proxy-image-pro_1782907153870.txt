@@ -1,0 +1,36 @@
+Do not modify auth.ts, authMiddleware, or proxy/image-proxy route logic anywhere in this task.
+
+SECTION 1 — Gift images always identical (confirmed bug)
+Scope: the gift claim route only.
+
+Logs show the gift scene prompt uses static text "intimate gift scene, secret revealed, close and personal" with no variation — meaning every gift image for the same character is pixel-identical (same seed + same full prompt = same output every time).
+
+Fix: add scene variation to the gift image prompt (similar to how auto-loop/trigger images vary), e.g. rotate through a small set of gift-reaction scene descriptors, or incorporate the specific gift item name into the scene text, so repeated gifts don't produce the same image.
+
+SECTION 2 — Gift claimed twice for one action (confirmed bug)
+Scope: the gift claim route only.
+
+Logs show two separate [GIFT CLAIM] results for what appears to be a single user action — affectionPoints jumped 72 → 142 with identical aiReaction text and identical image, seconds apart. This suggests either a double-submit from the client or a missing idempotency check server-side.
+
+Read-only first: check if the gift claim endpoint has any duplicate-submission protection (e.g. a per-user-per-gift cooldown, a claim token, a debounce). If not, add one — reject or ignore a second claim for the same gift within a short window (e.g. 5 seconds) per user+character.
+
+SECTION 3 — Chat message failing to send (diagnostic only)
+Scope: read-only, no changes.
+
+User reports chat messages sometimes fail to send. Pull the Railway logs from the most recent occurrence (or have the user reproduce it and pull fresh logs) and identify the exact error — timeout, provider failure, validation error, etc. Report findings only, do not fix yet.
+
+SECTION 4 — Blurred image showing a Dicebear placeholder instead of the real image (diagnostic + likely fix)
+Scope: read-only first, then fix if root cause is confirmed.
+
+A Dicebear-style placeholder avatar is appearing instead of the actual blurred teaser image. This strongly suggests the blurred image generation call is failing (Pollinations error, timeout, or bad prompt) and silently falling back to a dummy avatar generator instead of surfacing the error or retrying.
+
+Find where the blurred image is generated and where the Dicebear fallback is triggered. Show the exact condition that causes the fallback. Report what's actually happening, then fix so failures retry against Pollinations (matching the retry logic already used elsewhere) instead of silently substituting a placeholder — or at minimum, log the real error so we can see why it's failing.
+
+SECTION 5 — Populate local DB row from Supabase at character creation (previously offered, not yet done)
+Scope: character creation route only (characters.ts).
+
+Characters created via the user-facing flow currently only get written to Supabase, never to the local Drizzle DB — appearance columns stay empty locally until an admin manually saves the appearance drawer. Add a migration/step at creation time that also writes a full row (including all appearance fields) to the local Drizzle characters table, so admin pre-fill, chat system prompt injection, and in-chat image generation all work immediately for newly created characters without requiring a manual admin save first.
+
+For all sections, show your work — what you found, what was actually wrong, and the exact code change — before claiming anything is fixed.
+
+Do not touch any other files outside what's scoped in each section.
