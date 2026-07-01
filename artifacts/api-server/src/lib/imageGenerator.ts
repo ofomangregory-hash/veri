@@ -28,6 +28,17 @@ const EXISTING_ANIME_KEYWORDS = [
 const STYLE_ASSIST_TAGS =
   "anime aesthetic, detailed illustration, vibrant colors, clear outlines, sharp focus";
 
+// Heavy 2.5D anime NSFW anchors — injected when nsfwEnabled=true.
+// These override the softer STYLE_ASSIST_TAGS and steer Flux toward
+// detailed adult anime output with explicit content allowed.
+const NSFW_ANIME_ANCHORS =
+  "highly detailed 2.5D anime digital illustration, uncensored anime style, perfect anatomy, voluptuous proportions, vibrant colors, clean crisp linework, soft skin textures, soft rendering, depth of field, dramatic studio lighting, explicit content, sharp focus, masterpiece artwork";
+
+// Always appended to every selfie/avatar prompt to enforce vertical
+// portrait framing and prevent tight crops on full-body renders.
+const PORTRAIT_FRAMING =
+  "vertical composition, aspect ratio 9:16 portrait orientation, full-body framing, medium shot framing, showcase complete figure and posture context, no extreme close-ups, beautiful composition";
+
 function hasExplicitPhotorealistic(prompt: string): boolean {
   const lower = prompt.toLowerCase();
   return EXPLICIT_PHOTOREALISTIC_KEYWORDS.some(kw => lower.includes(kw));
@@ -176,24 +187,32 @@ async function tryPollinations(
   imageSeed: number,
   width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
+  nsfwEnabled = false,
 ): Promise<string | null> {
   const parts = [characterName, stylePrefix, ...subGenres, sceneDescription].filter(Boolean);
   const combined = parts.join(", ");
 
-  // ── Conditional style-assist ───────────────────────────────────────────────
-  // Only inject if neither an anime directive NOR a photorealistic directive exists.
-  // This keeps user-specified styles fully intact while improving vague prompts.
-  const photoReal = hasExplicitPhotorealistic(combined);
-  const alreadyAnimated = hasAnimeStyleDirective(combined);
-
-  if (!photoReal && !alreadyAnimated) {
-    parts.push(STYLE_ASSIST_TAGS);
-    console.log("[STYLE ASSIST] No art-style directive detected — appending assist tags");
+  // ── Style injection ────────────────────────────────────────────────────────
+  // NSFW: inject heavy 2.5D anime anchors (overrides the lighter assist).
+  // SFW:  inject soft STYLE_ASSIST_TAGS only when no art-style directive found.
+  if (nsfwEnabled) {
+    parts.push(NSFW_ANIME_ANCHORS);
+    console.log("[STYLE ASSIST] NSFW enabled — injecting 2.5D anime NSFW anchors");
   } else {
-    console.log(
-      `[STYLE ASSIST] Skipping — detected: ${photoReal ? "photorealistic" : "anime/illustration"} style`
-    );
+    const photoReal = hasExplicitPhotorealistic(combined);
+    const alreadyAnimated = hasAnimeStyleDirective(combined);
+    if (!photoReal && !alreadyAnimated) {
+      parts.push(STYLE_ASSIST_TAGS);
+      console.log("[STYLE ASSIST] No art-style directive detected — appending assist tags");
+    } else {
+      console.log(
+        `[STYLE ASSIST] Skipping — detected: ${photoReal ? "photorealistic" : "anime/illustration"} style`
+      );
+    }
   }
+
+  // Always enforce vertical 9:16 portrait framing in the text prompt
+  parts.push(PORTRAIT_FRAMING);
 
   const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
   const encodedPrompt = encodeURIComponent(cleanPrompt);
@@ -289,12 +308,14 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
     sceneDescription,
     userId,
     characterId,
+    nsfwEnabled = false,
   } = opts;
 
   const styleDesc = opts.styleDescriptor ?? getStylePrefix(genre);
   const baseSeed = parseInt(opts.imageSeed, 10) || Math.floor(Math.random() * 10000000000);
   console.log(`[IMAGE SEED] ${characterName} — seed: ${baseSeed}`);
   console.log(`[STYLE] ${characterName} — using style: ${styleDesc}`);
+  console.log(`[NSFW] ${characterName} — nsfwEnabled: ${nsfwEnabled}`);
 
   const trackingKey = userId != null && characterId != null
     ? { userId: String(userId), characterId }
@@ -308,7 +329,7 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
       : Math.floor(Math.random() * 10000000000);
 
     // Primary: Pollinations with full prompt and vertical canvas (DEFAULT_WIDTH × DEFAULT_HEIGHT)
-    const result = await tryPollinations(characterName, styleDesc, subGenres, sceneDescription, seed);
+    const result = await tryPollinations(characterName, styleDesc, subGenres, sceneDescription, seed, DEFAULT_WIDTH, DEFAULT_HEIGHT, nsfwEnabled);
 
     if (result) {
       if (trackingKey) {
@@ -327,6 +348,7 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
   }
 
   // Fallback: generic portrait prompt (no subGenres, no sceneDescription)
+  // nsfwEnabled intentionally NOT passed here — fallback stays conservative
   const genericResult = await tryPollinations(characterName, "portrait, detailed face", [], "", baseSeed);
   if (genericResult) {
     if (trackingKey) recordImageUrl(trackingKey.userId, trackingKey.characterId, genericResult);

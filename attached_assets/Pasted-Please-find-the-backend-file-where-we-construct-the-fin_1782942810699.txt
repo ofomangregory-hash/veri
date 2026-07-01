@@ -1,0 +1,19 @@
+Please find the backend file where we construct the final text prompt before sending it to the Pollinations API (e.g., inside an image.ts, chat.ts, or controller file). 
+
+Do not alter any API endpoint connections, database structures, or login scripts. We want to update ONLY the string interpolation logic that builds the prompt text to guide Pollinations toward a high-quality 2.5D stylized anime art style while dynamically allowing for uncensored, mature (NSFW) detail mapping.
+
+Update the prompt builder function to structure the incoming text using this unified assistant template format:
+
+1. Dynamic Metadata & NSFW Attribute Mapping:
+- Ensure the script pulls the custom physical features directly from our Supabase database row (e.g., character.name, character.age, character.breastSize, character.style, character.clothing).
+- Check if the character's profile properties contain mature, suggestive, or NSFW parameters. If present, do not filter them out. Explicitly map these traits directly into the prompt string structure: "${character.physicalTraits}, ${character.breastSize} chest, wearing ${character.clothing || 'sensual attire'}".
+
+2. Inject High-Weight Stylization & Adult Anime Anchors:
+Stitch the character data to these specific style identifiers to enforce the reference aesthetic:
+"highly detailed 2.5D anime digital illustration, uncensored anime style, perfect anatomy, voluptuous proportions, vibrant colors, clean crisp linework, soft skin textures, soft rendering, depth of field, dramatic studio lighting, explicit content, sharp focus, masterpiece artwork"
+
+3. Enforce Vertical 9:16 Camera Framing:
+To ensure the output stays consistent with vertical full-body or medium-shot character portraits and prevent intimate renders from cropping incorrectly, explicitly append these camera composition modifiers:
+"Vertical composition, aspect ratio 9:16 portrait orientation, full-body framing, medium shot framing, showcase complete figure and posture context, no extreme close-ups, beautiful composition"
+
+Please review the prompt factory logic, update the template string assembly to build this comprehensive style and visibility layout, and confirm when the file is updated.
