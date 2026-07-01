@@ -1,10 +1,11 @@
 import { logger } from "./logger";
 
 // ── Default canvas dimensions ─────────────────────────────────────────────────
-// 1920×1080 — cinematic widescreen used for all selfie, inchat, and avatar images.
+// 512×768 — tall portrait (2:3) used for all selfie, inchat, and avatar images.
+// Supports full-body and half-body framing naturally without cropping limbs.
 // Callers can override by passing explicit width/height to tryPollinations if needed.
-const DEFAULT_WIDTH  = 1920;
-const DEFAULT_HEIGHT = 1080;
+const DEFAULT_WIDTH  = 512;
+const DEFAULT_HEIGHT = 768;
 
 // ── Style-detection keyword lists ─────────────────────────────────────────────
 // If the combined prompt already contains an explicit non-anime art direction,
@@ -22,11 +23,11 @@ const EXISTING_ANIME_KEYWORDS = [
   "line art", "2d ", "2d,", "hand-drawn",
 ];
 
-// Subtle quality assist appended when no art-style directive is detected.
-// These guide Pollinations/Flux toward crisp, vibrant portrait aesthetics
-// without overriding any user-specified look.
+// Cel-shaded vector anime quality assist — appended when no art-style directive is detected.
+// Anchors Pollinations/Flux to crisp digital line-art and cel-shading without overriding
+// any explicit user-specified look.
 const STYLE_ASSIST_TAGS =
-  "anime aesthetic, detailed illustration, vibrant colors, clear outlines, sharp focus";
+  "clean anime cel-shading, crisp fine lineart outlines, vibrant vector art, smooth digital color gradients, minimalist flat white background, sharp focus, digital illustration, modern anime style, precise details";
 
 // Heavy 2.5D anime NSFW anchors — injected when nsfwEnabled=true.
 // These override the softer STYLE_ASSIST_TAGS and steer Flux toward
@@ -34,10 +35,15 @@ const STYLE_ASSIST_TAGS =
 const NSFW_ANIME_ANCHORS =
   "highly detailed 2.5D anime digital illustration, uncensored anime style, perfect anatomy, voluptuous proportions, vibrant colors, clean crisp linework, soft skin textures, soft rendering, depth of field, dramatic studio lighting, explicit content, sharp focus, masterpiece artwork";
 
-// Always appended to every selfie/avatar prompt to enforce vertical
-// portrait framing and prevent tight crops on full-body renders.
+// Always appended to every selfie/avatar prompt to enforce half-body or full-body
+// framing and eliminate tight facial crops.
 const PORTRAIT_FRAMING =
-  "vertical composition, aspect ratio 9:16 portrait orientation, full-body framing, medium shot framing, showcase complete figure and posture context, no extreme close-ups, beautiful composition";
+  "either full-body shot or half-body shot composition, clean anime cel-shading, crisp fine lineart outlines, vibrant vector art, smooth digital color gradients, minimalist flat white background, sharp focus, digital illustration, modern anime style, precise details";
+
+// Negative prompt — appended as &negative= query param to aggressively suppress
+// heavy textures, tight facial crops, and non-cel-shaded rendering styles.
+const NEGATIVE_PROMPT =
+  "close-up, headshot, face zoom, cropped limbs, oil painting, canvas texture, watercolor, smudged shading, realistic skin texture, heavy brushes, blurry lines, airbrushed, 3D render, dark muddy shadows, messy sketch";
 
 function hasExplicitPhotorealistic(prompt: string): boolean {
   const lower = prompt.toLowerCase();
@@ -216,7 +222,8 @@ async function tryPollinations(
 
   const cleanPrompt = sanitizePrompt(parts.join(", ").replace(/,\s*$/, "").trim());
   const encodedPrompt = encodeURIComponent(cleanPrompt);
-  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=${width}&height=${height}&nologo=true&enhance=true&safe=false&seed=${imageSeed}`;
+  const encodedNegative = encodeURIComponent(NEGATIVE_PROMPT);
+  const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=${width}&height=${height}&nologo=true&enhance=false&safe=false&seed=${imageSeed}&negative=${encodedNegative}`;
 
   console.log("Image prompt:", cleanPrompt);
   console.log(`Pollinations URL (${width}×${height}):`, url);
