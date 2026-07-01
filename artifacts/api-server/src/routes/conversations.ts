@@ -743,7 +743,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
       imageSeed: selfieResolvedSeed,
       sceneDescription: [parsed.data.description, selfieLocalAppearanceDesc].filter(Boolean).join(", "),
       avatarUrl: character.avatarUrl ?? null,
-      nsfwEnabled: effectiveNsfw,
+      nsfwEnabled: true,
       contentLevelWords: contentWords,
       styleDescriptor: selfieResolvedStyle,
     });
