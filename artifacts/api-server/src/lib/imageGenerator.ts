@@ -323,6 +323,10 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
   console.log(`[STYLE] ${characterName} — using style: ${styleDesc}`);
   console.log(`[NSFW] ${characterName} — nsfwEnabled: ${nsfwEnabled}`);
 
+  // Include teaserDescription in every generation call so the character's visual
+  // description (species, build, hair/eye colour etc.) anchors every image.
+  const fullSceneDescription = [opts.teaserDescription, sceneDescription].filter(Boolean).join(", ");
+
   const trackingKey = userId != null && characterId != null
     ? { userId: String(userId), characterId }
     : null;
@@ -335,7 +339,7 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
       : Math.floor(Math.random() * 10000000000);
 
     // Primary: Pollinations with full prompt and vertical canvas (DEFAULT_WIDTH × DEFAULT_HEIGHT)
-    const result = await tryPollinations(characterName, styleDesc, subGenres, sceneDescription, seed, DEFAULT_WIDTH, DEFAULT_HEIGHT, nsfwEnabled);
+    const result = await tryPollinations(characterName, styleDesc, subGenres, fullSceneDescription, seed, DEFAULT_WIDTH, DEFAULT_HEIGHT, nsfwEnabled);
 
     if (result) {
       if (trackingKey) {

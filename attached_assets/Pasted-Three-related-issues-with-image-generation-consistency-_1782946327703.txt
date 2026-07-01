@@ -1,0 +1,19 @@
+Three related issues with image generation consistency. Please investigate and report back before making changes to item 3 — items 1 and 2 can be implemented directly.
+
+1. AVATAR CONSISTENCY (implement directly)
+Generated images for a character are no longer visually consistent with that character's original avatar (first generated image). Investigate why: check whether the full character description (hair color, eye color, species, build, etc.) is being included in every image generation call, not just at avatar creation — and whether the seed and style_descriptor are being applied consistently every time. Fix whatever causes the drift so every generated image for a character stays visually consistent with its avatar. Do not change the prompt style keywords themselves.
+
+2. SCENE FOLLOWS CHAT CONTEXT (implement directly)
+The auto-image generation loop currently doesn't vary scene/surroundings based on the conversation. Modify the code so that each auto-generated image reflects the scene, setting, or activity implied by the most recent chat message (e.g. if the last message describes the character in a park, the generated image should reflect that setting) rather than always using a static/default environment. Keep the character's appearance/style consistent — only the scene/surroundings should change based on context.
+
+3. SELFIE GENERATION USING AVATAR AS VISUAL REFERENCE (investigate and report back first, do not implement yet)
+When a user requests a selfie in chat, the goal is to use the character's original avatar image as a visual reference/guide, so the selfie generation stays visually locked to that exact avatar, then renders whatever pose/scene/action the user specifically requested in their message.
+
+Before implementing: check whether Pollinations' image generation API supports a reference-image parameter (an `image=` URL parameter) on the model currently in use (flux), or whether a different model would be required for image-to-image/reference-guided generation. Report back:
+- Whether flux supports reference images, or which model does
+- Whether the avatar URL can be passed directly as a reference, or needs to be re-hosted/converted first
+- Any request format changes needed (e.g. different endpoint, different params)
+
+Do not modify the selfie generation code until I confirm the approach based on your findings.
+
+Do not touch any other files or unrelated logic.

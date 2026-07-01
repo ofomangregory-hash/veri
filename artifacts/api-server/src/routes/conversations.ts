@@ -377,7 +377,7 @@ router.post("/conversations/:characterId/messages", async (req, res): Promise<vo
 
   // ── Intimacy + content level ──────────────────────────────────────────────
   const intimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
-  const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
+  const charNsfw = true; // NSFW always enabled globally
   const contentLevel = getContentLevel(intimacy, charNsfw);
   const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
 
@@ -478,18 +478,13 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
     console.log(`[IMAGE SEED] ${character.name} — using saved seed: ${resolvedSeed}`);
   }
 
-  // Style: use row already fetched above (_localCharRow) → fallback to genre+tags
-  // artStyle stored in local DB (set at character creation); infer for old Anime-genre chars if missing.
+  // Style: always derive fresh from current template constants — never use cached DB value
+  // so prompt-template updates apply immediately to all existing characters.
   const _charArtStyle = (_localCharRow?.artStyle as string | undefined) ??
     (character.genre === "Anime" ? "Anime" : undefined);
-  let resolvedStyle = _localCharRow?.styleDescriptor ?? null;
-  if (!resolvedStyle) {
-    resolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? [], _charArtStyle);
-    console.log(`[STYLE] ${character.name} — derived and saved: ${resolvedStyle}`);
-    void db.update(charactersTable).set({ styleDescriptor: resolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
-  } else {
-    console.log(`[STYLE] ${character.name} — using style: ${resolvedStyle}`);
-  }
+  const resolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? [], _charArtStyle);
+  console.log(`[STYLE] ${character.name} — derived fresh: ${resolvedStyle}`);
+  void db.update(charactersTable).set({ styleDescriptor: resolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
   const dailyImageLimit = await getDailyImageLimit(tier, isAdminUser);
   const overDailyLimit = conv.dailyAutoImageCount >= dailyImageLimit;
 
@@ -542,7 +537,10 @@ CRITICAL: Always respond in English only. Never respond in Chinese or any other 
     try {
       const loopAvatarUrl = await getRandomCharacterAvatar(params.data.characterId, character.avatarUrl ?? null);
       const loopShotType = getNextBgShotType(params.data.characterId);
-      const loopScene = ["casual portrait", loopShotType, contentWords, localAppearanceDesc].filter(Boolean).join(", ");
+      // Scene derived from the most recent user message so the image reflects
+      // the current conversation context (setting, activity, mood).
+      const chatContextScene = parsed.data.content.slice(0, 150).trim();
+      const loopScene = [chatContextScene, loopShotType, contentWords, localAppearanceDesc].filter(Boolean).join(", ");
       autoImageUrl = await generateCharacterSelfie({
         characterName: character.name,
         genre: character.genre ?? "Fantasy",
@@ -691,7 +689,7 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   const character = await getSupabaseCharacterById(params.data.characterId);
   if (!character) { res.status(404).json({ error: "Character not found" }); return; }
 
-  const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
+  const charNsfw = true; // NSFW always enabled globally
   const intimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
   const contentLevel = getContentLevel(intimacy, charNsfw);
   const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
@@ -723,14 +721,10 @@ router.post("/conversations/:characterId/selfie", async (req, res): Promise<void
   }
   const _selfieArtStyle = (_selfieCharRow?.artStyle as string | undefined) ??
     (character.genre === "Anime" ? "Anime" : undefined);
-  let selfieResolvedStyle = _selfieCharRow?.styleDescriptor ?? null;
-  if (!selfieResolvedStyle) {
-    selfieResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? [], _selfieArtStyle);
-    console.log(`[STYLE] ${character.name} — derived and saved: ${selfieResolvedStyle}`);
-    void db.update(charactersTable).set({ styleDescriptor: selfieResolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
-  } else {
-    console.log(`[STYLE] ${character.name} — using style: ${selfieResolvedStyle}`);
-  }
+  // Always derive fresh — never use cached DB value so template updates apply immediately
+  const selfieResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? [], _selfieArtStyle);
+  console.log(`[STYLE] ${character.name} — derived fresh: ${selfieResolvedStyle}`);
+  void db.update(charactersTable).set({ styleDescriptor: selfieResolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
   const selfieLocalAppearanceDesc = buildLocalAppearanceDesc(_selfieCharRow);
 
   let imageUrl: string;
@@ -1043,7 +1037,7 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
   let scenarioImageUrl: string | null = null;
   if (parsed.data.giftType === "secret_key" && character) {
     const newIntimacy = await getIntimacyLevel(req.telegramUserId, params.data.characterId);
-    const charNsfw = charHasNsfw(character) || user.nsfwEnabled;
+    const charNsfw = true; // NSFW always enabled globally
     const contentLevel = getContentLevel(newIntimacy, charNsfw);
     const contentWords = CONTENT_LEVEL_WORDS[contentLevel];
     let giftResolvedSeed = character.imageSeed ?? null;
@@ -1058,14 +1052,10 @@ router.post("/conversations/:characterId/gift", async (req, res): Promise<void> 
       .where(eq(charactersTable.characterId, params.data.characterId));
     const _giftArtStyle = (_giftCharRow?.artStyle as string | undefined) ??
       (character.genre === "Anime" ? "Anime" : undefined);
-    let giftResolvedStyle = _giftCharRow?.styleDescriptor ?? null;
-    if (!giftResolvedStyle) {
-      giftResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? [], _giftArtStyle);
-      console.log(`[STYLE] ${character.name} — derived and saved: ${giftResolvedStyle}`);
-      void db.update(charactersTable).set({ styleDescriptor: giftResolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
-    } else {
-      console.log(`[STYLE] ${character.name} — using style: ${giftResolvedStyle}`);
-    }
+    // Always derive fresh — never use cached DB value so template updates apply immediately
+    const giftResolvedStyle = deriveStyleDescriptor(character.genre ?? "Modern", (character.tags as string[]) ?? [], _giftArtStyle);
+    console.log(`[STYLE] ${character.name} — derived fresh: ${giftResolvedStyle}`);
+    void db.update(charactersTable).set({ styleDescriptor: giftResolvedStyle }).where(eq(charactersTable.characterId, params.data.characterId));
     const giftLocalAppearanceDesc = buildLocalAppearanceDesc(_giftCharRow);
     // Fresh random seed per gift — ensures every secret_key produces a different image
     // even for the same character (unlike chat images which use the persistent character seed).
