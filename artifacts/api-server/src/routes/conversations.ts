@@ -19,6 +19,7 @@ import { authMiddleware } from "../middlewares/auth";
 import { generateAIReply } from "../lib/openrouter";
 import { getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterSelfie, deriveStyleDescriptor } from "../lib/imageGenerator";
+import { buildLocalAppearanceDesc } from "../lib/appearance";
 import { logger } from "../lib/logger";
 import { getSupabaseCharacterById, type NormalizedCharacter } from "../lib/supabaseCharacters";
 import { getEconomyConfig } from "../lib/economyConfig";
@@ -69,36 +70,6 @@ const SECRET_KEY_SCENES = [
 // Builds a concise, ordered appearance string from local DB columns for use in
 // both the AI system prompt (Section 3) and all image generation prompts (Section 4).
 // Returns "" when the row is null/undefined (no local row for this character).
-function buildLocalAppearanceDesc(row: typeof charactersTable.$inferSelect | undefined | null): string {
-  if (!row) return "";
-  const parts: string[] = [];
-  const hairParts = [row.hairColor, row.hairLength].filter(Boolean);
-  if (hairParts.length) parts.push(`${hairParts.join(" ")} hair`);
-  if (row.eyeColor) parts.push(`${row.eyeColor} eyes`);
-  if (row.build) parts.push(`${row.build} build`);
-  if (row.height) parts.push(`${row.height} height`);
-  if (row.species) {
-    const speciesLabel = row.species === "Hybrid" && row.hybridSpecies ? row.hybridSpecies : row.species;
-    parts.push(speciesLabel);
-  }
-  if (row.earType) parts.push(`${row.earType} ears`);
-  if (row.chestSize) parts.push(`${row.chestSize} chest`);
-  if (row.assSize) parts.push(`${row.assSize} ass`);
-  if (row.thighHipSize) parts.push(`${row.thighHipSize} hips`);
-  if (row.hairstyle) parts.push(`${row.hairstyle} hairstyle`);
-  if (row.bangsStyle) parts.push(row.bangsStyle);
-  if (row.makeupStyle) parts.push(`${row.makeupStyle} makeup`);
-  if (row.posture) parts.push(`${row.posture} posture`);
-  if (row.tailWings) parts.push(row.tailWings);
-  if (row.distinguishingFeature) parts.push(row.distinguishingFeature);
-  if (row.accessory) parts.push(row.accessory);
-  if (row.outfitFit) parts.push(`${row.outfitFit} outfit`);
-  if (row.outfitCleavageCut) parts.push(`${row.outfitCleavageCut} cut`);
-  if (row.legwearSocksStyle) parts.push(row.legwearSocksStyle);
-  if (row.environmentSetting) parts.push(row.environmentSetting);
-  if (row.genderBaseMesh) parts.push(row.genderBaseMesh);
-  return parts.filter(Boolean).join(", ");
-}
 
 // ── Per-character alternating shot-type counter (Section 2 — blurred/auto/trigger) ──
 // Odd count → "full body shot", even count → "half body, bust shot"

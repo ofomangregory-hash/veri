@@ -129,6 +129,11 @@ export interface GenerateAvatarOptions {
   subGenres?: string[];
   userId?: number | string | null;
   characterId?: string | null;
+  /** Full appearance description built from the character's DB columns.
+   *  When provided, it is appended to the scene description so the generated
+   *  image reflects the character's saved physical traits (hair, eyes, species,
+   *  hybrid features, etc.).  Omitting it falls back to the teaserDescription only. */
+  appearanceDesc?: string | null;
 }
 
 function getStylePrefix(genre: string): string {
@@ -306,13 +311,21 @@ async function tryPollinations(
 }
 
 export async function generateCharacterAvatar(opts: GenerateAvatarOptions): Promise<string> {
+  // Build scene description: base portrait framing + full appearance fields when available.
+  // Without appearanceDesc the prompt only has the teaserDescription, which causes
+  // the model to ignore species/hybrid/hair/eyes and produce a generic human.
+  const baseScene = "close-up portrait, looking at camera, soft studio lighting, high detail";
+  const sceneDescription = opts.appearanceDesc
+    ? [baseScene, opts.appearanceDesc].join(", ")
+    : baseScene;
+
   return generateCharacterSelfie({
     characterName: opts.characterName,
     genre: opts.genre,
     systemPrompt: "",
     teaserDescription: opts.teaserDescription,
     imageSeed: opts.imageSeed,
-    sceneDescription: "close-up portrait, looking at camera, soft studio lighting, high detail",
+    sceneDescription,
     nsfwEnabled: opts.nsfwEnabled ?? false,
     avatarUrl: opts.avatarUrl,
     subGenres: opts.subGenres,

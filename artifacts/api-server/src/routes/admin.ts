@@ -25,6 +25,7 @@ import {
 import { authMiddleware, adminOnly } from "../middlewares/auth";
 import { getGenreDefaultAvatar } from "../lib/cloudinary";
 import { generateCharacterAvatar, generateCharacterSelfie, deriveStyleDescriptor } from "../lib/imageGenerator";
+import { buildLocalAppearanceDesc } from "../lib/appearance";
 import { logger } from "../lib/logger";
 import { listSupabaseCharacters, createSupabaseCharacter, updateSupabaseCharacter, getSupabaseCharacterById } from "../lib/supabaseCharacters";
 import { getErrors, clearErrors, deleteError } from "../lib/errorStore";
@@ -1415,6 +1416,15 @@ router.post("/admin/images/regenerate-avatar/:characterId", adminOnly, async (re
     const char = await getSupabaseCharacterById(characterId);
     if (!char) { res.status(404).json({ error: "Character not found" }); return; }
 
+    // Fetch local DB row for appearance columns (hair, eyes, species, hybrid features, etc.)
+    // These are absent from the Supabase character record but are the source of truth for
+    // what the character actually looks like — without them the model produces a generic human.
+    const [localCharRow] = await db
+      .select()
+      .from(charactersTable)
+      .where(eq(charactersTable.characterId, characterId));
+    const appearanceDesc = buildLocalAppearanceDesc(localCharRow ?? null);
+
     // Generate — never throws, but may return the existing avatar or a dicebear
     // placeholder when Pollinations exhausts all retries.
     let newAvatarUrl: string;
@@ -1426,6 +1436,7 @@ router.post("/admin/images/regenerate-avatar/:characterId", adminOnly, async (re
         imageSeed: char.imageSeed ?? String(Math.floor(Math.random() * 9999999)),
         avatarUrl: char.avatarUrl,
         subGenres: Array.isArray(char.subGenres) ? char.subGenres as string[] : [],
+        appearanceDesc: appearanceDesc || null,
       });
     } catch (genErr) {
       logger.warn({ genErr, characterId }, "admin/images/regenerate-avatar: generation threw");
