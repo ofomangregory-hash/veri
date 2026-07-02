@@ -4,8 +4,8 @@ import { logger } from "./logger";
 // 512×768 — tall portrait (2:3) used for all selfie, inchat, and avatar images.
 // Supports full-body and half-body framing naturally without cropping limbs.
 // Callers can override by passing explicit width/height to tryPollinations if needed.
-const DEFAULT_WIDTH  = 512;
-const DEFAULT_HEIGHT = 768;
+const DEFAULT_WIDTH  = 1920;
+const DEFAULT_HEIGHT = 1080;
 
 // ── Style-detection keyword lists ─────────────────────────────────────────────
 // If the combined prompt already contains an explicit non-anime art direction,
@@ -23,10 +23,10 @@ const EXISTING_ANIME_KEYWORDS = [
   "line art", "2d ", "2d,", "hand-drawn",
 ];
 
-// Flat cel-shaded vector anime quality assist — appended when no art-style directive is detected.
-// Uses explicit hard-edge / flat-color anchors to eliminate any soft, painterly, or airbrushed output.
+// Paused anime frame style — appended when no art-style directive is detected.
+// Targets broadcast/streaming anime still-frame aesthetic at 1080p, not painted illustration.
 const STYLE_ASSIST_TAGS =
-  "ultra-sharp 2D vector anime style, hard cel-shading, explicit heavy black lineart outlines, 100% flat digital coloring, high contrast color blocking, crisp clean shapes, no gradients, minimal geometric white background, perfectly drawn hands and anatomy";
+  "anime screenshot, TV anime still frame, broadcast quality cel-shaded animation, studio-quality anime production values, crisp clean linework, sharp flat cel shading with subtle controlled gradients, saturated anime color grading, consistent line weight, sharp focus, high detail, 1080p resolution, paused anime scene aesthetic";
 
 // Heavy 2.5D anime NSFW anchors — injected when nsfwEnabled=true.
 // These override the softer STYLE_ASSIST_TAGS and steer Flux toward
@@ -42,7 +42,7 @@ const PORTRAIT_FRAMING =
 // Negative prompt — appended as &negative= query param to aggressively suppress
 // soft airbrushed textures, tight crops, and non-cel-shaded rendering styles.
 const NEGATIVE_PROMPT =
-  "soft shading, airbrushed, watercolor, smudge, blur, smooth gradients, ambient volumetric lighting, lens flare, bloom effect, volumetric dust, 3D appearance, realistic skin pores, photorealism, heavy shadows, cropped hips, headshot, close-up, face zoom, cropped limbs, oil painting, canvas texture, smudged shading, realistic skin texture, heavy brushes, blurry lines, 3D render, dark muddy shadows, messy sketch, extra hands, extra fingers, extra limbs, deformed hands, malformed hands, mutated hands, fused fingers, missing fingers, disfigured";
+  "soft shading, airbrushed, watercolor, smudge, blur, smooth gradients, ambient volumetric lighting, lens flare, bloom effect, volumetric dust, 3D appearance, realistic skin pores, photorealism, heavy shadows, cropped hips, headshot, close-up, face zoom, cropped limbs, oil painting, canvas texture, smudged shading, realistic skin texture, heavy brushes, blurry lines, 3D render, dark muddy shadows, messy sketch, extra hands, extra fingers, extra limbs, deformed hands, malformed hands, mutated hands, fused fingers, missing fingers, disfigured, digital painting, matte painting, concept art, painterly texture, illustration art, artstation style, semi-realistic, brush strokes, oil painting texture, watercolor texture, overly soft rendering, dreamy soft focus";
 
 function hasExplicitPhotorealistic(prompt: string): boolean {
   const lower = prompt.toLowerCase();
@@ -55,7 +55,7 @@ function hasAnimeStyleDirective(prompt: string): boolean {
 }
 
 const GENRE_STYLE_PREFIX: Record<string, string> = {
-  "Anime":     "ultra-sharp 2D vector anime style, hard cel-shading, explicit heavy black lineart outlines, 100% flat digital coloring, high contrast color blocking, crisp clean shapes, no gradients",
+  "Anime":     "anime screenshot, TV anime still frame, broadcast quality cel-shaded animation, studio-quality anime production values, crisp clean linework, sharp flat cel shading with subtle controlled gradients, saturated anime color grading, consistent line weight, sharp focus, high detail, 1080p resolution, paused anime scene aesthetic",
   "Realistic": "realistic, photorealistic, detailed photography, lifelike",
 };
 
@@ -92,7 +92,7 @@ export interface GenerateSelfieOptions {
 
 // ── Style descriptor templates ────────────────────────────────────────────────
 const ANIME_STYLE_DESCRIPTOR =
-  "ultra-sharp 2D vector anime style, hard cel-shading, explicit heavy black lineart outlines, 100% flat digital coloring, high contrast color blocking, crisp clean shapes, no gradients";
+  "anime screenshot, TV anime still frame, broadcast quality cel-shaded animation, studio-quality anime production values, crisp clean linework, sharp flat cel shading with subtle controlled gradients, saturated anime color grading, consistent line weight, sharp focus, high detail, 1080p resolution, paused anime scene aesthetic";
 
 const REALISTIC_STYLE_DESCRIPTOR =
   "photorealistic, DSLR photograph, 35mm lens, sharp focus, natural studio lighting, cinematic composition, intricate textures, volumetric atmosphere, professional color grading, 8k resolution";
@@ -162,8 +162,30 @@ function getImagePositionInHistory(userId: string, characterId: string, url: str
   return idx === -1 ? null : idx + 1; // 1 = most recent, 30 = oldest tracked
 }
 
-// Module-level throttle — enforce 1s minimum gap between all image requests
-let lastImageRequestTime = 0;
+// ── Pollinations request queue ─────────────────────────────────────────────────
+// Serializes ALL Pollinations calls through a promise-chain so concurrent HTTP
+// requests never race past each other. Each slot holds the queue until the
+// full tryPollinations call (including all retries) completes, then enforces
+// a 1 s gap before releasing the next waiter.
+// JS is single-threaded between await points, so the prevTail read + queue
+// reassignment is atomic — no concurrent caller can slip in between.
+let pollinationsQueueTail: Promise<void> = Promise.resolve();
+
+async function enqueuePollinationsRequest<T>(fn: () => Promise<T>): Promise<T> {
+  const prevTail = pollinationsQueueTail;
+  let releaseNext!: () => void;
+  pollinationsQueueTail = new Promise<void>(resolve => { releaseNext = resolve; });
+
+  await prevTail; // wait for all previously enqueued requests to finish
+
+  try {
+    return await fn(); // fn() contains tryPollinations with all its retry logic
+  } finally {
+    // Enforce 1 s minimum gap before unblocking the next queued request.
+    await new Promise<void>(resolve => setTimeout(resolve, 1000));
+    releaseNext();
+  }
+}
 
 // ── Smart assistant prompt builder ────────────────────────────────────────────
 //
@@ -226,14 +248,6 @@ async function tryPollinations(
 
   console.log("Image prompt:", cleanPrompt);
   console.log(`Pollinations URL (${width}×${height}):`, url);
-
-  // Enforce 1s minimum gap between all Pollinations requests
-  const now = Date.now();
-  const timeSinceLast = now - lastImageRequestTime;
-  if (timeSinceLast < 1000) {
-    await new Promise(resolve => setTimeout(resolve, 1000 - timeSinceLast));
-  }
-  lastImageRequestTime = Date.now();
 
   // Exponential back-off: attempt 0 = immediate, attempt 1 = +2s, attempt 2 = +4s
   const delays = [0, 2000, 4000];
@@ -338,8 +352,9 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
       ? baseSeed
       : Math.floor(Math.random() * 10000000000);
 
-    // Primary: Pollinations with full prompt and vertical canvas (DEFAULT_WIDTH × DEFAULT_HEIGHT)
-    const result = await tryPollinations(characterName, styleDesc, subGenres, fullSceneDescription, seed, DEFAULT_WIDTH, DEFAULT_HEIGHT, nsfwEnabled);
+    // Primary: Pollinations via shared queue — serializes all concurrent callers.
+    const result = await enqueuePollinationsRequest(() =>
+      tryPollinations(characterName, styleDesc, subGenres, fullSceneDescription, seed, DEFAULT_WIDTH, DEFAULT_HEIGHT, nsfwEnabled));
 
     if (result) {
       if (trackingKey) {
@@ -359,7 +374,8 @@ export async function generateCharacterSelfie(opts: GenerateSelfieOptions): Prom
 
   // Fallback: generic portrait prompt (no subGenres, no sceneDescription)
   // nsfwEnabled intentionally NOT passed here — fallback stays conservative
-  const genericResult = await tryPollinations(characterName, "portrait, detailed face", [], "", baseSeed);
+  const genericResult = await enqueuePollinationsRequest(() =>
+    tryPollinations(characterName, "portrait, detailed face", [], "", baseSeed));
   if (genericResult) {
     if (trackingKey) recordImageUrl(trackingKey.userId, trackingKey.characterId, genericResult);
     return genericResult;
