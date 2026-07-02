@@ -1,0 +1,21 @@
+Three issues found in production logs. Please address items 1 and 2 directly. Item 3 is investigate-only — report back, do not change anything for it yet.
+
+1. ZOD ERROR: "Expected object, received null" ON "character" (implement fix)
+There's a recurring ZodError in production:
+"Expected object, received null" at path ["character"], thrown from conversations.ts:230, inside a Promise.all (conversations.ts:226).
+
+Investigate what this Promise.all is fetching, and why "character" is sometimes null instead of a valid object. Likely causes: a conversation references a character_id that no longer exists, or a lookup returns null when it shouldn't.
+
+Show me what you find before making changes. If the right fix is to gracefully skip/filter out conversations with a missing character (rather than crashing the whole request), tell me your proposed approach before implementing it.
+
+2. updateSupabaseCharacter DOUBLE ROUND-TRIP (implement fix)
+In updateSupabaseCharacter, every call currently tries .update() first, which fails with PGRST116 (no rows found) when the row doesn't exist yet, then falls back to .upsert() which succeeds. This works but doubles Supabase calls unnecessarily on every character image-seed/style save.
+
+Change this to call .upsert() directly instead of trying .update() first — same end result, one round-trip instead of two. Do not change any other logic.
+
+3. POLLINATIONS 429 RATE LIMITING BURST (investigate only, report back)
+Logs show a large burst of 429 rate-limit errors from Pollinations around 23:52, with many images failing after 3 retries and falling back to the existing avatar URL instead of generating a new one.
+
+Investigate: was this burst caused by a bulk/batch operation (e.g. many characters generating avatars in quick succession, like a backfill or refresh job), or could this also happen during normal single-user traffic? Report back what you find — do not add throttling, queueing, or rate-limit handling changes yet, I want to decide the approach after seeing your findings.
+
+Do not touch any other files or unrelated logic for any of these three items.
