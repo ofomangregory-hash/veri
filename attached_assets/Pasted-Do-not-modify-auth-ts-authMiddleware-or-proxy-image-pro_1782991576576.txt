@@ -1,0 +1,24 @@
+Do not modify auth.ts, authMiddleware, or proxy/image-proxy route logic anywhere in this task.
+
+SECTION A — Wire artStyle into deriveStyleDescriptor callers
+Scope: characters.ts, conversations.ts, admin.ts only.
+
+deriveStyleDescriptor accepts artStyle as a third parameter, but no caller currently passes it — they all still call deriveStyleDescriptor(genre, subGenres) with two arguments, meaning every character falls through to the same style regardless of what art style they selected. Find every call site and update them to pass the character's artStyle field as the third argument: deriveStyleDescriptor(genre, subGenres, artStyle).
+
+Confirm artStyle is actually being read from the character record/request payload at each call site — if it's missing from any payload (creation, avatar regeneration, in-chat image generation, chat system prompt), trace where it should come from and fix that too, so artStyle flows all the way from character creation through to every later prompt-building call.
+
+After this change, create one Anime character and one Realistic character, and paste the actual styleDescriptor saved for each — confirm they are now genuinely different templates, not both falling through to the same one.
+
+SECTION B — Confirm avatar shot-type and style actually take effect
+Scope: characters.ts avatar route only, verification after Section A lands.
+
+Once artStyle is properly wired, generate a fresh avatar (not regenerated) for the Realistic test character and paste the exact final prompt string sent to Pollinations. Confirm:
+1. The photorealistic style descriptor appears (not the anime one)
+2. "full body portrait" appears and is not being overridden or contradicted by anything else in the prompt
+
+SECTION C — Confirm which database is actually live
+Scope: read-only, no changes.
+
+Confirm the earlier schema push (pnpm --filter @workspace/db run push) was applied to the SAME database Railway/production actually connects to, not a separate local/dev database inside Replit's own environment. Show the DATABASE_URL (or equivalent) used by the push command and compare it against what's configured in the live Railway environment. If they're different databases, report that clearly — do not change anything until confirmed which database is actually live.
+
+For Sections A and B, show your work — what you found, what was wrong, and the exact code change — before claiming anything is fixed. Do not touch any other files outside what's scoped in each section.
