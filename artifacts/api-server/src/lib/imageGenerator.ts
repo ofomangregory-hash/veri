@@ -23,10 +23,12 @@ const EXISTING_ANIME_KEYWORDS = [
   "line art", "2d ", "2d,", "hand-drawn",
 ];
 
-// Paused anime frame style — appended when no art-style directive is detected.
-// Targets broadcast/streaming anime still-frame aesthetic at 1080p, not painted illustration.
+// Manhwa/webtoon style — appended when no art-style directive is detected.
+// Targets Korean webtoon digital illustration aesthetic: clean thin linework,
+// soft controlled cel-shading with warm gradients, fully rendered backgrounds,
+// realistic proportions, natural lighting — not flat vector, not painterly.
 const STYLE_ASSIST_TAGS =
-  "anime screenshot, TV anime still frame, broadcast quality cel-shaded animation, studio-quality anime production values, crisp clean linework, sharp flat cel shading with subtle controlled gradients, saturated anime color grading, consistent line weight, sharp focus, high detail, 1080p resolution, paused anime scene aesthetic";
+  "korean webtoon style, manhwa digital illustration, clean thin linework, soft controlled cel-shading with subtle warm gradients, natural warm interior lighting, realistic proportions with anime-influenced features, fully rendered grounded background, soft ambient lighting, glossy detailed eyes with light reflections, subtle skin blush, realistic soft hair rendering, soft consistent shadows, realistic fabric folds and wrinkles, warm color palette, high production digital art, professional webtoon coloring";
 
 // Heavy 2.5D anime NSFW anchors — injected when nsfwEnabled=true.
 // These override the softer STYLE_ASSIST_TAGS and steer Flux toward
@@ -42,7 +44,7 @@ const PORTRAIT_FRAMING =
 // Negative prompt — appended as &negative= query param to aggressively suppress
 // soft airbrushed textures, tight crops, and non-cel-shaded rendering styles.
 const NEGATIVE_PROMPT =
-  "soft shading, airbrushed, watercolor, smudge, blur, smooth gradients, ambient volumetric lighting, lens flare, bloom effect, volumetric dust, 3D appearance, realistic skin pores, photorealism, heavy shadows, cropped hips, headshot, close-up, face zoom, cropped limbs, oil painting, canvas texture, smudged shading, realistic skin texture, heavy brushes, blurry lines, 3D render, dark muddy shadows, messy sketch, extra hands, extra fingers, extra limbs, deformed hands, malformed hands, mutated hands, fused fingers, missing fingers, disfigured, digital painting, matte painting, concept art, painterly texture, illustration art, artstation style, semi-realistic, brush strokes, oil painting texture, watercolor texture, overly soft rendering, dreamy soft focus";
+  "soft shading, airbrushed, watercolor, smudge, blur, smooth gradients, ambient volumetric lighting, lens flare, bloom effect, volumetric dust, 3D appearance, realistic skin pores, photorealism, heavy shadows, cropped hips, headshot, close-up, face zoom, cropped limbs, oil painting, canvas texture, smudged shading, realistic skin texture, heavy brushes, blurry lines, 3D render, dark muddy shadows, messy sketch, extra hands, extra fingers, extra limbs, deformed hands, malformed hands, mutated hands, fused fingers, missing fingers, disfigured, digital painting, matte painting, concept art, painterly texture, illustration art, artstation style, semi-realistic, brush strokes, oil painting texture, watercolor texture, overly soft rendering, dreamy soft focus, exaggerated anime proportions, chibi, overly flat shading, vector art, hard cel shading, harsh black outlines, dramatic studio lighting, vignette, hazy glow, overexposed lighting, blurry background, bokeh";
 
 function hasExplicitPhotorealistic(prompt: string): boolean {
   const lower = prompt.toLowerCase();
@@ -55,7 +57,7 @@ function hasAnimeStyleDirective(prompt: string): boolean {
 }
 
 const GENRE_STYLE_PREFIX: Record<string, string> = {
-  "Anime":     "anime screenshot, TV anime still frame, broadcast quality cel-shaded animation, studio-quality anime production values, crisp clean linework, sharp flat cel shading with subtle controlled gradients, saturated anime color grading, consistent line weight, sharp focus, high detail, 1080p resolution, paused anime scene aesthetic",
+  "Anime":     "korean webtoon style, manhwa digital illustration, clean thin linework, soft controlled cel-shading with subtle warm gradients, natural warm interior lighting, realistic proportions with anime-influenced features, fully rendered grounded background, soft ambient lighting, glossy detailed eyes with light reflections, subtle skin blush, realistic soft hair rendering, soft consistent shadows, realistic fabric folds and wrinkles, warm color palette, high production digital art, professional webtoon coloring",
   "Realistic": "realistic, photorealistic, detailed photography, lifelike",
 };
 
@@ -92,7 +94,7 @@ export interface GenerateSelfieOptions {
 
 // ── Style descriptor templates ────────────────────────────────────────────────
 const ANIME_STYLE_DESCRIPTOR =
-  "anime screenshot, TV anime still frame, broadcast quality cel-shaded animation, studio-quality anime production values, crisp clean linework, sharp flat cel shading with subtle controlled gradients, saturated anime color grading, consistent line weight, sharp focus, high detail, 1080p resolution, paused anime scene aesthetic";
+  "korean webtoon style, manhwa digital illustration, clean thin linework, soft controlled cel-shading with subtle warm gradients, natural warm interior lighting, realistic proportions with anime-influenced features, fully rendered grounded background, soft ambient lighting, glossy detailed eyes with light reflections, subtle skin blush, realistic soft hair rendering, soft consistent shadows, realistic fabric folds and wrinkles, warm color palette, high production digital art, professional webtoon coloring";
 
 const REALISTIC_STYLE_DESCRIPTOR =
   "photorealistic, DSLR photograph, 35mm lens, sharp focus, natural studio lighting, cinematic composition, intricate textures, volumetric atmosphere, professional color grading, 8k resolution";

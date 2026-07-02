@@ -1414,20 +1414,45 @@ router.post("/admin/images/regenerate-avatar/:characterId", adminOnly, async (re
   try {
     const char = await getSupabaseCharacterById(characterId);
     if (!char) { res.status(404).json({ error: "Character not found" }); return; }
-    const avatarUrl = await generateCharacterAvatar({
-      characterName: char.name,
-      genre: char.genre ?? "Anime",
-      teaserDescription: char.teaserDescription,
-      imageSeed: char.imageSeed ?? String(Math.floor(Math.random() * 9999999)),
-      avatarUrl: char.avatarUrl,
-      subGenres: Array.isArray(char.subGenres) ? char.subGenres as string[] : [],
-    });
-    await updateSupabaseCharacter(characterId, { avatar_url: avatarUrl });
-    await db.update(charactersTable).set({ avatarUrl }).where(eq(charactersTable.characterId, characterId));
-    res.json({ avatarUrl });
+
+    // Generate — never throws, but may return the existing avatar or a dicebear
+    // placeholder when Pollinations exhausts all retries.
+    let newAvatarUrl: string;
+    try {
+      newAvatarUrl = await generateCharacterAvatar({
+        characterName: char.name,
+        genre: char.genre ?? "Anime",
+        teaserDescription: char.teaserDescription,
+        imageSeed: char.imageSeed ?? String(Math.floor(Math.random() * 9999999)),
+        avatarUrl: char.avatarUrl,
+        subGenres: Array.isArray(char.subGenres) ? char.subGenres as string[] : [],
+      });
+    } catch (genErr) {
+      logger.warn({ genErr, characterId }, "admin/images/regenerate-avatar: generation threw");
+      res.json({ ok: false, error: "Image generation failed — existing avatar preserved" });
+      return;
+    }
+
+    // Detect fallback URLs: if Pollinations failed, generateCharacterAvatar returns
+    // the character's existing avatarUrl or a dicebear placeholder — neither should
+    // overwrite the stored avatar.
+    const isFallback =
+      newAvatarUrl === char.avatarUrl ||
+      newAvatarUrl.includes("dicebear");
+
+    if (isFallback) {
+      logger.warn({ characterId }, "admin/images/regenerate-avatar: Pollinations failed after all retries — avatar unchanged");
+      res.json({ ok: false, error: "Pollinations failed after all retries — existing avatar preserved" });
+      return;
+    }
+
+    // Success — persist the new URL
+    await updateSupabaseCharacter(characterId, { avatar_url: newAvatarUrl });
+    await db.update(charactersTable).set({ avatarUrl: newAvatarUrl }).where(eq(charactersTable.characterId, characterId));
+    res.json({ ok: true, avatarUrl: newAvatarUrl });
   } catch (err) {
     logger.warn({ err }, "admin/images/regenerate-avatar failed");
-    res.status(500).json({ error: String(err) });
+    res.json({ ok: false, error: "Regeneration failed — existing avatar preserved" });
   }
 });
 

@@ -1,0 +1,27 @@
+Two things to address.
+
+1. FIX ADMIN BULK REGENERATION ERROR HANDLING
+During bulk avatar regeneration in the admin panel, some characters fail with a raw "Error: upstream error" popup instead of a graceful fallback. This happens when Pollinations exhausts all retries for a specific request (visible in logs as repeated 429s or another upstream failure that never succeeds for that one item).
+
+Find the admin bulk/single avatar regeneration endpoint (POST /admin/images/regenerate-avatar/:characterId) and update its error handling so that when Pollinations ultimately fails after all retries:
+a) It does not throw an unhandled error to the frontend as a generic "upstream error" popup.
+b) Instead, return a clear response indicating that specific character's regeneration failed (e.g. so the button can show "Failed — retry" instead of getting stuck on "Generating..." or crashing with a popup).
+c) The character's existing avatar should remain unchanged if regeneration fails — do not clear or null out the current avatar_url on failure.
+
+Do not touch the queue logic, retry logic, or any other file for this item — just the error handling/response at this endpoint.
+
+2. REFINE IMAGE STYLE TO MANHWA/WEBTOON LOOK
+I've attached a reference image showing the exact target art style — please look at it directly before making changes. It's a Korean webtoon/manhwa-style digital illustration: clean thin linework, soft controlled cel-shading (not flat, not painterly-muddy), natural warm interior lighting, realistic proportions with anime-influenced features, detailed grounded backgrounds, glossy detailed eyes, subtle skin blush, and soft consistent shadows rather than dramatic studio lighting.
+
+Update ANIME_STYLE_DESCRIPTOR, STYLE_ASSIST_TAGS, and GENRE_STYLE_PREFIX["Anime"] (same three unified locations from prior fixes) to match what you see in the reference image. As a starting point, incorporate language like:
+
+"korean webtoon style, manhwa digital illustration, clean thin linework, soft controlled cel-shading, natural warm lighting, realistic proportions with anime-influenced features, detailed grounded background, soft ambient interior lighting, glossy detailed eyes, subtle skin blush, sharp clean edges, high production digital art, consistent soft shadows, professional webtoon coloring"
+
+— but adjust or expand the wording based on what you actually observe in the reference image, rather than treating this as a fixed list.
+
+Update NEGATIVE_PROMPT — remove "no gradients" and "flat digital coloring" wording if present from prior versions (the manhwa style uses soft controlled gradients, not flat coloring), and add:
+"exaggerated anime proportions, chibi, overly flat shading, vector art, hard cel shading, harsh black outlines, dramatic studio lighting, vignette, hazy glow, overexposed lighting, blurry background, bokeh"
+
+Show me the exact before/after of all changed constants, and briefly explain how the reference image informed any wording changes beyond my starting suggestion, before considering this done.
+
+Do not touch any other files or unrelated logic for either item.
