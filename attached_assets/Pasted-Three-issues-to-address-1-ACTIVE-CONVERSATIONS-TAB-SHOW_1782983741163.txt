@@ -1,0 +1,20 @@
+Three issues to address.
+
+1. ACTIVE CONVERSATIONS TAB SHOWING EMPTY (implement fix)
+The Active tab in the chat list is showing no conversations even when the user has active chats. Expected behavior: Active should show all ongoing conversations. Only when a NEW chat is started with a character that already has an existing conversation should that character's OLD conversation move to Archive — starting a new chat with one character should not affect or archive conversations with other characters. Investigate the query/logic behind the Active tab and fix so it correctly lists all non-archived conversations.
+
+2. TWO HANDS / EXTRA LIMBS IN GENERATED IMAGES (implement fix)
+Generated images are showing anatomy errors — specifically extra hands. In the NEGATIVE_PROMPT constant (wherever it's defined, likely imageGenerator.ts), add explicit anti-artifact terms: "extra hands, extra fingers, extra limbs, deformed hands, malformed hands, mutated hands, fused fingers, missing fingers, disfigured". Do not remove any existing negative prompt terms — only add these.
+
+3. STYLE MISMATCH — deriveStyleDescriptor() IS USING THE OLD SOFT TEMPLATE (investigate and fix)
+Chat message/selfie images keep coming out soft, painterly, with gradients and dramatic lighting — despite multiple rounds of updating imageGenerator.ts toward a flat cel-shaded, hard-lineart style.
+
+I found the likely cause: production logs show images generated via a function called deriveStyleDescriptor() still produce this old text: "modern high-quality anime style, clean digital line art, smooth cell shading, soft gradients, vibrant lighting, polished textures, highly detailed 2D illustration" — this is the OLD soft style template.
+
+Meanwhile, a DIFFERENT code path (used for avatar/portrait fallback generation, logged as "[STYLE ASSIST] No art-style directive detected") correctly produces the NEW flat cel-shaded template: "ultra-sharp 2D vector anime style, hard cel-shading, explicit heavy black lineart outlines, 100% flat digital coloring..."
+
+This means there are two separate template sources in the codebase, and only one was updated during previous style fixes. Find deriveStyleDescriptor() (likely in imageGenerator.ts or a shared prompt utility file) and update its template to match the current flat cel-shaded / hard lineart style used elsewhere, so chat/selfie image generation produces the same style as avatar generation.
+
+Show me both template locations and confirm they're now unified before considering this done.
+
+Do not touch any other files or unrelated logic for any of these three items.

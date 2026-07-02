@@ -223,8 +223,9 @@ router.get("/conversations", async (req, res): Promise<void> => {
     ))
     .orderBy(desc(conversationsTable.updatedAt));
 
-  const result = await Promise.all(convs.map(async (conv) => {
+  const result = (await Promise.all(convs.map(async (conv) => {
     const character = await getSupabaseCharacterById(conv.characterId);
+    if (!character) return null; // skip orphaned conversations (deleted character)
     const messages = Array.isArray(conv.messageHistory) ? conv.messageHistory as ChatMessage[] : [];
     const lastMsg = messages[messages.length - 1];
     return ListConversationsResponseItem.parse({
@@ -234,9 +235,9 @@ router.get("/conversations", async (req, res): Promise<void> => {
       lastMessage: lastMsg?.content ?? null,
       lastMessageAt: conv.updatedAt.toISOString(),
       unread: false,
-      character: character ? serializeCharacter(character) : null,
+      character: serializeCharacter(character),
     });
-  }));
+  }))).filter((item): item is NonNullable<typeof item> => item !== null);
 
   res.json(result);
 });

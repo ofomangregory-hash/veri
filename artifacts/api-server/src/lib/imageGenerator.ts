@@ -42,7 +42,7 @@ const PORTRAIT_FRAMING =
 // Negative prompt — appended as &negative= query param to aggressively suppress
 // soft airbrushed textures, tight crops, and non-cel-shaded rendering styles.
 const NEGATIVE_PROMPT =
-  "soft shading, airbrushed, watercolor, smudge, blur, smooth gradients, ambient volumetric lighting, lens flare, bloom effect, volumetric dust, 3D appearance, realistic skin pores, photorealism, heavy shadows, cropped hips, headshot, close-up, face zoom, cropped limbs, oil painting, canvas texture, smudged shading, realistic skin texture, heavy brushes, blurry lines, 3D render, dark muddy shadows, messy sketch";
+  "soft shading, airbrushed, watercolor, smudge, blur, smooth gradients, ambient volumetric lighting, lens flare, bloom effect, volumetric dust, 3D appearance, realistic skin pores, photorealism, heavy shadows, cropped hips, headshot, close-up, face zoom, cropped limbs, oil painting, canvas texture, smudged shading, realistic skin texture, heavy brushes, blurry lines, 3D render, dark muddy shadows, messy sketch, extra hands, extra fingers, extra limbs, deformed hands, malformed hands, mutated hands, fused fingers, missing fingers, disfigured";
 
 function hasExplicitPhotorealistic(prompt: string): boolean {
   const lower = prompt.toLowerCase();
@@ -55,7 +55,7 @@ function hasAnimeStyleDirective(prompt: string): boolean {
 }
 
 const GENRE_STYLE_PREFIX: Record<string, string> = {
-  "Anime":     "modern high-quality anime style, clean digital line art, smooth cell shading, soft gradients, vibrant lighting, polished textures, highly detailed 2D illustration",
+  "Anime":     "ultra-sharp 2D vector anime style, hard cel-shading, explicit heavy black lineart outlines, 100% flat digital coloring, high contrast color blocking, crisp clean shapes, no gradients",
   "Realistic": "realistic, photorealistic, detailed photography, lifelike",
 };
 
@@ -92,7 +92,7 @@ export interface GenerateSelfieOptions {
 
 // ── Style descriptor templates ────────────────────────────────────────────────
 const ANIME_STYLE_DESCRIPTOR =
-  "modern high-quality anime style, clean digital line art, smooth cell shading, soft gradients, vibrant lighting, polished textures, highly detailed 2D illustration";
+  "ultra-sharp 2D vector anime style, hard cel-shading, explicit heavy black lineart outlines, 100% flat digital coloring, high contrast color blocking, crisp clean shapes, no gradients";
 
 const REALISTIC_STYLE_DESCRIPTOR =
   "photorealistic, DSLR photograph, 35mm lens, sharp focus, natural studio lighting, cinematic composition, intricate textures, volumetric atmosphere, professional color grading, 8k resolution";
